@@ -445,5 +445,116 @@ export async function registerRoutes(
     }
   });
 
+  // GET /api/anual-stats - Stats for the Annual Dashboard
+  app.get("/api/anual-stats", async (req, res) => {
+    try {
+      const conn = await pool.getConnection();
+      try {
+        const { year, casa } = req.query;
+        const selectedYear = year ? String(year) : String(new Date().getFullYear());
+
+        // Build casa filter
+        let casaFilter = "";
+        const casaParams: string[] = [];
+        if (casa) {
+          const casaArr = Array.isArray(casa) ? casa.map(String) : [String(casa)];
+          const filtered = casaArr.filter(c => c !== 'Todas');
+          if (filtered.length > 0) {
+            const hasFalta = filtered.includes('Falta de Interação');
+            const realCasas = filtered.filter(c => c !== 'Falta de Interação');
+            const conditions: string[] = [];
+            if (realCasas.length > 0) {
+              conditions.push(`TRIM(casa) IN (${realCasas.map(() => '?').join(',')})`);
+              casaParams.push(...realCasas);
+            }
+            if (hasFalta) {
+              conditions.push(`(TRIM(casa) = '' OR casa IS NULL)`);
+            }
+            casaFilter = `AND (${conditions.join(' OR ')})`;
+          }
+        }
+
+        const yearFilter = `AND YEAR(\`data e hora de fim\`) = ?`;
+
+        // 1. Evolução dos Atendimentos por Mês agrupado por Canal
+        const [evolucao] = await conn.query<RowDataPacket[]>(`
+          SELECT
+            MONTH(\`data e hora de fim\`) AS mes,
+            canal,
+            COUNT(DISTINCT protocolo) AS total
+          FROM \`${TABLE_NAME}\`
+          WHERE \`data e hora de fim\` IS NOT NULL
+            ${yearFilter}
+            ${casaFilter}
+          GROUP BY MONTH(\`data e hora de fim\`), canal
+          ORDER BY mes ASC, canal ASC
+        `, [selectedYear, ...casaParams]);
+
+        // 2. Atendimentos por Origem (tipo de canal)
+        const [porOrigem] = await conn.query<RowDataPacket[]>(`
+          SELECT
+            COALESCE(NULLIF(TRIM(\`tipo de canal\`), ''), 'Não informado') AS nome,
+            COUNT(DISTINCT protocolo) AS total
+          FROM \`${TABLE_NAME}\`
+          WHERE \`data e hora de fim\` IS NOT NULL
+            ${yearFilter}
+            ${casaFilter}
+          GROUP BY nome
+          ORDER BY total DESC
+        `, [selectedYear, ...casaParams]);
+
+        // 3. Atendimentos por Assunto (resumo da conversa)
+        const [porAssunto] = await conn.query<RowDataPacket[]>(`
+          SELECT
+            \`resumo da conversa\` AS nome,
+            COUNT(DISTINCT protocolo) AS total
+          FROM \`${TABLE_NAME}\`
+          WHERE \`data e hora de fim\` IS NOT NULL
+            AND \`resumo da conversa\` IS NOT NULL
+            AND \`resumo da conversa\` != ''
+            ${yearFilter}
+            ${casaFilter}
+          GROUP BY \`resumo da conversa\`
+          ORDER BY total DESC
+          LIMIT 15
+        `, [selectedYear, ...casaParams]);
+
+        // 4. Dentro e Fora do Prazo (24h SLA)
+        const [prazo] = await conn.query<RowDataPacket[]>(`
+          SELECT
+            SUM(CASE WHEN TIMESTAMPDIFF(HOUR, \`data e hora de inicio\`, \`data e hora de fim\`) <= 24 THEN 1 ELSE 0 END) AS dentro,
+            SUM(CASE WHEN TIMESTAMPDIFF(HOUR, \`data e hora de inicio\`, \`data e hora de fim\`) > 24 THEN 1 ELSE 0 END) AS fora
+          FROM (
+            SELECT protocolo, MIN(\`data e hora de inicio\`) AS \`data e hora de inicio\`, MAX(\`data e hora de fim\`) AS \`data e hora de fim\`
+            FROM \`${TABLE_NAME}\`
+            WHERE \`data e hora de fim\` IS NOT NULL
+              AND \`data e hora de inicio\` IS NOT NULL
+              ${yearFilter}
+              ${casaFilter}
+            GROUP BY protocolo
+          ) sub
+        `, [selectedYear, ...casaParams]);
+
+        conn.release();
+
+        res.json({
+          evolucao: evolucao || [],
+          porOrigem: porOrigem || [],
+          porAssunto: porAssunto || [],
+          prazo: {
+            dentro: prazo[0]?.dentro || 0,
+            fora: prazo[0]?.fora || 0,
+          },
+        });
+      } catch (queryErr) {
+        conn.release();
+        throw queryErr;
+      }
+    } catch (error) {
+      console.error("Erro ao buscar stats anuais:", error);
+      res.status(500).json({ message: "Erro ao buscar estatísticas anuais" });
+    }
+  });
+
   return httpServer;
 }

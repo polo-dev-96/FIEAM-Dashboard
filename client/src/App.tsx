@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import OverviewPage from "@/pages/Overview";
 import SearchProtocolPage from "@/pages/SearchProtocol";
 import SearchPhonePage from "@/pages/SearchPhone";
+import DashboardAnualPage from "@/pages/DashboardAnual";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -15,6 +16,7 @@ function Router() {
       <Route path="/" component={OverviewPage} />
       <Route path="/protocolo" component={SearchProtocolPage} />
       <Route path="/telefone" component={SearchPhonePage} />
+      <Route path="/anual" component={DashboardAnualPage} />
       <Route component={NotFound} />
     </Switch>
   );

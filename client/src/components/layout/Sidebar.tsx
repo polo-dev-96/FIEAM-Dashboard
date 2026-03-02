@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   Search,
   Phone,
+  CalendarRange,
   Menu,
   X,
   ChevronLeft,
@@ -17,6 +18,7 @@ const navItems = [
   { href: "/", label: "Visão Geral", icon: LayoutDashboard },
   { href: "/protocolo", label: "Pesquisar Protocolo", icon: Search },
   { href: "/telefone", label: "Pesquisar Telefone", icon: Phone },
+  { href: "/anual", label: "Dashboard Anual", icon: CalendarRange },
 ];
 
 export function Sidebar() {
