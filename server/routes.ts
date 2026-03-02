@@ -450,8 +450,9 @@ export async function registerRoutes(
     try {
       const conn = await pool.getConnection();
       try {
-        const { year, casa } = req.query;
+        const { year, month, casa } = req.query;
         const selectedYear = year ? String(year) : String(new Date().getFullYear());
+        const selectedMonth = month ? (Array.isArray(month) ? month.map(String) : [String(month)]) : null;
 
         // Build casa filter
         let casaFilter = "";
@@ -475,6 +476,12 @@ export async function registerRoutes(
         }
 
         const yearFilter = `AND YEAR(\`data e hora de fim\`) = ?`;
+        const monthFilter = selectedMonth && selectedMonth.length > 0
+          ? `AND MONTH(\`data e hora de fim\`) IN (${selectedMonth.map(() => '?').join(',')})`
+          : '';
+        const dateParams = selectedMonth && selectedMonth.length > 0
+          ? [selectedYear, ...selectedMonth]
+          : [selectedYear];
 
         // 1. Evolução dos Atendimentos por Mês agrupado por Canal
         const [evolucao] = await conn.query<RowDataPacket[]>(`
@@ -485,10 +492,11 @@ export async function registerRoutes(
           FROM \`${TABLE_NAME}\`
           WHERE \`data e hora de fim\` IS NOT NULL
             ${yearFilter}
+            ${monthFilter}
             ${casaFilter}
           GROUP BY MONTH(\`data e hora de fim\`), canal
           ORDER BY mes ASC, canal ASC
-        `, [selectedYear, ...casaParams]);
+        `, [...dateParams, ...casaParams]);
 
         // 2. Atendimentos por Origem (tipo de canal)
         const [porOrigem] = await conn.query<RowDataPacket[]>(`
@@ -498,10 +506,11 @@ export async function registerRoutes(
           FROM \`${TABLE_NAME}\`
           WHERE \`data e hora de fim\` IS NOT NULL
             ${yearFilter}
+            ${monthFilter}
             ${casaFilter}
           GROUP BY nome
           ORDER BY total DESC
-        `, [selectedYear, ...casaParams]);
+        `, [...dateParams, ...casaParams]);
 
         // 3. Atendimentos por Assunto (resumo da conversa)
         const [porAssunto] = await conn.query<RowDataPacket[]>(`
@@ -513,11 +522,12 @@ export async function registerRoutes(
             AND \`resumo da conversa\` IS NOT NULL
             AND \`resumo da conversa\` != ''
             ${yearFilter}
+            ${monthFilter}
             ${casaFilter}
           GROUP BY \`resumo da conversa\`
           ORDER BY total DESC
           LIMIT 15
-        `, [selectedYear, ...casaParams]);
+        `, [...dateParams, ...casaParams]);
 
         // 4. Dentro e Fora do Prazo (24h SLA)
         const [prazo] = await conn.query<RowDataPacket[]>(`
@@ -530,10 +540,11 @@ export async function registerRoutes(
             WHERE \`data e hora de fim\` IS NOT NULL
               AND \`data e hora de inicio\` IS NOT NULL
               ${yearFilter}
+              ${monthFilter}
               ${casaFilter}
             GROUP BY protocolo
           ) sub
-        `, [selectedYear, ...casaParams]);
+        `, [...dateParams, ...casaParams]);
 
         conn.release();
 
@@ -553,6 +564,100 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Erro ao buscar stats anuais:", error);
       res.status(500).json({ message: "Erro ao buscar estatísticas anuais" });
+    }
+  });
+
+  // GET /api/anual-drilldown - Drill-down for annual dashboard charts
+  app.get("/api/anual-drilldown", async (req, res) => {
+    try {
+      const { year, month, casa, tipo, valor } = req.query;
+      const selectedYear = year ? String(year) : String(new Date().getFullYear());
+      const selectedMonth = month ? (Array.isArray(month) ? month.map(String) : [String(month)]) : null;
+
+      // Build casa filter
+      let casaFilter = "";
+      const casaParams: string[] = [];
+      if (casa) {
+        const casaArr = Array.isArray(casa) ? casa.map(String) : [String(casa)];
+        const filtered = casaArr.filter(c => c !== 'Todas');
+        if (filtered.length > 0) {
+          const hasFalta = filtered.includes('Falta de Interação');
+          const realCasas = filtered.filter(c => c !== 'Falta de Interação');
+          const conditions: string[] = [];
+          if (realCasas.length > 0) {
+            conditions.push(`TRIM(casa) IN (${realCasas.map(() => '?').join(',')})`);
+            casaParams.push(...realCasas);
+          }
+          if (hasFalta) {
+            conditions.push(`(TRIM(casa) = '' OR casa IS NULL)`);
+          }
+          casaFilter = `AND (${conditions.join(' OR ')})`;
+        }
+      }
+
+      const yearFilter = `AND YEAR(\`data e hora de fim\`) = ?`;
+      const monthFilter = selectedMonth && selectedMonth.length > 0
+        ? `AND MONTH(\`data e hora de fim\`) IN (${selectedMonth.map(() => '?').join(',')})`
+        : '';
+      const dateParams = selectedMonth && selectedMonth.length > 0
+        ? [selectedYear, ...selectedMonth]
+        : [selectedYear];
+
+      let extraFilter = "";
+      const extraParams: string[] = [];
+      const tipoStr = String(tipo || "");
+      const valorStr = String(valor || "");
+
+      if (tipoStr === "origem") {
+        if (valorStr === "Não informado") {
+          extraFilter = `AND (TRIM(\`tipo de canal\`) = '' OR \`tipo de canal\` IS NULL)`;
+        } else {
+          extraFilter = `AND TRIM(\`tipo de canal\`) = ?`;
+          extraParams.push(valorStr);
+        }
+      } else if (tipoStr === "assunto") {
+        extraFilter = `AND \`resumo da conversa\` = ?`;
+        extraParams.push(valorStr);
+      } else if (tipoStr === "prazo") {
+        if (valorStr === "dentro") {
+          extraFilter = `AND TIMESTAMPDIFF(HOUR, t.\`data e hora de inicio\`, t.\`data e hora de fim\`) <= 24`;
+        } else {
+          extraFilter = `AND TIMESTAMPDIFF(HOUR, t.\`data e hora de inicio\`, t.\`data e hora de fim\`) > 24`;
+        }
+      }
+
+      const allParams = [...dateParams, ...casaParams, ...extraParams];
+
+      const [rows] = await pool.query<RowDataPacket[]>(`
+        SELECT
+          t.protocolo,
+          t.contato,
+          t.identificador,
+          t.canal,
+          t.\`tipo de canal\` AS tipoCanal,
+          t.\`data e hora de inicio\` AS dataHoraInicio,
+          t.\`data e hora de fim\` AS dataHoraFim,
+          t.\`resumo da conversa\` AS resumoConversa,
+          COALESCE(NULLIF(TRIM(t.casa), ''), 'Falta de Interação') AS casa
+        FROM \`${TABLE_NAME}\` t
+        INNER JOIN (
+          SELECT MAX(id) AS max_id
+          FROM \`${TABLE_NAME}\`
+          WHERE \`data e hora de fim\` IS NOT NULL
+            ${yearFilter}
+            ${monthFilter}
+            ${casaFilter}
+          GROUP BY protocolo
+        ) latest ON t.id = latest.max_id
+        WHERE 1=1
+          ${extraFilter}
+        ORDER BY t.\`data e hora de fim\` DESC
+      `, allParams);
+
+      res.json(rows);
+    } catch (error) {
+      console.error("Erro ao buscar drilldown:", error);
+      res.status(500).json({ message: "Erro ao buscar dados detalhados" });
     }
   });
 

@@ -7,11 +7,14 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { CasaPicker } from "@/components/ui/casa-picker";
+import { MonthPicker } from "@/components/ui/month-picker";
 import {
-    RefreshCw, TrendingUp, Headphones, FileText, Clock, ChevronLeft, ChevronRight
+    RefreshCw, TrendingUp, Headphones, FileText, Clock, Filter
 } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
+import { format } from "date-fns";
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -20,6 +23,25 @@ interface AnualStatsData {
     porOrigem: Array<{ nome: string; total: number }>;
     porAssunto: Array<{ nome: string; total: number }>;
     prazo: { dentro: number; fora: number };
+}
+
+interface DrilldownRecord {
+    protocolo: string;
+    contato: string;
+    identificador: string;
+    canal: string;
+    tipoCanal: string;
+    dataHoraInicio: string;
+    dataHoraFim: string;
+    resumoConversa: string;
+    casa: string;
+}
+
+interface DrilldownState {
+    open: boolean;
+    title: string;
+    tipo: string;
+    valor: string;
 }
 
 // ─── Constants ─────────────────────────────────────────────────────
@@ -95,7 +117,20 @@ function EvolucaoTooltip({ active, payload, label }: any) {
 export default function DashboardAnualPage() {
     const currentYear = new Date().getFullYear();
     const [selectedYear, setSelectedYear] = useState(currentYear);
+    const [selectedMonths, setSelectedMonths] = useState<number[]>([]);
     const [selectedCasas, setSelectedCasas] = useState<string[]>([]);
+    const [drilldown, setDrilldown] = useState<DrilldownState>({ open: false, title: '', tipo: '', valor: '' });
+    const [drilldownPage, setDrilldownPage] = useState(1);
+    const ITEMS_PER_PAGE = 10;
+
+    const openDrilldown = useCallback((title: string, tipo: string, valor: string) => {
+        setDrilldownPage(1);
+        setDrilldown({ open: true, title, tipo, valor });
+    }, []);
+
+    const closeDrilldown = useCallback(() => {
+        setDrilldown(d => ({ ...d, open: false }));
+    }, []);
 
     // Fetch casas
     const { data: casasList } = useQuery<string[]>({
@@ -107,9 +142,20 @@ export default function DashboardAnualPage() {
         ? selectedCasas.map(c => `&casa=${encodeURIComponent(c)}`).join('')
         : "";
 
+    const monthParam = selectedMonths.length > 0
+        ? selectedMonths.map(m => `&month=${m}`).join('')
+        : "";
+
     const { data: stats, isLoading, refetch } = useQuery<AnualStatsData>({
-        queryKey: ["anual-stats", selectedYear, selectedCasas],
-        queryFn: () => apiRequest(`/api/anual-stats?year=${selectedYear}${casaParam}`),
+        queryKey: ["anual-stats", selectedYear, selectedMonths, selectedCasas],
+        queryFn: () => apiRequest(`/api/anual-stats?year=${selectedYear}${monthParam}${casaParam}`),
+    });
+
+    // Fetch drilldown data
+    const { data: drilldownData, isLoading: drilldownLoading } = useQuery<DrilldownRecord[]>({
+        queryKey: ['anual-drilldown', selectedYear, selectedMonths, selectedCasas, drilldown.tipo, drilldown.valor],
+        queryFn: () => apiRequest(`/api/anual-drilldown?year=${selectedYear}${monthParam}${casaParam}&tipo=${encodeURIComponent(drilldown.tipo)}&valor=${encodeURIComponent(drilldown.valor)}`),
+        enabled: drilldown.open && !!drilldown.tipo,
     });
 
     // ─── Transform evolucao data for line chart ────────────────────
@@ -180,7 +226,7 @@ export default function DashboardAnualPage() {
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-[#0C2135] rounded-xl px-4 py-3 border border-[#165A8A] gap-3">
                 <div className="flex items-center gap-3">
                     <div className="w-2 h-2 rounded-full bg-blue-500" />
-                    <span className="text-sm text-gray-300 font-medium">Dados Anuais</span>
+                    <span className="text-sm text-gray-300 font-medium">Filtro Mensal</span>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                     {/* Casa filter */}
@@ -189,31 +235,13 @@ export default function DashboardAnualPage() {
                         casas={casasList || []}
                         onChange={setSelectedCasas}
                     />
-                    {/* Year picker */}
-                    <div className="flex items-center gap-1 bg-[#061726] border border-[#165A8A] rounded-lg px-1">
-                        <button
-                            onClick={() => setSelectedYear(y => y - 1)}
-                            className="p-1.5 text-gray-400 hover:text-white transition-colors"
-                        >
-                            <ChevronLeft className="w-4 h-4" />
-                        </button>
-                        <select
-                            value={selectedYear}
-                            onChange={(e) => setSelectedYear(Number(e.target.value))}
-                            className="bg-transparent text-gray-200 text-sm font-medium px-2 py-1.5 focus:outline-none cursor-pointer appearance-none text-center"
-                        >
-                            {yearOptions.map(y => (
-                                <option key={y} value={y} className="bg-[#0C2135]">{y}</option>
-                            ))}
-                        </select>
-                        <button
-                            onClick={() => setSelectedYear(y => Math.min(currentYear, y + 1))}
-                            disabled={selectedYear >= currentYear}
-                            className="p-1.5 text-gray-400 hover:text-white transition-colors disabled:opacity-30"
-                        >
-                            <ChevronRight className="w-4 h-4" />
-                        </button>
-                    </div>
+                    {/* Month + Year picker */}
+                    <MonthPicker
+                        selectedMonths={selectedMonths}
+                        selectedYear={selectedYear}
+                        onChangeMonths={setSelectedMonths}
+                        onChangeYear={setSelectedYear}
+                    />
                     <button
                         onClick={() => refetch()}
                         className="flex items-center gap-2 text-xs text-gray-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-white/5"
@@ -289,7 +317,7 @@ export default function DashboardAnualPage() {
                                     return (
                                         <Tooltip key={item.nome}>
                                             <TooltipTrigger asChild>
-                                                <div className="group cursor-default">
+                                                <div className="group cursor-pointer hover:bg-white/5 rounded-lg p-1 -m-1 transition-colors" onDoubleClick={() => openDrilldown(`Origem: ${item.nome}`, 'origem', item.nome)}>
                                                     <div className="flex items-center justify-between mb-2">
                                                         <div className="flex items-center gap-2">
                                                             <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: barColor }} />
@@ -362,7 +390,7 @@ export default function DashboardAnualPage() {
                                 {/* Dentro do Prazo */}
                                 <Tooltip>
                                     <TooltipTrigger asChild>
-                                        <div className="cursor-default">
+                                        <div className="cursor-pointer hover:bg-white/5 rounded-lg p-1 -m-1 transition-colors" onDoubleClick={() => openDrilldown('Dentro do Prazo', 'prazo', 'dentro')}>
                                             <div className="flex items-center justify-between mb-2">
                                                 <div className="flex items-center gap-2">
                                                     <div className="w-3 h-3 rounded-full bg-emerald-500 flex-shrink-0" />
@@ -413,7 +441,7 @@ export default function DashboardAnualPage() {
                                 {/* Fora do Prazo */}
                                 <Tooltip>
                                     <TooltipTrigger asChild>
-                                        <div className="cursor-default">
+                                        <div className="cursor-pointer hover:bg-white/5 rounded-lg p-1 -m-1 transition-colors" onDoubleClick={() => openDrilldown('Fora do Prazo', 'prazo', 'fora')}>
                                             <div className="flex items-center justify-between mb-2">
                                                 <div className="flex items-center gap-2">
                                                     <div className="w-3 h-3 rounded-full bg-red-500 flex-shrink-0" />
@@ -492,19 +520,20 @@ export default function DashboardAnualPage() {
                                             <span className="text-[10px] text-gray-400 uppercase tracking-wider">Total</span>
                                         </div>
                                     </div>
-                                </div>
-                            </div>
+                                </div >
+                            </div >
                         ) : (
                             <div className="flex items-center justify-center h-[200px] text-gray-500">
                                 Nenhum dado disponível
                             </div>
-                        )}
-                    </CardContent>
-                </Card>
-            </div>
+                        )
+                        }
+                    </CardContent >
+                </Card >
+            </div >
 
             {/* 3. Atendimentos por Assunto — Horizontal Bar Chart */}
-            <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
+            < Card className="bg-[#0C2135] border-[#165A8A] shadow-lg" >
                 <CardHeader>
                     <CardTitle className="text-white text-lg flex items-center gap-2">
                         <FileText className="w-5 h-5 text-sky-400" />
@@ -518,6 +547,13 @@ export default function DashboardAnualPage() {
                                 data={stats.porAssunto}
                                 layout="vertical"
                                 margin={{ left: 10, right: 30 }}
+                                onClick={(data: any) => {
+                                    if (data?.activePayload?.[0]) {
+                                        const nome = data.activePayload[0].payload.nome;
+                                        openDrilldown(`Assunto: ${nome}`, 'assunto', nome);
+                                    }
+                                }}
+                                style={{ cursor: 'pointer' }}
                             >
                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#165A8A" />
                                 <XAxis type="number" stroke="#6b7280" fontSize={11} />
@@ -535,7 +571,7 @@ export default function DashboardAnualPage() {
                                 />
                                 <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={22}>
                                     {stats.porAssunto.map((_, index) => (
-                                        <Cell key={`assunto-${index}`} fill={ASSUNTO_COLORS[index % ASSUNTO_COLORS.length]} />
+                                        <Cell key={`assunto-${index}`} fill={ASSUNTO_COLORS[index % ASSUNTO_COLORS.length]} className="cursor-pointer" />
                                     ))}
                                 </Bar>
                             </BarChart>
@@ -546,7 +582,112 @@ export default function DashboardAnualPage() {
                         </div>
                     )}
                 </CardContent>
-            </Card>
-        </Layout>
+            </Card >
+
+            {/* ─── Drill-down Modal ─────────────────────────────────── */}
+            < Dialog open={drilldown.open} onOpenChange={(open) => !open && closeDrilldown()}>
+                <DialogContent className="bg-[#0C2135] border-[#165A8A] text-white max-w-[95vw] w-[1200px] max-h-[85vh] overflow-hidden flex flex-col">
+                    <DialogHeader>
+                        <DialogTitle className="text-white text-lg flex items-center gap-2">
+                            <Filter className="w-5 h-5 text-blue-400" />
+                            {drilldown.title}
+                        </DialogTitle>
+                        <DialogDescription className="text-gray-400">
+                            Atendimentos filtrados • {selectedYear}
+                            {drilldownData && ` • ${drilldownData.length.toLocaleString('pt-BR')} registros`}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="flex-1 overflow-auto min-h-0">
+                        {drilldownLoading ? (
+                            <div className="flex items-center justify-center py-16">
+                                <RefreshCw className="w-6 h-6 text-blue-500 animate-spin" />
+                                <span className="text-gray-400 ml-3">Carregando...</span>
+                            </div>
+                        ) : drilldownData && drilldownData.length > 0 ? (
+                            <>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead>
+                                            <tr className="border-b border-[#165A8A]">
+                                                <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Protocolo</th>
+                                                <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Contato</th>
+                                                <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Canal</th>
+                                                <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Início</th>
+                                                <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Fim</th>
+                                                <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Resumo</th>
+                                                <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Casa</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {drilldownData
+                                                .slice((drilldownPage - 1) * ITEMS_PER_PAGE, drilldownPage * ITEMS_PER_PAGE)
+                                                .map((row, idx) => {
+                                                    const formatDate = (d: string) => {
+                                                        if (!d) return '—';
+                                                        try { return format(new Date(d), 'dd/MM/yyyy HH:mm'); }
+                                                        catch { return d; }
+                                                    };
+                                                    return (
+                                                        <tr key={`${row.protocolo}-${idx}`} className="border-b border-[#165A8A]/50 hover:bg-white/5 transition-colors">
+                                                            <td className="py-2.5 px-3 text-blue-300 font-mono text-xs">{row.protocolo}</td>
+                                                            <td className="py-2.5 px-3 text-gray-200">{row.contato || row.identificador || '—'}</td>
+                                                            <td className="py-2.5 px-3">
+                                                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300">
+                                                                    {row.canal}
+                                                                </span>
+                                                            </td>
+                                                            <td className="py-2.5 px-3 text-gray-300 text-xs">{formatDate(row.dataHoraInicio)}</td>
+                                                            <td className="py-2.5 px-3 text-gray-300 text-xs">{formatDate(row.dataHoraFim)}</td>
+                                                            <td className="py-2.5 px-3 text-gray-200 max-w-[200px] truncate">{row.resumoConversa || '—'}</td>
+                                                            <td className="py-2.5 px-3">
+                                                                <span className={`text-xs font-medium ${row.casa === 'Falta de Interação' ? 'text-red-400' : 'text-emerald-400'}`}>
+                                                                    {row.casa}
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                {/* Pagination */}
+                                {drilldownData.length > ITEMS_PER_PAGE && (
+                                    <div className="flex items-center justify-between pt-4 mt-2 border-t border-[#165A8A]">
+                                        <span className="text-xs text-gray-400">
+                                            Mostrando {((drilldownPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(drilldownPage * ITEMS_PER_PAGE, drilldownData.length)} de {drilldownData.length.toLocaleString('pt-BR')}
+                                        </span>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => setDrilldownPage(p => Math.max(1, p - 1))}
+                                                disabled={drilldownPage === 1}
+                                                className="px-3 py-1 text-xs text-gray-300 bg-white/5 rounded-lg hover:bg-white/10 disabled:opacity-30 transition-colors"
+                                            >
+                                                ‹ Anterior
+                                            </button>
+                                            <span className="text-xs text-gray-400">
+                                                {drilldownPage} / {Math.ceil(drilldownData.length / ITEMS_PER_PAGE)}
+                                            </span>
+                                            <button
+                                                onClick={() => setDrilldownPage(p => Math.min(Math.ceil(drilldownData.length / ITEMS_PER_PAGE), p + 1))}
+                                                disabled={drilldownPage >= Math.ceil(drilldownData.length / ITEMS_PER_PAGE)}
+                                                className="px-3 py-1 text-xs text-gray-300 bg-white/5 rounded-lg hover:bg-white/10 disabled:opacity-30 transition-colors"
+                                            >
+                                                Próximo ›
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        ) : (
+                            <div className="flex items-center justify-center py-16 text-gray-500">
+                                Nenhum registro encontrado
+                            </div>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog >
+        </Layout >
     );
 }
