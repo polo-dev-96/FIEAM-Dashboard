@@ -2,7 +2,7 @@
 
 **Data:** 13/02/2026
 
-## Problema
+## Problema:
 
 A tabela "Últimos Atendimentos Finalizados" não respeitava o filtro de datas selecionado no DateRangePicker. Os cards de métricas e o gráfico de timeline filtravam corretamente, mas a tabela sempre mostrava **todos** os atendimentos, independente do período selecionado.
 
