@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { Building2, Check, Search, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
@@ -12,9 +12,19 @@ export function CasaPicker({ value, casas, onChange }: CasaPickerProps) {
     const [open, setOpen] = useState(false);
     const [search, setSearch] = useState("");
 
-    const allSelected = value.length === 0; // empty = "Todas"
+    // Staged selection — only applied on confirm
+    const [staged, setStaged] = useState<string[]>(value);
 
-    const displayText = allSelected
+    // Sync staged with external value when popover opens
+    useEffect(() => {
+        if (open) {
+            setStaged(value);
+        }
+    }, [open]);
+
+    const allSelected = staged.length === 0; // empty = "Todas"
+
+    const displayText = value.length === 0
         ? "Todas as Casas"
         : value.length === 1
             ? value[0]
@@ -27,40 +37,54 @@ export function CasaPicker({ value, casas, onChange }: CasaPickerProps) {
     }, [casas, search]);
 
     const isSelected = useCallback(
-        (casa: string) => value.includes(casa),
-        [value]
+        (casa: string) => staged.includes(casa),
+        [staged]
     );
 
     const toggleCasa = useCallback(
         (casa: string) => {
-            if (value.includes(casa)) {
-                onChange(value.filter((c) => c !== casa));
-            } else {
-                onChange([...value, casa]);
-            }
+            setStaged((prev) =>
+                prev.includes(casa) ? prev.filter((c) => c !== casa) : [...prev, casa]
+            );
         },
-        [value, onChange]
+        []
     );
 
     const handleSelectAll = useCallback(() => {
-        onChange([]);
-        setOpen(false);
-        setSearch("");
-    }, [onChange]);
+        setStaged([]);
+    }, []);
 
     const handleClear = useCallback(() => {
-        onChange([]);
+        setStaged([]);
+    }, []);
+
+    const handleConfirm = useCallback(() => {
+        onChange(staged);
         setOpen(false);
         setSearch("");
-    }, [onChange]);
+    }, [staged, onChange]);
+
+    const handleCancel = useCallback(() => {
+        setStaged(value);
+        setOpen(false);
+        setSearch("");
+    }, [value]);
+
+    // Check if staged differs from current value
+    const hasChanges = useMemo(() => {
+        if (staged.length !== value.length) return true;
+        const sortedStaged = [...staged].sort();
+        const sortedValue = [...value].sort();
+        return sortedStaged.some((s, i) => s !== sortedValue[i]);
+    }, [staged, value]);
 
     return (
-        <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) setSearch(""); }}>
+        <Popover open={open} onOpenChange={(v) => { if (!v) { handleCancel(); } else { setOpen(true); } }}>
             <PopoverTrigger asChild>
                 <button className="group flex items-center gap-2.5 px-4 py-2.5 text-xs bg-[#060e1a]/80 border border-[#1a3a5c]/80 rounded-xl text-gray-300 hover:border-[#009FE3]/40 hover:bg-[#0a1929] hover:text-white transition-all duration-300 min-w-[180px] backdrop-blur-sm shadow-sm hover:shadow-md hover:shadow-[#009FE3]/5">
                     <Building2 className="w-4 h-4 text-[#009FE3] shrink-0 group-hover:scale-110 transition-transform" />
                     <span className="text-left flex-1 truncate font-medium">{displayText}</span>
-                    {!allSelected && (
+                    {value.length > 0 && (
                         <span className="px-1.5 py-0.5 bg-[#009FE3]/15 text-[#009FE3] text-[9px] font-bold rounded-full border border-[#009FE3]/20 min-w-[18px] text-center">
                             {value.length}
                         </span>
@@ -107,13 +131,13 @@ export function CasaPicker({ value, casas, onChange }: CasaPickerProps) {
                         <button
                             onClick={handleSelectAll}
                             className={`w-full text-left px-3 py-2.5 text-xs rounded-lg transition-all duration-200 flex items-center gap-2.5 ${allSelected
-                                    ? "bg-[#009FE3]/15 text-[#009FE3] font-semibold border border-[#009FE3]/20"
-                                    : "text-gray-400 hover:text-white hover:bg-white/5 border border-transparent"
+                                ? "bg-[#009FE3]/15 text-[#009FE3] font-semibold border border-[#009FE3]/20"
+                                : "text-gray-400 hover:text-white hover:bg-white/5 border border-transparent"
                                 }`}
                         >
                             <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all ${allSelected
-                                    ? "border-[#009FE3] bg-[#009FE3]"
-                                    : "border-gray-600"
+                                ? "border-[#009FE3] bg-[#009FE3]"
+                                : "border-gray-600"
                                 }`}>
                                 {allSelected && <Check className="w-2.5 h-2.5 text-white" />}
                             </div>
@@ -131,13 +155,13 @@ export function CasaPicker({ value, casas, onChange }: CasaPickerProps) {
                                         key={casa}
                                         onClick={() => toggleCasa(casa)}
                                         className={`w-full text-left px-3 py-2.5 text-xs rounded-lg transition-all duration-200 flex items-center gap-2.5 ${checked
-                                                ? "bg-[#009FE3]/15 text-[#009FE3] font-semibold border border-[#009FE3]/20"
-                                                : "text-gray-400 hover:text-white hover:bg-white/5 border border-transparent"
+                                            ? "bg-[#009FE3]/15 text-[#009FE3] font-semibold border border-[#009FE3]/20"
+                                            : "text-gray-400 hover:text-white hover:bg-white/5 border border-transparent"
                                             }`}
                                     >
                                         <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all ${checked
-                                                ? "border-[#009FE3] bg-[#009FE3]"
-                                                : "border-gray-600 hover:border-gray-400"
+                                            ? "border-[#009FE3] bg-[#009FE3]"
+                                            : "border-gray-600 hover:border-gray-400"
                                             }`}>
                                             {checked && <Check className="w-2.5 h-2.5 text-white" />}
                                         </div>
@@ -152,18 +176,28 @@ export function CasaPicker({ value, casas, onChange }: CasaPickerProps) {
                         )}
                     </div>
 
-                    {/* Footer */}
-                    {!allSelected && (
-                        <div className="px-3 py-2.5 border-t border-[#1a3a5c]/40 bg-[#081422]/50">
+                    {/* Footer — Confirm / Clear */}
+                    <div className="px-3 py-2.5 border-t border-[#1a3a5c]/40 bg-[#081422]/50 flex items-center gap-2">
+                        {!allSelected && (
                             <button
                                 onClick={handleClear}
-                                className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs text-gray-400 hover:text-red-400 transition-all duration-200 rounded-lg hover:bg-red-500/5 border border-transparent hover:border-red-500/15"
+                                className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs text-gray-400 hover:text-red-400 transition-all duration-200 rounded-lg hover:bg-red-500/5 border border-transparent hover:border-red-500/15"
                             >
                                 <X className="w-3.5 h-3.5" />
-                                Limpar filtro
+                                Limpar
                             </button>
-                        </div>
-                    )}
+                        )}
+                        <button
+                            onClick={handleConfirm}
+                            className={`flex-1 flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${hasChanges
+                                    ? "bg-[#009FE3] text-white hover:bg-[#0088c7] shadow-md shadow-[#009FE3]/20"
+                                    : "bg-[#009FE3]/20 text-[#009FE3] cursor-default"
+                                }`}
+                        >
+                            <Check className="w-3.5 h-3.5" />
+                            Confirmar
+                        </button>
+                    </div>
                 </div>
             </PopoverContent>
         </Popover>

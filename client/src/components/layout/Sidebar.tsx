@@ -2,6 +2,7 @@ import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard,
   Search,
+  Phone,
   Menu,
   X,
   ChevronLeft,
@@ -15,6 +16,7 @@ import { useSidebar } from "./SidebarContext";
 const navItems = [
   { href: "/", label: "Visão Geral", icon: LayoutDashboard },
   { href: "/protocolo", label: "Pesquisar Protocolo", icon: Search },
+  { href: "/telefone", label: "Pesquisar Telefone", icon: Phone },
 ];
 
 export function Sidebar() {

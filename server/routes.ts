@@ -284,6 +284,48 @@ export async function registerRoutes(
     }
   });
 
+  // GET /api/telefone/:telefone — Search all atendimentos by phone number
+  app.get("/api/telefone/:telefone", async (req, res) => {
+    try {
+      const { telefone } = req.params;
+      const { startDate, endDate } = req.query;
+
+      let dateFilter = "";
+      const params: any[] = [`%${telefone}%`];
+
+      if (startDate && endDate) {
+        dateFilter = " AND DATE(`data e hora de fim`) BETWEEN ? AND ?";
+        params.push(startDate, endDate);
+      }
+
+      const [rows] = await pool.query<RowDataPacket[]>(`
+        SELECT
+          id,
+          contato,
+          identificador,
+          protocolo,
+          canal,
+          \`data e hora de inicio\` AS dataHoraInicio,
+          \`data e hora de fim\` AS dataHoraFim,
+          \`tipo de canal\` AS tipoCanal,
+          \`resumo da conversa\` AS resumoConversa,
+          COALESCE(NULLIF(TRIM(casa), ''), 'Falta de Interação') AS casa
+        FROM \`${TABLE_NAME}\`
+        WHERE identificador LIKE ?${dateFilter}
+        ORDER BY \`data e hora de fim\` DESC
+      `, params);
+
+      if (rows.length === 0) {
+        return res.status(404).json({ message: "Telefone não encontrado" });
+      }
+
+      res.json(rows);
+    } catch (error) {
+      console.error("Erro ao buscar telefone:", error);
+      res.status(500).json({ message: "Erro ao buscar telefone" });
+    }
+  });
+
   // GET /api/export-xlsx — Export atendimentos as XLSX download
   app.get("/api/export-xlsx", async (req, res) => {
     try {
