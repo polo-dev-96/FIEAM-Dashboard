@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { CasaPicker } from "@/components/ui/casa-picker";
+import { ExportReportDialog } from "@/components/ui/export-report-dialog";
 import {
   MessageSquare, Clock, CalendarDays, TrendingUp,
   RefreshCw, Users, Building2, ChevronLeft, ChevronRight, Filter, Cloud
@@ -207,6 +208,7 @@ export default function OverviewPage() {
             endDate={dateRange.endDate}
             onApply={(s, e) => setDateRange({ startDate: s, endDate: e })}
           />
+          <ExportReportDialog selectedCasas={selectedCasas} />
           <button
             onClick={handleManualRefresh}
             className="flex items-center gap-2 text-xs text-gray-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-white/5"
