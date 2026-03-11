@@ -10,6 +10,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { CasaPicker } from "@/components/ui/casa-picker";
 import { MonthPicker } from "@/components/ui/month-picker";
+import { ExportReportDialog } from "@/components/ui/export-report-dialog";
 import {
     RefreshCw, TrendingUp, Headphones, FileText, Clock, Filter
 } from "lucide-react";
@@ -242,6 +243,7 @@ export default function DashboardAnualPage() {
                         onChangeMonths={setSelectedMonths}
                         onChangeYear={setSelectedYear}
                     />
+                    <ExportReportDialog selectedCasas={selectedCasas} />
                     <button
                         onClick={() => refetch()}
                         className="flex items-center gap-2 text-xs text-gray-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-white/5"

@@ -16,7 +16,7 @@ function LayoutInner({ children, title, subtitle }: {
           {/* Header Section — FIEAM Banner */}
           <header className="relative flex items-center justify-between rounded-xl overflow-hidden -mx-4 md:-mx-8 -mt-4 md:-mt-8 mb-2">
             {/* Background that matches the image blue */}
-            <div className="absolute inset-0 bg-[#0077C0]" />
+            <div className="absolute inset-0 bg-[#2D8FCF]" />
             <div className="relative z-10 px-6 py-4">
               <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-white">{title}</h2>
               {subtitle && <p className="text-white/70 mt-1 text-sm">{subtitle}</p>}

@@ -498,16 +498,21 @@ export async function registerRoutes(
           ORDER BY mes ASC, canal ASC
         `, [...dateParams, ...casaParams]);
 
-        // 2. Atendimentos por Origem (tipo de canal)
+        // 2. Atendimentos por Origem (tipo de canal) — deduplicated per protocol
         const [porOrigem] = await conn.query<RowDataPacket[]>(`
           SELECT
-            COALESCE(NULLIF(TRIM(\`tipo de canal\`), ''), 'Não informado') AS nome,
-            COUNT(DISTINCT protocolo) AS total
-          FROM \`${TABLE_NAME}\`
-          WHERE \`data e hora de fim\` IS NOT NULL
-            ${yearFilter}
-            ${monthFilter}
-            ${casaFilter}
+            COALESCE(NULLIF(TRIM(t.\`tipo de canal\`), ''), 'Não informado') AS nome,
+            COUNT(*) AS total
+          FROM \`${TABLE_NAME}\` t
+          INNER JOIN (
+            SELECT MIN(id) AS min_id
+            FROM \`${TABLE_NAME}\`
+            WHERE \`data e hora de fim\` IS NOT NULL
+              ${yearFilter}
+              ${monthFilter}
+              ${casaFilter}
+            GROUP BY protocolo
+          ) latest ON t.id = latest.min_id
           GROUP BY nome
           ORDER BY total DESC
         `, [...dateParams, ...casaParams]);
