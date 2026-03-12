@@ -7,12 +7,14 @@ import {
   Menu,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  LogOut
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useSidebar } from "./SidebarContext";
+import { useAuth } from "@/lib/AuthContext";
 
 const navItems = [
   { href: "/", label: "Visão Geral", icon: LayoutDashboard },
@@ -25,6 +27,7 @@ export function Sidebar() {
   const [location] = useLocation();
   const [isOpen, setIsOpen] = useState(false);
   const { collapsed, toggle } = useSidebar();
+  const { logout } = useAuth();
 
   return (
     <>
@@ -50,8 +53,8 @@ export function Sidebar() {
           {/* Logo Area */}
           <div className="p-6 border-b border-[#165A8A]">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#009FE3] to-[#0077B3] flex items-center justify-center flex-shrink-0">
-                <span className="text-white font-bold text-lg">F</span>
+              <div className="w-10 h-10 flex-shrink-0">
+                <img src="/Icone_Logo.png" alt="Logo" className="w-full h-full object-contain" />
               </div>
               {!collapsed && (
                 <div className="overflow-hidden">
@@ -103,6 +106,21 @@ export function Sidebar() {
               title={collapsed ? "Expandir" : "Recolher"}
             >
               {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+            </button>
+          </div>
+
+          {/* Logout */}
+          <div className={cn("px-4 pb-2", collapsed && "px-2")}>
+            <button
+              onClick={logout}
+              className={cn(
+                "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 w-full text-gray-400 hover:bg-red-500/10 hover:text-red-400",
+                collapsed && "justify-center px-2"
+              )}
+              title={collapsed ? "Sair" : undefined}
+            >
+              <LogOut className="w-5 h-5 flex-shrink-0" />
+              {!collapsed && <span className="font-medium text-sm">Sair</span>}
             </button>
           </div>
 

@@ -9,6 +9,23 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  // POST /api/login - Autenticação simples com credenciais do .env
+  app.post("/api/login", (req, res) => {
+    const { email, password } = req.body;
+    const validEmail = process.env.LOGIN_EMAIL;
+    const validPassword = process.env.LOGIN_PASSWORD;
+
+    if (!validEmail || !validPassword) {
+      return res.status(500).json({ message: "Credenciais não configuradas no servidor" });
+    }
+
+    if (email === validEmail && password === validPassword) {
+      return res.json({ success: true, token: Buffer.from(`${email}:${Date.now()}`).toString("base64") });
+    }
+
+    return res.status(401).json({ message: "Email ou senha inválidos" });
+  });
+
   // GET /api/stats - Metricas agregadas do dashboard
   // Supports optional ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
   // GET /api/casas - Lista de casas distintas
