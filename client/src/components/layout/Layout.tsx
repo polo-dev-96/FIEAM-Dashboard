@@ -21,11 +21,12 @@ function LayoutInner({ children, title, subtitle }: {
               <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-white">{title}</h2>
               {subtitle && <p className="text-white/70 mt-1 text-sm">{subtitle}</p>}
             </div>
-            <img
-              src="/anexo/grupo_fieam.png"
-              alt="FIEAM · SESI · SENAI · IEL"
-              className="relative z-10 h-full max-h-16 object-contain mr-4 md:mr-8"
-            />
+            <div className="relative z-10 flex items-center gap-3 mr-4 md:mr-8" style={{ isolation: "isolate" }}>
+              <img src="/anexo/FIEAM-removebg-preview.png" alt="FIEAM" className="h-10 object-contain" />
+              <img src="/anexo/SESI-removebg-preview.png" alt="SESI" className="h-10 object-contain" />
+              <img src="/anexo/SENAI-removebg-preview.png" alt="SENAI" className="h-10 object-contain" />
+              <img src="/anexo/IEL-removebg-preview.png" alt="IEL" className="h-10 object-contain" />
+            </div>
           </header>
 
           {/* Main Content */}
