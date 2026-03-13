@@ -81,3 +81,308 @@
 .animate-in {
   animation: fade-in 0.5s ease-out, slide-in-from-bottom-4 0.5s ease-out;
 }
+
+/* ─── Light Mode Overrides ─────────────────────────────────────────── */
+
+/* Surface backgrounds */
+[data-theme="light"] .bg-\[\#0C2135\] {
+  background-color: #ffffff !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+}
+[data-theme="light"] .bg-\[\#071A2E\] {
+  background-color: #f1f5f9 !important;
+}
+[data-theme="light"] .bg-\[\#061726\] {
+  background-color: #f8fafc !important;
+}
+[data-theme="light"] .bg-\[\#0b1a2e\] {
+  background-color: #ffffff !important;
+}
+[data-theme="light"] .bg-\[\#081422\] {
+  background-color: #f8fafc !important;
+}
+[data-theme="light"] .bg-\[\#081422\]\/50 {
+  background-color: rgba(248, 250, 252, 0.5) !important;
+}
+
+/* Borders */
+[data-theme="light"] .border-\[\#165A8A\] {
+  border-color: #cbd5e1 !important;
+}
+[data-theme="light"] .border-\[\#1a3a5c\] {
+  border-color: #e2e8f0 !important;
+}
+[data-theme="light"] .border-\[\#1a3a5c\]\/60 {
+  border-color: rgba(226, 232, 240, 0.6) !important;
+}
+[data-theme="light"] .border-\[\#1a3a5c\]\/50 {
+  border-color: rgba(226, 232, 240, 0.5) !important;
+}
+
+/* White transparent backgrounds (hover states, tracks) */
+[data-theme="light"] .bg-white\/5 {
+  background-color: #f1f5f9 !important;
+}
+[data-theme="light"] .bg-white\/10 {
+  background-color: #e2e8f0 !important;
+}
+
+/* Text inside dark surfaces → readable on white */
+[data-theme="light"] .bg-\[\#0C2135\] .text-white,
+[data-theme="light"] .bg-\[\#0b1a2e\] .text-white {
+  color: #0f172a !important;
+}
+[data-theme="light"] .bg-\[\#0C2135\] .text-gray-100,
+[data-theme="light"] .bg-\[\#0b1a2e\] .text-gray-100 {
+  color: #1e293b !important;
+}
+[data-theme="light"] .bg-\[\#0C2135\] .text-gray-200 {
+  color: #334155 !important;
+}
+[data-theme="light"] .bg-\[\#0C2135\] .text-gray-300,
+[data-theme="light"] .bg-\[\#061726\] .text-gray-300 {
+  color: #475569 !important;
+}
+[data-theme="light"] .bg-\[\#0C2135\] .text-gray-400,
+[data-theme="light"] .bg-\[\#061726\] .text-gray-400 {
+  color: #64748b !important;
+}
+[data-theme="light"] .bg-\[\#0C2135\] .text-gray-500,
+[data-theme="light"] .bg-\[\#061726\] .text-gray-500 {
+  color: #64748b !important;
+}
+[data-theme="light"] .bg-\[\#0C2135\] .text-gray-600 {
+  color: #475569 !important;
+}
+
+/* Hover states on nav/buttons */
+[data-theme="light"] .hover\:bg-white\/5:hover {
+  background-color: #f1f5f9 !important;
+}
+[data-theme="light"] .hover\:bg-white\/10:hover {
+  background-color: #e2e8f0 !important;
+}
+[data-theme="light"] .hover\:text-gray-200:hover {
+  color: #1e293b !important;
+}
+
+/* Date inputs */
+[data-theme="light"] input[type="date"] {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+/* Select dropdowns */
+[data-theme="light"] select {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+/* Recharts chart grids and axes */
+[data-theme="light"] .recharts-cartesian-grid-horizontal line,
+[data-theme="light"] .recharts-cartesian-grid-vertical line {
+  stroke: #e2e8f0 !important;
+}
+[data-theme="light"] .recharts-text {
+  fill: #64748b !important;
+}
+[data-theme="light"] .recharts-legend-item-text {
+  color: #64748b !important;
+}
+
+/* Table rows hover */
+[data-theme="light"] .bg-\[\#0C2135\] .hover\:bg-white\/5:hover {
+  background-color: #f8fafc !important;
+}
+
+/* ─── Filter button triggers (CasaPicker, DateRangePicker, MonthPicker) ── */
+[data-theme="light"] .bg-\[\#060e1a\]\/80 {
+  background-color: #ffffff !important;
+}
+[data-theme="light"] .bg-\[\#0a1929\] {
+  background-color: #f1f5f9 !important;
+}
+[data-theme="light"] .bg-\[\#0d1f33\]\/50 {
+  background-color: rgba(241, 245, 249, 0.8) !important;
+}
+[data-theme="light"] .bg-\[\#0a1628\] {
+  background-color: #f8fafc !important;
+}
+
+/* Filter button borders */
+[data-theme="light"] .border-\[\#1a3a5c\]\/80 {
+  border-color: rgba(203, 213, 225, 0.8) !important;
+}
+[data-theme="light"] .border-\[\#1a3a5c\]\/40 {
+  border-color: rgba(203, 213, 225, 0.4) !important;
+}
+[data-theme="light"] .border-\[\#1a3a5c\]\/30 {
+  border-color: rgba(203, 213, 225, 0.3) !important;
+}
+[data-theme="light"] .border-\[\#1a3a5c\]\/60 {
+  border-color: rgba(203, 213, 225, 0.6) !important;
+}
+
+/* Text on filter triggers */
+[data-theme="light"] .bg-\[\#060e1a\]\/80 .text-gray-300,
+[data-theme="light"] .bg-\[\#060e1a\]\/80 span {
+  color: #334155 !important;
+}
+
+/* Popover backgrounds */
+[data-theme="light"] .bg-\[\#0b1a2e\] {
+  background-color: #ffffff !important;
+}
+[data-theme="light"] .bg-\[\#081422\] {
+  background-color: #f8fafc !important;
+}
+
+/* Text inside popovers */
+[data-theme="light"] .bg-\[\#0b1a2e\] .text-white,
+[data-theme="light"] .bg-\[\#0b1a2e\] .text-gray-200 {
+  color: #1e293b !important;
+}
+[data-theme="light"] .bg-\[\#0b1a2e\] .text-gray-300 {
+  color: #475569 !important;
+}
+[data-theme="light"] .bg-\[\#0b1a2e\] .text-gray-400 {
+  color: #64748b !important;
+}
+[data-theme="light"] .bg-\[\#0b1a2e\] .text-gray-500 {
+  color: #94a3b8 !important;
+}
+[data-theme="light"] .bg-\[\#0b1a2e\] .border-gray-600 {
+  border-color: #cbd5e1 !important;
+}
+[data-theme="light"] .bg-\[\#0b1a2e\] .hover\:bg-white\/5:hover {
+  background-color: #f1f5f9 !important;
+}
+[data-theme="light"] .bg-\[\#0b1a2e\] .hover\:text-white:hover {
+  color: #0f172a !important;
+}
+
+/* Search inputs (SearchProtocol, SearchPhone) */
+[data-theme="light"] input.bg-\[\#0a1628\] {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+[data-theme="light"] input.bg-\[\#0a1628\]::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Disabled search button */
+[data-theme="light"] .disabled\:bg-gray-700:disabled {
+  background-color: #e2e8f0 !important;
+  color: #94a3b8 !important;
+}
+
+/* ─── Insights / Destaques panels in light mode ────────────────────── */
+[data-theme="light"] .bg-\[\#081E30\] {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+[data-theme="light"] .bg-\[\#081E30\] .text-white {
+  color: #0f172a !important;
+}
+[data-theme="light"] .bg-\[\#081E30\] .text-gray-400 {
+  color: #64748b !important;
+}
+[data-theme="light"] .bg-\[\#081E30\] .text-cyan-400 {
+  color: #0284c7 !important;
+}
+
+/* ─── Dialog/Modal close buttons and icons in light mode ─────────────── */
+[data-theme="light"] .bg-\[\#0C2135\] button,
+[data-theme="light"] .bg-\[\#0b1a2e\] button {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #475569 !important;
+}
+[data-theme="light"] .bg-\[\#0C2135\] button:hover,
+[data-theme="light"] .bg-\[\#0b1a2e\] button:hover {
+  background-color: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+[data-theme="light"] .bg-\[\#0C2135\] svg,
+[data-theme="light"] .bg-\[\#0b1a2e\] svg {
+  color: #475569 !important;
+}
+[data-theme="light"] .bg-\[\#0C2135\] svg:hover,
+[data-theme="light"] .bg-\[\#0b1a2e\] svg:hover {
+  color: #1e293b !important;
+}
+
+/* ─── Gray text improvements in light mode ─────────────────────────── */
+[data-theme="light"] .bg-\[\#0C2135\] .text-gray-300 {
+  color: #374151 !important;
+}
+[data-theme="light"] .bg-\[\#0C2135\] .text-gray-400 {
+  color: #6b7280 !important;
+}
+[data-theme="light"] .bg-\[\#0C2135\] .text-gray-500 {
+  color: #6b7280 !important;
+}
+[data-theme="light"] .bg-\[\#0C2135\] .text-gray-600 {
+  color: #4b5563 !important;
+}
+[data-theme="light"] .bg-\[\#0C2135\] .text-gray-700 {
+  color: #374151 !important;
+}
+
+/* ─── Login page — ALWAYS dark mode (ignore theme toggle) ──────────────── */
+body:has(div.bg-\[\#071A2E\]) .bg-\[\#071A2E\] {
+  background-color: #071A2E !important;
+}
+body:has(div.bg-\[\#071A2E\]) .bg-\[\#0C2135\] {
+  background-color: #0C2135 !important;
+  border-color: #165A8A !important;
+}
+body:has(div.bg-\[\#071A2E\]) .bg-\[\#061726\] {
+  background-color: #061726 !important;
+  border-color: #165A8A !important;
+}
+body:has(div.bg-\[\#071A2E\]) .text-white {
+  color: #ffffff !important;
+}
+body:has(div.bg-\[\#071A2E\]) .text-gray-300 {
+  color: #d1d5db !important;
+}
+body:has(div.bg-\[\#071A2E\]) .text-gray-400 {
+  color: #9ca3af !important;
+}
+body:has(div.bg-\[\#071A2E\]) .text-gray-500 {
+  color: #6b7280 !important;
+}
+body:has(div.bg-\[\#071A2E\]) .text-gray-600 {
+  color: #4b5563 !important;
+}
+body:has(div.bg-\[\#071A2E\]) .placeholder-gray-500::placeholder {
+  color: #6b7280 !important;
+}
+body:has(div.bg-\[\#071A2E\]) .border-\[\#165A8A\] {
+  border-color: #165A8A !important;
+}
+body:has(div.bg-\[\#071A2E\]) .from-\[\#009FE3\] {
+  --tw-gradient-from: #009FE3 !important;
+}
+body:has(div.bg-\[\#071A2E\]) .to-\[\#0077B3\] {
+  --tw-gradient-to: #0077B3 !important;
+}
+body:has(div.bg-\[\#071A2E\]) .hover\:from-\[\#008CCE\]:hover {
+  --tw-gradient-from: #008CCE !important;
+}
+body:has(div.bg-\[\#071A2E\]) .hover\:to-\[\#006A9F\]:hover {
+  --tw-gradient-to: #006A9F !important;
+}
+
+/* DayPicker calendar in light mode */
+[data-theme="light"] .bg-\[\#0b1a2e\] .rdp-day_button,
+[data-theme="light"] .bg-\[\#0b1a2e\] .text-gray-300 {
+  color: #475569 !important;
+}
+[data-theme="light"] .bg-\[\#0b1a2e\] .text-gray-500 {
+  color: #94a3b8 !important;
+}

@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
-  AreaChart, Area, Cell
+  AreaChart, Area, Cell, LabelList
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, startOfDay, endOfDay, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 
 interface StatsData {
   totais: {
@@ -74,6 +74,7 @@ function getDefaultDates() {
 }
 
 export default function OverviewPage() {
+  const contentRef = useRef<HTMLDivElement>(null);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [countdown, setCountdown] = useState(60);
 
@@ -208,7 +209,7 @@ export default function OverviewPage() {
             endDate={dateRange.endDate}
             onApply={(s, e) => setDateRange({ startDate: s, endDate: e })}
           />
-          <ExportReportDialog selectedCasas={selectedCasas} />
+          <ExportReportDialog selectedCasas={selectedCasas} contentRef={contentRef} pdfTitle="Visão Geral - Dashboard FIEAM" pdfSubtitle="Dashboard de atendimentos em tempo real" />
           <button
             onClick={handleManualRefresh}
             className="flex items-center gap-2 text-xs text-gray-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-white/5"
@@ -219,6 +220,7 @@ export default function OverviewPage() {
         </div>
       </div>
 
+      <div ref={contentRef} className="space-y-6">
       {/* Stats Cards - values adapt to date filter */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
@@ -227,12 +229,14 @@ export default function OverviewPage() {
           icon={<CalendarDays className="w-5 h-5" />}
           color="blue"
         />
+        <div data-pdf-exclude>
         <StatCard
           title="Atendimentos Hoje"
           value={stats.totais.hoje?.toLocaleString("pt-BR") || "0"}
           icon={<MessageSquare className="w-5 h-5" />}
           color="red"
         />
+        </div>
         <StatCard
           title="Este Mês"
           value={stats.totais.mes?.toLocaleString("pt-BR") || "0"}
@@ -302,6 +306,57 @@ export default function OverviewPage() {
         </CardContent>
       </Card>
 
+      {/* PDF-only: Daily Volume Table */}
+      <div data-pdf-only style={{ display: "none" }}>
+        <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-white text-base flex items-center gap-2">
+              <CalendarDays className="w-4 h-4 text-blue-400" />
+              Volume Diário de Atendimentos
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[#165A8A]">
+                    <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-2 px-3 font-semibold">Data</th>
+                    <th className="text-right text-gray-400 text-xs uppercase tracking-wider py-2 px-3 font-semibold">Atendimentos</th>
+                    <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-2 px-3 font-semibold">Data</th>
+                    <th className="text-right text-gray-400 text-xs uppercase tracking-wider py-2 px-3 font-semibold">Atendimentos</th>
+                    <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-2 px-3 font-semibold">Data</th>
+                    <th className="text-right text-gray-400 text-xs uppercase tracking-wider py-2 px-3 font-semibold">Atendimentos</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const timeline = stats.timeline || [];
+                    const cols = 3;
+                    const rows = Math.ceil(timeline.length / cols);
+                    return Array.from({ length: rows }).map((_, rowIdx) => (
+                      <tr key={rowIdx} className="border-b border-[#165A8A]/30">
+                        {Array.from({ length: cols }).map((_, colIdx) => {
+                          const item = timeline[colIdx * rows + rowIdx];
+                          if (!item) return <td key={colIdx} className="py-1.5 px-3" colSpan={2} />;
+                          let dateLabel: string;
+                          try { dateLabel = format(new Date(item.data), "dd/MM/yyyy"); } catch { dateLabel = item.data; }
+                          return (
+                            <React.Fragment key={colIdx}>
+                              <td className="py-1.5 px-3 text-gray-300 text-xs">{dateLabel}</td>
+                              <td className="py-1.5 px-3 text-white text-xs font-bold text-right">{item.total.toLocaleString("pt-BR")}</td>
+                            </React.Fragment>
+                          );
+                        })}
+                      </tr>
+                    ));
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Por Canal */}
@@ -333,6 +388,7 @@ export default function OverviewPage() {
                   {stats.porCanal.map((_, index) => (
                     <Cell key={`canal-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
+                  <LabelList dataKey="total" position="right" fill="#94a3b8" fontSize={11} formatter={(v: number) => v.toLocaleString("pt-BR")} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -368,6 +424,7 @@ export default function OverviewPage() {
                   {stats.porCasa.map((_, index) => (
                     <Cell key={`casa-${index}`} fill={COLORS[(index + 4) % COLORS.length]} />
                   ))}
+                  <LabelList dataKey="total" position="right" fill="#94a3b8" fontSize={11} formatter={(v: number) => v.toLocaleString("pt-BR")} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -375,21 +432,79 @@ export default function OverviewPage() {
         </Card>
       </div>
 
-      {/* Top 10 Assuntos — Nuvem de Palavras */}
-      <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
-        <CardHeader>
-          <CardTitle className="text-white text-lg flex items-center gap-2">
-            <Cloud className="w-5 h-5 text-purple-400" />
-            Top Assuntos (Resumo da Conversa)
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <AssuntosWordCloud data={stats.porResumo} />
-        </CardContent>
-      </Card>
+      {/* Top Assuntos — Tag Chips + Destaques */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
+        <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
+          <CardHeader className="pb-1">
+            <CardTitle className="text-white text-lg flex items-center gap-2">
+              <Cloud className="w-5 h-5 text-purple-400" />
+              Top Assuntos
+            </CardTitle>
+            <p className="text-xs text-gray-400 mt-1">Resumo visual dos principais temas recorrentes no período.</p>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2.5 py-4">
+              {(stats.porResumo || []).map((item, index) => {
+                const color = COLORS[index % COLORS.length];
+                return (
+                  <Tooltip key={item.nome}>
+                    <TooltipTrigger asChild>
+                      <span
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full border text-sm font-medium cursor-default transition-all hover:scale-105"
+                        style={{ borderColor: `${color}40`, backgroundColor: `${color}10`, color }}
+                      >
+                        {item.nome}
+                        <span className="text-xs opacity-75 font-bold">{item.total.toLocaleString("pt-BR")}</span>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent className="bg-white text-[#0C2135] border border-gray-200 shadow-lg rounded-xl px-4 py-3" sideOffset={8}>
+                      <p className="font-bold text-sm">{item.nome}</p>
+                      <p className="text-xs text-gray-600 mt-1">
+                        {item.total.toLocaleString("pt-BR")} atendimentos
+                        {stats.totais.total > 0 && ` · ${((item.total / stats.totais.total) * 100).toFixed(1)}%`}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Destaques sidebar */}
+        <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-white text-sm font-bold">Destaques</CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 space-y-2.5">
+            {(() => {
+              const canalLider = stats.porCanal?.[0];
+              const casaLider = stats.porCasa?.[0];
+              return (
+                <>
+                  {canalLider && (
+                    <div className="bg-[#081E30] rounded-lg p-3 border border-[#165A8A]/40">
+                      <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold">Canal Líder</span>
+                      <p className="text-white font-bold text-sm mt-0.5">{canalLider.nome}</p>
+                      <p className="text-gray-400 text-[10px]">{canalLider.total.toLocaleString("pt-BR")} atendimentos</p>
+                    </div>
+                  )}
+                  {casaLider && (
+                    <div className="bg-[#081E30] rounded-lg p-3 border border-[#165A8A]/40">
+                      <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold">Casa Líder</span>
+                      <p className="text-white font-bold text-sm mt-0.5">{casaLider.nome}</p>
+                      <p className="text-gray-400 text-[10px]">{casaLider.total.toLocaleString("pt-BR")} atendimentos</p>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Recent Calls Table with Tabs + Pagination */}
-      <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
+      <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg" data-pdf-exclude>
         <CardHeader className="pb-2">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <CardTitle className="text-white text-lg flex items-center gap-2">
@@ -510,6 +625,7 @@ export default function OverviewPage() {
           )}
         </CardContent>
       </Card>
+      </div>
     </Layout>
   );
 }
@@ -537,7 +653,7 @@ function AssuntosWordCloud({ data }: { data: Array<{ nome: string; total: number
           <Tooltip key={item.nome}>
             <TooltipTrigger asChild>
               <span
-                className="inline-block cursor-default transition-all duration-300 hover:scale-110 hover:brightness-125 select-none"
+                className="inline-flex flex-col items-center cursor-default transition-all duration-300 hover:scale-110 hover:brightness-125 select-none"
                 style={{
                   fontSize: `${fontSize}rem`,
                   color,
@@ -546,6 +662,9 @@ function AssuntosWordCloud({ data }: { data: Array<{ nome: string; total: number
                 }}
               >
                 {item.nome}
+                <span style={{ fontSize: '0.65rem', opacity: 0.8, fontWeight: 600 }}>
+                  ({item.total.toLocaleString("pt-BR")})
+                </span>
               </span>
             </TooltipTrigger>
             <TooltipContent

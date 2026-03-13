@@ -1,5 +1,6 @@
 import { Sidebar } from "./Sidebar";
 import { SidebarProvider, useSidebar } from "./SidebarContext";
+import { useTheme } from "@/lib/ThemeContext";
 
 function LayoutInner({ children, title, subtitle }: {
   children: React.ReactNode;
@@ -7,9 +8,10 @@ function LayoutInner({ children, title, subtitle }: {
   subtitle?: string;
 }) {
   const { collapsed } = useSidebar();
+  const { isDark } = useTheme();
 
   return (
-    <div className="min-h-screen bg-[#071A2E] text-gray-100 flex">
+    <div className={`min-h-screen ${isDark ? "bg-[#071A2E]" : "bg-slate-100"} text-gray-100 flex transition-colors duration-300`}>
       <Sidebar />
       <main className={`flex-1 transition-all duration-300 ${collapsed ? "md:ml-20" : "md:ml-64"}`}>
         <div className="p-4 md:p-8 space-y-6 max-w-[1600px] mx-auto">

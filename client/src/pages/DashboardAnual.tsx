@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import {
     LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-    Tooltip as RechartsTooltip, ResponsiveContainer, Cell, Legend
+    Tooltip as RechartsTooltip, ResponsiveContainer, Cell, Legend, LabelList
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -14,7 +14,7 @@ import { ExportReportDialog } from "@/components/ui/export-report-dialog";
 import {
     RefreshCw, TrendingUp, Headphones, FileText, Clock, Filter
 } from "lucide-react";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { format } from "date-fns";
 
 // ─── Types ─────────────────────────────────────────────────────────
@@ -116,6 +116,7 @@ function EvolucaoTooltip({ active, payload, label }: any) {
 // ─── Page Component ────────────────────────────────────────────────
 
 export default function DashboardAnualPage() {
+    const contentRef = useRef<HTMLDivElement>(null);
     const currentYear = new Date().getFullYear();
     const [selectedYear, setSelectedYear] = useState(currentYear);
     const [selectedMonths, setSelectedMonths] = useState<number[]>([]);
@@ -243,7 +244,7 @@ export default function DashboardAnualPage() {
                         onChangeMonths={setSelectedMonths}
                         onChangeYear={setSelectedYear}
                     />
-                    <ExportReportDialog selectedCasas={selectedCasas} />
+                    <ExportReportDialog selectedCasas={selectedCasas} contentRef={contentRef} pdfTitle="Dashboard Anual - FIEAM" pdfSubtitle="Visão anual de atendimentos" />
                     <button
                         onClick={() => refetch()}
                         className="flex items-center gap-2 text-xs text-gray-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-white/5"
@@ -254,6 +255,7 @@ export default function DashboardAnualPage() {
                 </div>
             </div>
 
+            <div ref={contentRef} className="space-y-4">
             {/* 1. Evolução dos Atendimentos — Line Chart */}
             <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
                 <CardHeader>
@@ -262,7 +264,7 @@ export default function DashboardAnualPage() {
                         Evolução dos Atendimentos
                     </CardTitle>
                 </CardHeader>
-                <CardContent className="h-[380px]">
+                <CardContent className="h-[450px]">
                     {chartData.length > 0 ? (
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={chartData} margin={{ top: 20, right: 30, bottom: 10, left: 10 }}>
@@ -288,7 +290,16 @@ export default function DashboardAnualPage() {
                                         dot={{ r: 4, fill: LINE_COLORS[idx % LINE_COLORS.length], strokeWidth: 0 }}
                                         activeDot={{ r: 6, strokeWidth: 2, stroke: '#fff' }}
                                         connectNulls
-                                    />
+                                    >
+                                        <LabelList
+                                            dataKey={canal}
+                                            position="top"
+                                            fill={LINE_COLORS[idx % LINE_COLORS.length]}
+                                            fontSize={9}
+                                            offset={8}
+                                            formatter={(v: number) => v > 0 ? v.toLocaleString("pt-BR") : ""}
+                                        />
+                                    </Line>
                                 ))}
                             </LineChart>
                         </ResponsiveContainer>
@@ -299,6 +310,60 @@ export default function DashboardAnualPage() {
                     )}
                 </CardContent>
             </Card>
+
+            {/* PDF-only: Evolução — Tabela Resumo Mensal por Canal */}
+            <div data-pdf-only style={{ display: "none" }}>
+                <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-white text-base flex items-center gap-2">
+                            <TrendingUp className="w-4 h-4 text-blue-400" />
+                            Resumo Mensal por Canal — {selectedYear}
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-xs">
+                                <thead>
+                                    <tr className="border-b border-[#165A8A]">
+                                        <th className="text-left text-gray-400 uppercase tracking-wider py-2 px-2 font-semibold">Canal</th>
+                                        {MONTH_NAMES.map((m) => (
+                                            <th key={m} className="text-right text-gray-400 uppercase tracking-wider py-2 px-1.5 font-semibold">{m}</th>
+                                        ))}
+                                        <th className="text-right text-gray-300 uppercase tracking-wider py-2 px-2 font-bold">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {canais.map((canal, idx) => {
+                                        const rowTotal = chartData.reduce((sum, row) => sum + (Number(row[canal]) || 0), 0);
+                                        return (
+                                            <tr key={canal} className={idx % 2 === 0 ? "bg-white/[0.02]" : ""}>
+                                                <td className="py-1.5 px-2 text-gray-300 font-medium whitespace-nowrap">{canal}</td>
+                                                {chartData.map((row, mi) => (
+                                                    <td key={mi} className="py-1.5 px-1.5 text-gray-400 text-right tabular-nums">
+                                                        {(Number(row[canal]) || 0).toLocaleString("pt-BR")}
+                                                    </td>
+                                                ))}
+                                                <td className="py-1.5 px-2 text-white font-bold text-right tabular-nums">{rowTotal.toLocaleString("pt-BR")}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                    {/* Totals row */}
+                                    <tr className="border-t border-[#165A8A] font-bold">
+                                        <td className="py-2 px-2 text-gray-200">TOTAL</td>
+                                        {chartData.map((row, mi) => {
+                                            const monthTotal = canais.reduce((sum, c) => sum + (Number(row[c]) || 0), 0);
+                                            return <td key={mi} className="py-2 px-1.5 text-white text-right tabular-nums">{monthTotal.toLocaleString("pt-BR")}</td>;
+                                        })}
+                                        <td className="py-2 px-2 text-cyan-400 text-right tabular-nums">
+                                            {canais.reduce((total, c) => total + chartData.reduce((sum, row) => sum + (Number(row[c]) || 0), 0), 0).toLocaleString("pt-BR")}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
 
             {/* 2 + 4: Origem + Prazo side by side */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -326,10 +391,10 @@ export default function DashboardAnualPage() {
                                                             <span className="text-sm font-medium text-gray-300">{item.nome}</span>
                                                         </div>
                                                         <div className="flex items-center gap-3">
-                                                            <span className="text-xs text-gray-500">
+                                                            <span className="text-sm font-semibold text-gray-300">
                                                                 {item.total.toLocaleString("pt-BR")}
                                                             </span>
-                                                            <span className="text-lg font-bold text-white min-w-[60px] text-right">
+                                                            <span className="text-xl font-bold text-white min-w-[60px] text-right">
                                                                 {item.percent.toFixed(1)}%
                                                             </span>
                                                         </div>
@@ -399,7 +464,7 @@ export default function DashboardAnualPage() {
                                                     <span className="text-sm font-medium text-gray-300">Dentro do prazo</span>
                                                 </div>
                                                 <div className="flex items-center gap-3">
-                                                    <span className="text-xs text-gray-500">
+                                                    <span className="text-sm font-semibold text-gray-300">
                                                         {prazoData.dentro.toLocaleString("pt-BR")}
                                                     </span>
                                                     <span className="text-2xl font-bold text-emerald-400">
@@ -450,7 +515,7 @@ export default function DashboardAnualPage() {
                                                     <span className="text-sm font-medium text-gray-300">Fora do prazo</span>
                                                 </div>
                                                 <div className="flex items-center gap-3">
-                                                    <span className="text-xs text-gray-500">
+                                                    <span className="text-sm font-semibold text-gray-300">
                                                         {prazoData.fora.toLocaleString("pt-BR")}
                                                     </span>
                                                     <span className="text-2xl font-bold text-red-400">
@@ -534,57 +599,104 @@ export default function DashboardAnualPage() {
                 </Card >
             </div >
 
-            {/* 3. Atendimentos por Assunto — Horizontal Bar Chart */}
-            < Card className="bg-[#0C2135] border-[#165A8A] shadow-lg" >
-                <CardHeader>
-                    <CardTitle className="text-white text-lg flex items-center gap-2">
-                        <FileText className="w-5 h-5 text-sky-400" />
-                        Atendimentos por Assunto
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="h-[500px]">
-                    {stats?.porAssunto?.length ? (
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart
-                                data={stats.porAssunto}
-                                layout="vertical"
-                                margin={{ left: 10, right: 30 }}
-                                onClick={(data: any) => {
-                                    if (data?.activePayload?.[0]) {
-                                        const nome = data.activePayload[0].payload.nome;
-                                        openDrilldown(`Assunto: ${nome}`, 'assunto', nome);
-                                    }
-                                }}
-                                style={{ cursor: 'pointer' }}
-                            >
-                                <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#165A8A" />
-                                <XAxis type="number" stroke="#6b7280" fontSize={11} />
-                                <YAxis
-                                    type="category"
-                                    dataKey="nome"
-                                    width={140}
-                                    stroke="#9ca3af"
-                                    fontSize={11}
-                                    tick={{ fill: '#9ca3af' }}
-                                />
-                                <RechartsTooltip
-                                    {...TOOLTIP_STYLE}
-                                    formatter={(value: number) => [value.toLocaleString("pt-BR"), "Atendimentos"]}
-                                />
-                                <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={22}>
-                                    {stats.porAssunto.map((_, index) => (
-                                        <Cell key={`assunto-${index}`} fill={ASSUNTO_COLORS[index % ASSUNTO_COLORS.length]} className="cursor-pointer" />
+            {/* 3. Atendimentos por Assunto — Bar Chart + Insights */}
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
+                <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
+                    <CardHeader>
+                        <CardTitle className="text-white text-lg flex items-center gap-2">
+                            <FileText className="w-5 h-5 text-sky-400" />
+                            Ranking de Assuntos
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="h-[600px]">
+                        {stats?.porAssunto?.length ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart
+                                    data={stats.porAssunto}
+                                    layout="vertical"
+                                    margin={{ left: 10, right: 60 }}
+                                    onClick={(data: any) => {
+                                        if (data?.activePayload?.[0]) {
+                                            const nome = data.activePayload[0].payload.nome;
+                                            openDrilldown(`Assunto: ${nome}`, 'assunto', nome);
+                                        }
+                                    }}
+                                    style={{ cursor: 'pointer' }}
+                                >
+                                    <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#165A8A" />
+                                    <XAxis type="number" stroke="#6b7280" fontSize={11} />
+                                    <YAxis
+                                        type="category"
+                                        dataKey="nome"
+                                        width={140}
+                                        stroke="#9ca3af"
+                                        fontSize={11}
+                                        tick={{ fill: '#9ca3af' }}
+                                    />
+                                    <RechartsTooltip
+                                        {...TOOLTIP_STYLE}
+                                        formatter={(value: number) => [value.toLocaleString("pt-BR"), "Atendimentos"]}
+                                    />
+                                    <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={22}>
+                                        {stats.porAssunto.map((_, index) => (
+                                            <Cell key={`assunto-${index}`} fill={ASSUNTO_COLORS[index % ASSUNTO_COLORS.length]} className="cursor-pointer" />
+                                        ))}
+                                        <LabelList dataKey="total" position="right" fill="#94a3b8" fontSize={11} formatter={(v: number) => v.toLocaleString("pt-BR")} />
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="flex items-center justify-center h-full text-gray-500">
+                                Nenhum dado disponível
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* Insights Panel */}
+                {stats?.porAssunto?.length ? (() => {
+                    const sorted = [...stats.porAssunto].sort((a, b) => b.total - a.total);
+                    const grandTotal = sorted.reduce((s, i) => s + i.total, 0);
+                    const top3Total = sorted.slice(0, 3).reduce((s, i) => s + i.total, 0);
+                    const top5Total = sorted.slice(0, 5).reduce((s, i) => s + i.total, 0);
+                    const top3Pct = grandTotal > 0 ? ((top3Total / grandTotal) * 100).toFixed(1) : "0";
+                    const top5Pct = grandTotal > 0 ? ((top5Total / grandTotal) * 100).toFixed(1) : "0";
+                    const threshold = Math.round(grandTotal * 0.05);
+                    const longTail = sorted.filter(i => i.total < threshold).length;
+
+                    return (
+                        <div className="space-y-3">
+                            <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
+                                <CardHeader className="pb-2 pt-4 px-4">
+                                    <CardTitle className="text-white text-sm font-bold">Insights</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-3 px-4 pb-4">
+                                    {sorted.slice(0, 3).map((item, i) => (
+                                        <div key={i} className="bg-[#081E30] rounded-lg p-3 border border-[#165A8A]/40">
+                                            <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold">Top {i + 1}</span>
+                                            <p className="text-white font-bold text-sm mt-0.5">{item.nome}</p>
+                                            <p className="text-gray-400 text-xs">{item.total.toLocaleString("pt-BR")}</p>
+                                        </div>
                                     ))}
-                                </Bar>
-                            </BarChart>
-                        </ResponsiveContainer>
-                    ) : (
-                        <div className="flex items-center justify-center h-full text-gray-500">
-                            Nenhum dado disponível
+                                    <div className="bg-[#081E30] rounded-lg p-3 border border-[#165A8A]/40">
+                                        <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold">Top 3 no Total</span>
+                                        <p className="text-white font-bold text-lg mt-0.5">{top3Pct}%</p>
+                                    </div>
+                                    <div className="bg-[#081E30] rounded-lg p-3 border border-[#165A8A]/40">
+                                        <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold">Top 5 no Total</span>
+                                        <p className="text-white font-bold text-lg mt-0.5">{top5Pct}%</p>
+                                    </div>
+                                    <div className="bg-[#081E30] rounded-lg p-3 border border-[#165A8A]/40">
+                                        <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold">Cauda Longa</span>
+                                        <p className="text-white font-bold text-sm mt-0.5">{longTail} assuntos abaixo de {threshold.toLocaleString("pt-BR")}</p>
+                                    </div>
+                                </CardContent>
+                            </Card>
                         </div>
-                    )}
-                </CardContent>
-            </Card >
+                    );
+                })() : null}
+            </div>
+            </div>
 
             {/* ─── Drill-down Modal ─────────────────────────────────── */}
             < Dialog open={drilldown.open} onOpenChange={(open) => !open && closeDrilldown()}>

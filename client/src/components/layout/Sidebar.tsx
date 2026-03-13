@@ -8,13 +8,16 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  LogOut
+  LogOut,
+  Sun,
+  Moon
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useSidebar } from "./SidebarContext";
 import { useAuth } from "@/lib/AuthContext";
+import { useTheme } from "@/lib/ThemeContext";
 
 const navItems = [
   { href: "/", label: "Visão Geral", icon: LayoutDashboard },
@@ -28,6 +31,7 @@ export function Sidebar() {
   const [isOpen, setIsOpen] = useState(false);
   const { collapsed, toggle } = useSidebar();
   const { logout } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
 
   return (
     <>
@@ -44,24 +48,25 @@ export function Sidebar() {
       {/* Sidebar Container */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 bg-[#0C2135] border-r border-[#165A8A] shadow-lg transition-all duration-300 ease-in-out md:translate-x-0",
+          "fixed inset-y-0 left-0 z-40 shadow-lg transition-all duration-300 ease-in-out md:translate-x-0",
+          isDark ? "bg-[#0C2135] border-r border-[#165A8A]" : "bg-white border-r border-slate-200",
           collapsed ? "w-20" : "w-64",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
         <div className="flex flex-col h-full">
           {/* Logo Area */}
-          <div className="p-6 border-b border-[#165A8A]">
+          <div className={cn("p-6 border-b", isDark ? "border-[#165A8A]" : "border-slate-200")}>
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 flex-shrink-0">
                 <img src="/Icone_Logo.png" alt="Logo" className="w-full h-full object-contain" />
               </div>
               {!collapsed && (
                 <div className="overflow-hidden">
-                  <h1 className="text-xl font-bold text-white whitespace-nowrap">
+                  <h1 className={cn("text-xl font-bold whitespace-nowrap", isDark ? "text-white" : "text-gray-900")}>
                     FIEAM
                   </h1>
-                  <p className="text-xs text-sky-300/60">Sistema Indústria</p>
+                  <p className={cn("text-xs", isDark ? "text-sky-300/60" : "text-slate-400")}>Sistema Indústria</p>
                 </div>
               )}
             </div>
@@ -70,7 +75,7 @@ export function Sidebar() {
           {/* Section Label */}
           {!collapsed && (
             <div className="px-6 pt-6 pb-2">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Dashboards</p>
+              <p className={cn("text-xs font-semibold uppercase tracking-wider", isDark ? "text-gray-400" : "text-slate-600")}>Dashboards</p>
             </div>
           )}
 
@@ -85,13 +90,22 @@ export function Sidebar() {
                       "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
                       collapsed && "justify-center px-2",
                       isActive
-                        ? "bg-[#009FE3]/20 text-sky-300 border border-[#009FE3]/40"
-                        : "text-gray-400 hover:bg-white/5 hover:text-gray-200"
+                        ? isDark
+                          ? "bg-[#009FE3]/20 text-sky-300 border border-[#009FE3]/40"
+                          : "bg-blue-50 text-blue-700 border border-blue-200"
+                        : isDark
+                          ? "text-gray-100 hover:bg-white/5 hover:text-white"
+                          : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
                     )}
                     title={collapsed ? item.label : undefined}
                   >
-                    <item.icon className={cn("w-5 h-5 flex-shrink-0", isActive ? "text-sky-300" : "text-gray-500")} />
-                    {!collapsed && <span className="font-medium text-sm">{item.label}</span>}
+                    <item.icon className={cn(
+                      "w-5 h-5 flex-shrink-0",
+                      isActive
+                        ? isDark ? "text-sky-300" : "text-blue-600"
+                        : isDark ? "text-gray-300" : "text-slate-500"
+                    )} />
+                    {!collapsed && <span className={cn("text-sm", isDark ? "font-medium" : "font-semibold")}>{item.label}</span>}
                   </div>
                 </Link>
               );
@@ -99,13 +113,40 @@ export function Sidebar() {
           </nav>
 
           {/* Collapse Toggle (desktop only) */}
-          <div className="hidden md:flex p-4 border-t border-[#165A8A] justify-center">
+          <div className={cn("hidden md:flex p-4 border-t justify-center", isDark ? "border-[#165A8A]" : "border-slate-200")}>
             <button
               onClick={toggle}
-              className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+              className={cn(
+                "flex items-center justify-center w-8 h-8 rounded-lg transition-colors",
+                isDark ? "bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white" : "bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900"
+              )}
               title={collapsed ? "Expandir" : "Recolher"}
             >
               {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+            </button>
+          </div>
+
+          {/* Theme Toggle */}
+          <div className={cn("px-4 pb-1", collapsed && "px-2")}>
+            <button
+              onClick={toggleTheme}
+              className={cn(
+                "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 w-full",
+                collapsed && "justify-center px-2",
+                isDark
+                  ? "text-gray-100 hover:bg-white/5 hover:text-yellow-400"
+                  : "text-slate-700 hover:bg-slate-100 hover:text-amber-600"
+              )}
+              title={collapsed ? (isDark ? "Modo Claro" : "Modo Escuro") : undefined}
+            >
+              {isDark
+                ? <Sun className="w-5 h-5 flex-shrink-0" />
+                : <Moon className="w-5 h-5 flex-shrink-0" />}
+              {!collapsed && (
+                <span className="font-medium text-sm">
+                  {isDark ? "Modo Claro" : "Modo Escuro"}
+                </span>
+              )}
             </button>
           </div>
 
@@ -114,8 +155,11 @@ export function Sidebar() {
             <button
               onClick={logout}
               className={cn(
-                "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 w-full text-gray-400 hover:bg-red-500/10 hover:text-red-400",
-                collapsed && "justify-center px-2"
+                "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 w-full",
+                collapsed && "justify-center px-2",
+                isDark
+                  ? "text-gray-100 hover:bg-red-500/10 hover:text-red-400"
+                  : "text-slate-700 hover:bg-red-50 hover:text-red-600"
               )}
               title={collapsed ? "Sair" : undefined}
             >
@@ -125,10 +169,14 @@ export function Sidebar() {
           </div>
 
           {/* Footer */}
-          <div className="p-4 border-t border-[#165A8A]">
-            <div className={cn("flex items-center gap-3 p-3 rounded-lg bg-white/5", collapsed && "justify-center p-2")}>
+          <div className={cn("p-4 border-t", isDark ? "border-[#165A8A]" : "border-slate-200")}>
+            <div className={cn(
+              "flex items-center gap-3 p-3 rounded-lg",
+              isDark ? "bg-white/5" : "bg-slate-50",
+              collapsed && "justify-center p-2"
+            )}>
               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse flex-shrink-0" />
-              {!collapsed && <p className="text-xs text-gray-400">Dados em tempo real</p>}
+              {!collapsed && <p className={cn("text-xs", isDark ? "text-gray-200" : "text-slate-600")}>Dados em tempo real</p>}
             </div>
           </div>
         </div>
