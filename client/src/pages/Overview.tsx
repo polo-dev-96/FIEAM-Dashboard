@@ -8,15 +8,15 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
-import { CasaPicker } from "@/components/ui/casa-picker";
 import { ExportReportDialog } from "@/components/ui/export-report-dialog";
 import {
-  MessageSquare, Clock, CalendarDays, TrendingUp,
+  MessageSquare, CalendarDays, TrendingUp,
   RefreshCw, Users, Building2, ChevronLeft, ChevronRight, Filter, Cloud
 } from "lucide-react";
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, startOfDay, endOfDay, subMonths } from "date-fns";
+import { format, differenceInCalendarDays, differenceInCalendarMonths, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { agruparAssuntos, getCasasForFiltro, mapCasaToEntidadeUnidade, type AssuntoAggregado, type Entidade, type UnidadeSESI } from "@/lib/entidadeMapping";
 
 interface StatsData {
   totais: {
@@ -81,19 +81,27 @@ export default function OverviewPage() {
   // Date range state (default: current month)
   const [dateRange, setDateRange] = useState(getDefaultDates);
 
-  // Casa (entity) filter — empty array means "Todas"
-  const [selectedCasas, setSelectedCasas] = useState<string[]>([]);
+  // Filtros de Entidade/Unidade
+  const [entidade, setEntidade] = useState<Entidade | "">("");
+  const [unidade, setUnidade] = useState<UnidadeSESI | "">("");
+
+  // Lista de todas as casas (vinda da API)
+  const { data: casasList } = useQuery<string[]>({
+    queryKey: ["casas"],
+    queryFn: () => apiRequest("/api/casas"),
+  });
+
+  // Casas efetivamente usadas nos filtros de API, derivadas de Entidade/Unidade
+  const selectedCasas = useMemo(() => {
+    return getCasasForFiltro(casasList, entidade || null, unidade || null);
+  }, [casasList, entidade, unidade]);
 
   // Table state
   const [activeTab, setActiveTab] = useState("Todos");
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Fetch list of casas for dropdown
-  const { data: casasList } = useQuery<string[]>({
-    queryKey: ["casas"],
-    queryFn: () => apiRequest("/api/casas"),
-  }); const casaParam = selectedCasas.length > 0 ? selectedCasas.map(c => `&casa=${encodeURIComponent(c)}`).join('') : "";
+  const casaParam = selectedCasas.length > 0 ? selectedCasas.map(c => `&casa=${encodeURIComponent(c)}`).join('') : "";
 
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<StatsData>({
     queryKey: ["stats", dateRange.startDate, dateRange.endDate, selectedCasas],
@@ -161,6 +169,61 @@ export default function OverviewPage() {
 
   const isLoading = statsLoading || recentesLoading;
 
+  // ─── Métricas derivadas para cards ─────────────────────────────────
+  const {
+    totalPeriodo,
+    mediaPorMes,
+    mediaPorDia,
+  } = useMemo(() => {
+    const total = stats?.totais?.total || 0;
+
+    let mediaMes = 0;
+    let mediaDia = 0;
+
+    try {
+      const start = new Date(dateRange.startDate);
+      const end = new Date(dateRange.endDate);
+
+      const dias = Math.max(differenceInCalendarDays(end, start) + 1, 1);
+      mediaDia = dias > 0 ? total / dias : 0;
+
+      const mesesBrutos = Math.max(differenceInCalendarMonths(end, start), 0);
+      const meses = Math.max(mesesBrutos + 1, 1);
+      mediaMes = meses > 0 ? total / meses : 0;
+    } catch {
+      mediaDia = 0;
+      mediaMes = 0;
+    }
+
+    return {
+      totalPeriodo: total,
+      mediaPorMes: mediaMes,
+      mediaPorDia: mediaDia,
+    };
+  }, [stats?.totais?.total, dateRange.startDate, dateRange.endDate]);
+
+  // ─── Dados agregados por Entidade/Unidade ──────────────────────────
+  const atendimentosPorEntidade = useMemo(() => {
+    const origem = stats?.porCasa || [];
+    const mapa = new Map<string, number>();
+
+    for (const item of origem) {
+      const { entidade, unidade } = mapCasaToEntidadeUnidade(item.nome);
+      if (!entidade) continue;
+      const label = entidade === "SESI" && unidade ? unidade : entidade;
+      const atual = mapa.get(label) || 0;
+      mapa.set(label, atual + (item.total || 0));
+    }
+
+    return Array.from(mapa.entries())
+      .map(([nome, total]) => ({ nome, total }))
+      .sort((a, b) => b.total - a.total);
+  }, [stats?.porCasa]);
+
+  const topAssuntosAggregados: AssuntoAggregado[] = useMemo(() => {
+    return agruparAssuntos((stats?.porResumo || []) as AssuntoAggregado[]);
+  }, [stats?.porResumo]);
+
   if (isLoading) {
     return (
       <Layout title="Visão Geral" subtitle="Dashboard de atendimentos em tempo real">
@@ -185,7 +248,7 @@ export default function OverviewPage() {
   }
 
   return (
-    <Layout title="Visão Geral" subtitle="Dashboard de atendimentos em tempo real">
+      <Layout title="Visão Geral" subtitle="Dashboard de atendimentos em tempo real">
       {/* Refresh Info Bar + Date Filter */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-[#0C2135] rounded-xl px-4 py-3 border border-[#165A8A] gap-3">
         <div className="flex items-center gap-3">
@@ -198,18 +261,49 @@ export default function OverviewPage() {
           </span>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Casa filter */}
-          <CasaPicker
-            value={selectedCasas}
-            casas={casasList || []}
-            onChange={setSelectedCasas}
-          />
+          {/* Filtro de Entidade */}
+          <select
+            value={entidade}
+            onChange={(e) => {
+              const value = e.target.value as Entidade | "";
+              setEntidade(value);
+              setUnidade("");
+            }}
+            className="bg-[#061726] text-gray-300 text-xs border border-[#165A8A] rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#0047B6]"
+          >
+            <option value="">Todas as Entidades</option>
+            <option value="SENAI">SENAI</option>
+            <option value="SESI">SESI</option>
+            <option value="IEL">IEL</option>
+          </select>
+
+          {/* Filtro de Unidade (apenas SESI) */}
+          <select
+            value={unidade}
+            onChange={(e) => setUnidade(e.target.value as UnidadeSESI | "")}
+            disabled={entidade !== "SESI"}
+            className="bg-[#061726] text-gray-300 text-xs border border-[#165A8A] rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#0047B6] disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <option value="">Todas as Unidades</option>
+            <option value="SESI ESCOLA">SESI ESCOLA</option>
+            <option value="SESI CLUBE">SESI CLUBE</option>
+            <option value="SESI SAÚDE">SESI SAÚDE</option>
+          </select>
           <DateRangePicker
             startDate={dateRange.startDate}
             endDate={dateRange.endDate}
             onApply={(s, e) => setDateRange({ startDate: s, endDate: e })}
           />
-          <ExportReportDialog selectedCasas={selectedCasas} contentRef={contentRef} pdfTitle="Visão Geral - Dashboard FIEAM" pdfSubtitle="Dashboard de atendimentos em tempo real" />
+          <ExportReportDialog
+            selectedCasas={selectedCasas}
+            contentRef={contentRef}
+            pdfTitle="Visão Geral - Dashboard FIEAM"
+            pdfSubtitle={
+              entidade
+                ? `Dashboard de atendimentos em tempo real · Entidade: ${entidade}${entidade === "SESI" && unidade ? ` · Unidade: ${unidade}` : ""}`
+                : "Dashboard de atendimentos em tempo real · Todas as Entidades"
+            }
+          />
           <button
             onClick={handleManualRefresh}
             className="flex items-center gap-2 text-xs text-gray-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-white/5"
@@ -224,30 +318,22 @@ export default function OverviewPage() {
       {/* Stats Cards - values adapt to date filter */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title="Total no Período"
-          value={stats.totais.total?.toLocaleString("pt-BR") || "0"}
+          title="Total no Período de Atendimento"
+          value={totalPeriodo.toLocaleString("pt-BR")}
           icon={<CalendarDays className="w-5 h-5" />}
           color="blue"
         />
-        <div data-pdf-exclude>
         <StatCard
-          title="Atendimentos Hoje"
-          value={stats.totais.hoje?.toLocaleString("pt-BR") || "0"}
-          icon={<MessageSquare className="w-5 h-5" />}
-          color="red"
-        />
-        </div>
-        <StatCard
-          title="Este Mês"
-          value={stats.totais.mes?.toLocaleString("pt-BR") || "0"}
+          title="Média de Atendimentos por Mês"
+          value={Math.round(mediaPorMes).toLocaleString("pt-BR")}
           icon={<TrendingUp className="w-5 h-5" />}
           color="green"
         />
         <StatCard
-          title="Duração Média"
-          value={`${stats.duracaoMedia || 0} min`}
-          icon={<Clock className="w-5 h-5" />}
-          color="amber"
+          title="Média de Atendimentos por Dia"
+          value={mediaPorDia.toFixed(1).replace(".", ",")}
+          icon={<MessageSquare className="w-5 h-5" />}
+          color="red"
         />
       </div>
 
@@ -364,7 +450,7 @@ export default function OverviewPage() {
           <CardHeader>
             <CardTitle className="text-white text-lg flex items-center gap-2">
               <Users className="w-5 h-5 text-blue-400" />
-              Atendimentos por Canal
+              Atendimentos por Meio de Comunicação
             </CardTitle>
           </CardHeader>
           <CardContent className="h-[300px]">
@@ -400,12 +486,12 @@ export default function OverviewPage() {
           <CardHeader>
             <CardTitle className="text-white text-lg flex items-center gap-2">
               <Building2 className="w-5 h-5 text-green-400" />
-              Atendimentos por Casa
+              Atendimentos por Entidade
             </CardTitle>
           </CardHeader>
           <CardContent className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats.porCasa} layout="vertical" margin={{ left: 10 }}>
+              <BarChart data={atendimentosPorEntidade} layout="vertical" margin={{ left: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#165A8A" />
                 <XAxis type="number" stroke="#6b7280" fontSize={11} />
                 <YAxis
@@ -421,7 +507,7 @@ export default function OverviewPage() {
                   formatter={(value: number) => [value, "Atendimentos"]}
                 />
                 <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={28}>
-                  {stats.porCasa.map((_, index) => (
+                  {atendimentosPorEntidade.map((_, index) => (
                     <Cell key={`casa-${index}`} fill={COLORS[(index + 4) % COLORS.length]} />
                   ))}
                   <LabelList dataKey="total" position="right" fill="#94a3b8" fontSize={11} formatter={(v: number) => v.toLocaleString("pt-BR")} />
@@ -444,7 +530,7 @@ export default function OverviewPage() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2.5 py-4">
-              {(stats.porResumo || []).map((item, index) => {
+              {topAssuntosAggregados.map((item, index) => {
                 const color = COLORS[index % COLORS.length];
                 return (
                   <Tooltip key={item.nome}>
@@ -479,7 +565,7 @@ export default function OverviewPage() {
           <CardContent className="px-4 pb-4 space-y-2.5">
             {(() => {
               const canalLider = stats.porCanal?.[0];
-              const casaLider = stats.porCasa?.[0];
+              const casaLider = atendimentosPorEntidade?.[0];
               return (
                 <>
                   {canalLider && (
@@ -491,7 +577,7 @@ export default function OverviewPage() {
                   )}
                   {casaLider && (
                     <div className="bg-[#081E30] rounded-lg p-3 border border-[#165A8A]/40">
-                      <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold">Casa Líder</span>
+                      <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold">Entidade Líder</span>
                       <p className="text-white font-bold text-sm mt-0.5">{casaLider.nome}</p>
                       <p className="text-gray-400 text-[10px]">{casaLider.total.toLocaleString("pt-BR")} atendimentos</p>
                     </div>

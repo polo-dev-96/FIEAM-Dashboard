@@ -8,7 +8,6 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { CasaPicker } from "@/components/ui/casa-picker";
 import { MonthPicker } from "@/components/ui/month-picker";
 import { ExportReportDialog } from "@/components/ui/export-report-dialog";
 import {
@@ -16,6 +15,7 @@ import {
 } from "lucide-react";
 import { useState, useMemo, useCallback, useRef } from "react";
 import { format } from "date-fns";
+import { agruparAssuntos, Entidade, UnidadeSESI, getCasasForFiltro } from "@/lib/entidadeMapping";
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -120,7 +120,8 @@ export default function DashboardAnualPage() {
     const currentYear = new Date().getFullYear();
     const [selectedYear, setSelectedYear] = useState(currentYear);
     const [selectedMonths, setSelectedMonths] = useState<number[]>([]);
-    const [selectedCasas, setSelectedCasas] = useState<string[]>([]);
+    const [entidade, setEntidade] = useState<Entidade | "">("");
+    const [unidade, setUnidade] = useState<UnidadeSESI | "">("");
     const [drilldown, setDrilldown] = useState<DrilldownState>({ open: false, title: '', tipo: '', valor: '' });
     const [drilldownPage, setDrilldownPage] = useState(1);
     const ITEMS_PER_PAGE = 10;
@@ -139,6 +140,10 @@ export default function DashboardAnualPage() {
         queryKey: ["casas"],
         queryFn: () => apiRequest("/api/casas"),
     });
+
+    const selectedCasas = useMemo(() => {
+        return getCasasForFiltro(casasList, entidade || null, unidade || null);
+    }, [casasList, entidade, unidade]);
 
     const casaParam = selectedCasas.length > 0
         ? selectedCasas.map(c => `&casa=${encodeURIComponent(c)}`).join('')
@@ -209,9 +214,14 @@ export default function DashboardAnualPage() {
     // ─── Year navigation ──────────────────────────────────────────
     const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
+    const rankingAssuntos = useMemo(() => {
+        if (!stats?.porAssunto?.length) return [];
+        return agruparAssuntos(stats.porAssunto as any);
+    }, [stats?.porAssunto]);
+
     if (isLoading) {
         return (
-            <Layout title="Dashboard Anual" subtitle="Visão anual de atendimentos">
+            <Layout title="Dashboard - SAC" subtitle="Visão anual de atendimentos">
                 <div className="flex items-center justify-center h-[60vh]">
                     <div className="flex flex-col items-center gap-4">
                         <RefreshCw className="w-8 h-8 text-blue-500 animate-spin" />
@@ -223,7 +233,7 @@ export default function DashboardAnualPage() {
     }
 
     return (
-        <Layout title="Dashboard Anual" subtitle="Visão anual de atendimentos">
+        <Layout title="Dashboard - SAC" subtitle="Visão anual de atendimentos">
             {/* Filter Bar */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-[#0C2135] rounded-xl px-4 py-3 border border-[#165A8A] gap-3">
                 <div className="flex items-center gap-3">
@@ -231,12 +241,34 @@ export default function DashboardAnualPage() {
                     <span className="text-sm text-gray-300 font-medium">Filtro Mensal</span>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
-                    {/* Casa filter */}
-                    <CasaPicker
-                        value={selectedCasas}
-                        casas={casasList || []}
-                        onChange={setSelectedCasas}
-                    />
+                    {/* Filtro de Entidade */}
+                    <select
+                        value={entidade}
+                        onChange={(e) => {
+                            const value = e.target.value as Entidade | "";
+                            setEntidade(value);
+                            setUnidade("");
+                        }}
+                        className="bg-[#061726] text-gray-300 text-xs border border-[#165A8A] rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#0047B6]"
+                    >
+                        <option value="">Todas as Entidades</option>
+                        <option value="SENAI">SENAI</option>
+                        <option value="SESI">SESI</option>
+                        <option value="IEL">IEL</option>
+                    </select>
+
+                    {/* Filtro de Unidade (apenas SESI) */}
+                    <select
+                        value={unidade}
+                        onChange={(e) => setUnidade(e.target.value as UnidadeSESI | "")}
+                        disabled={entidade !== "SESI"}
+                        className="bg-[#061726] text-gray-300 text-xs border border-[#165A8A] rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#0047B6] disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                        <option value="">Todas as Unidades</option>
+                        <option value="SESI ESCOLA">SESI ESCOLA</option>
+                        <option value="SESI CLUBE">SESI CLUBE</option>
+                        <option value="SESI SAÚDE">SESI SAÚDE</option>
+                    </select>
                     {/* Month + Year picker */}
                     <MonthPicker
                         selectedMonths={selectedMonths}
@@ -244,7 +276,16 @@ export default function DashboardAnualPage() {
                         onChangeMonths={setSelectedMonths}
                         onChangeYear={setSelectedYear}
                     />
-                    <ExportReportDialog selectedCasas={selectedCasas} contentRef={contentRef} pdfTitle="Dashboard Anual - FIEAM" pdfSubtitle="Visão anual de atendimentos" />
+                    <ExportReportDialog
+                        selectedCasas={selectedCasas}
+                        contentRef={contentRef}
+                        pdfTitle="Dashboard - SAC"
+                        pdfSubtitle={
+                            entidade
+                                ? `Visão de Atendimentos - Entidade: ${entidade}${entidade === "SESI" && unidade ? ` · Unidade: ${unidade}` : ""}`
+                                : "Visão de Atendimentos - Todas as Entidades"
+                        }
+                    />
                     <button
                         onClick={() => refetch()}
                         className="flex items-center gap-2 text-xs text-gray-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-white/5"
@@ -609,10 +650,10 @@ export default function DashboardAnualPage() {
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="h-[600px]">
-                        {stats?.porAssunto?.length ? (
+                        {rankingAssuntos.length ? (
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart
-                                    data={stats.porAssunto}
+                                    data={rankingAssuntos}
                                     layout="vertical"
                                     margin={{ left: 10, right: 60 }}
                                     onClick={(data: any) => {
@@ -654,8 +695,8 @@ export default function DashboardAnualPage() {
                 </Card>
 
                 {/* Insights Panel */}
-                {stats?.porAssunto?.length ? (() => {
-                    const sorted = [...stats.porAssunto].sort((a, b) => b.total - a.total);
+                {rankingAssuntos.length ? (() => {
+                    const sorted = [...rankingAssuntos].sort((a, b) => b.total - a.total);
                     const grandTotal = sorted.reduce((s, i) => s + i.total, 0);
                     const top3Total = sorted.slice(0, 3).reduce((s, i) => s + i.total, 0);
                     const top5Total = sorted.slice(0, 5).reduce((s, i) => s + i.total, 0);

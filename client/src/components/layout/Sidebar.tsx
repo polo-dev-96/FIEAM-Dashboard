@@ -23,7 +23,7 @@ const navItems = [
   { href: "/", label: "Visão Geral", icon: LayoutDashboard },
   { href: "/protocolo", label: "Pesquisar Protocolo", icon: Search },
   { href: "/telefone", label: "Pesquisar Telefone", icon: Phone },
-  { href: "/anual", label: "Dashboard Anual", icon: CalendarRange },
+  { href: "/anual", label: "Dashboard - SAC", icon: CalendarRange },
 ];
 
 export function Sidebar() {
