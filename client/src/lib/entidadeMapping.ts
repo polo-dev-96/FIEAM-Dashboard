@@ -99,7 +99,12 @@ export interface AssuntoAggregado {
 }
 
 export function normalizeAssuntoKey(raw: string): string {
-  const base = (raw || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const base = (raw || "").toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/ç/g, "c")
+    .replace(/ñ/g, "n");
+  
   const cleaned = base
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
@@ -110,9 +115,19 @@ export function normalizeAssuntoKey(raw: string): string {
   if (words.length === 0) return cleaned;
 
   const singularized = words.map((w) => {
-    if (w.length > 3 && w.endsWith("s")) {
-      return w.slice(0, -1);
+    // Handle common plural patterns in Portuguese - order matters!
+    // Skip "oes" pattern for words that were originally "ções" 
+    // (they become "coes" after accent removal, not "oes")
+    if (w.endsWith("oes") && !w.includes("c")) return w.slice(0, -3) + "o"; // ex: pões -> pão
+    if (w.endsWith("aes")) return w.slice(0, -3) + "ao"; // ex: capitaes -> capitao  
+    if (w.endsWith("eis")) return w.slice(0, -3) + "el"; // ex: animais -> animal
+    if (w.endsWith("res")) return w.slice(0, -2); // ex: mulheres -> mulher (irregular, but basic)
+    if (w.endsWith("is")) return w.slice(0, -2) + "l"; // ex: canais -> canal
+    if (w.endsWith("coes")) {
+      return w.slice(0, -4) + "cao"; // ex: informacoes -> informacao
     }
+    if (w.endsWith("es") && w.length > 3) return w.slice(0, -2); // ex: informacoes -> informacao
+    if (w.endsWith("s") && w.length > 3) return w.slice(0, -1); // general case
     return w;
   });
 
@@ -120,19 +135,25 @@ export function normalizeAssuntoKey(raw: string): string {
 }
 
 export function agruparAssuntos(data: AssuntoAggregado[]): AssuntoAggregado[] {
-  const mapa = new Map<string, { nome: string; total: number }>();
+  const mapa = new Map<string, number>();
 
   for (const item of data || []) {
     const key = normalizeAssuntoKey(item.nome);
     if (!key) continue;
     const existente = mapa.get(key);
-    if (existente) {
-      existente.total += item.total;
+    if (existente !== undefined) {
+      mapa.set(key, existente + item.total);
     } else {
-      mapa.set(key, { nome: item.nome, total: item.total });
+      mapa.set(key, item.total);
     }
   }
 
-  return Array.from(mapa.values()).sort((a, b) => b.total - a.total);
+  // Convert back to array with properly capitalized display names
+  return Array.from(mapa.entries())
+    .map(([key, total]) => ({
+      nome: key.charAt(0).toUpperCase() + key.slice(1), // Capitalize first letter
+      total
+    }))
+    .sort((a, b) => b.total - a.total);
 }
 

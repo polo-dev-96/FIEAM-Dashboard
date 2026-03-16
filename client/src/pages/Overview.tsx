@@ -8,6 +8,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { SelectCustom } from "@/components/ui/select-custom";
 import { ExportReportDialog } from "@/components/ui/export-report-dialog";
 import {
   MessageSquare, CalendarDays, TrendingUp,
@@ -262,33 +263,36 @@ export default function OverviewPage() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {/* Filtro de Entidade */}
-          <select
-            value={entidade}
-            onChange={(e) => {
-              const value = e.target.value as Entidade | "";
-              setEntidade(value);
+          <SelectCustom
+            value={entidade || ""}
+            onValueChange={(value) => {
+              setEntidade(value as Entidade | "");
               setUnidade("");
             }}
-            className="bg-[#061726] text-gray-300 text-xs border border-[#165A8A] rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#0047B6]"
-          >
-            <option value="">Todas as Entidades</option>
-            <option value="SENAI">SENAI</option>
-            <option value="SESI">SESI</option>
-            <option value="IEL">IEL</option>
-          </select>
+            placeholder="Todas as Entidades"
+            panelTitle="Entidades"
+            options={[
+              { value: "", label: "Todas as Entidades" },
+              { value: "SENAI", label: "SENAI" },
+              { value: "SESI", label: "SESI" },
+              { value: "IEL", label: "IEL" }
+            ]}
+          />
 
           {/* Filtro de Unidade (apenas SESI) */}
-          <select
-            value={unidade}
-            onChange={(e) => setUnidade(e.target.value as UnidadeSESI | "")}
+          <SelectCustom
+            value={unidade || ""}
+            onValueChange={(value) => setUnidade(value as UnidadeSESI | "")}
+            placeholder="Todas as Unidades"
             disabled={entidade !== "SESI"}
-            className="bg-[#061726] text-gray-300 text-xs border border-[#165A8A] rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#0047B6] disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <option value="">Todas as Unidades</option>
-            <option value="SESI ESCOLA">SESI ESCOLA</option>
-            <option value="SESI CLUBE">SESI CLUBE</option>
-            <option value="SESI SAÚDE">SESI SAÚDE</option>
-          </select>
+            panelTitle="Unidades"
+            options={[
+              { value: "", label: "Todas as Unidades" },
+              { value: "SESI ESCOLA", label: "SESI ESCOLA" },
+              { value: "SESI CLUBE", label: "SESI CLUBE" },
+              { value: "SESI SAÚDE", label: "SESI SAÚDE" }
+            ]}
+          />
           <DateRangePicker
             startDate={dateRange.startDate}
             endDate={dateRange.endDate}
@@ -298,6 +302,8 @@ export default function OverviewPage() {
             selectedCasas={selectedCasas}
             contentRef={contentRef}
             pdfTitle="Visão Geral - Dashboard FIEAM"
+            startDate={dateRange.startDate}
+            endDate={dateRange.endDate}
             pdfSubtitle={
               entidade
                 ? `Dashboard de atendimentos em tempo real · Entidade: ${entidade}${entidade === "SESI" && unidade ? ` · Unidade: ${unidade}` : ""}`

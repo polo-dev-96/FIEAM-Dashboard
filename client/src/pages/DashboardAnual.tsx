@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { MonthPicker } from "@/components/ui/month-picker";
+import { SelectCustom } from "@/components/ui/select-custom";
 import { ExportReportDialog } from "@/components/ui/export-report-dialog";
 import {
     RefreshCw, TrendingUp, Headphones, FileText, Clock, Filter
@@ -145,6 +146,29 @@ export default function DashboardAnualPage() {
         return getCasasForFiltro(casasList, entidade || null, unidade || null);
     }, [casasList, entidade, unidade]);
 
+    // Converter período do filtro anual para datas de exportação
+    const exportDateRange = useMemo(() => {
+        if (selectedMonths.length > 0) {
+            const sortedMonths = [...selectedMonths].sort();
+            const firstMonth = sortedMonths[0];
+            const lastMonth = sortedMonths[sortedMonths.length - 1];
+            
+            const startDate = new Date(selectedYear, firstMonth - 1, 1);
+            const endDate = new Date(selectedYear, lastMonth - 1, new Date(selectedYear, lastMonth, 0).getDate());
+            
+            return {
+                startDate: format(startDate, "yyyy-MM-dd"),
+                endDate: format(endDate, "yyyy-MM-dd")
+            };
+        } else {
+            // Se nenhum mês selecionado, usa o ano inteiro
+            return {
+                startDate: `${selectedYear}-01-01`,
+                endDate: `${selectedYear}-12-31`
+            };
+        }
+    }, [selectedYear, selectedMonths]);
+
     const casaParam = selectedCasas.length > 0
         ? selectedCasas.map(c => `&casa=${encodeURIComponent(c)}`).join('')
         : "";
@@ -242,33 +266,36 @@ export default function DashboardAnualPage() {
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                     {/* Filtro de Entidade */}
-                    <select
-                        value={entidade}
-                        onChange={(e) => {
-                            const value = e.target.value as Entidade | "";
-                            setEntidade(value);
+                    <SelectCustom
+                        value={entidade || ""}
+                        onValueChange={(value) => {
+                            setEntidade(value as Entidade | "");
                             setUnidade("");
                         }}
-                        className="bg-[#061726] text-gray-300 text-xs border border-[#165A8A] rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#0047B6]"
-                    >
-                        <option value="">Todas as Entidades</option>
-                        <option value="SENAI">SENAI</option>
-                        <option value="SESI">SESI</option>
-                        <option value="IEL">IEL</option>
-                    </select>
+                        placeholder="Todas as Entidades"
+                        panelTitle="Entidades"
+                        options={[
+                            { value: "", label: "Todas as Entidades" },
+                            { value: "SENAI", label: "SENAI" },
+                            { value: "SESI", label: "SESI" },
+                            { value: "IEL", label: "IEL" }
+                        ]}
+                    />
 
                     {/* Filtro de Unidade (apenas SESI) */}
-                    <select
-                        value={unidade}
-                        onChange={(e) => setUnidade(e.target.value as UnidadeSESI | "")}
+                    <SelectCustom
+                        value={unidade || ""}
+                        onValueChange={(value) => setUnidade(value as UnidadeSESI | "")}
+                        placeholder="Todas as Unidades"
                         disabled={entidade !== "SESI"}
-                        className="bg-[#061726] text-gray-300 text-xs border border-[#165A8A] rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#0047B6] disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                        <option value="">Todas as Unidades</option>
-                        <option value="SESI ESCOLA">SESI ESCOLA</option>
-                        <option value="SESI CLUBE">SESI CLUBE</option>
-                        <option value="SESI SAÚDE">SESI SAÚDE</option>
-                    </select>
+                        panelTitle="Unidades"
+                        options={[
+                            { value: "", label: "Todas as Unidades" },
+                            { value: "SESI ESCOLA", label: "SESI ESCOLA" },
+                            { value: "SESI CLUBE", label: "SESI CLUBE" },
+                            { value: "SESI SAÚDE", label: "SESI SAÚDE" }
+                        ]}
+                    />
                     {/* Month + Year picker */}
                     <MonthPicker
                         selectedMonths={selectedMonths}
@@ -280,6 +307,8 @@ export default function DashboardAnualPage() {
                         selectedCasas={selectedCasas}
                         contentRef={contentRef}
                         pdfTitle="Dashboard - SAC"
+                        startDate={exportDateRange.startDate}
+                        endDate={exportDateRange.endDate}
                         pdfSubtitle={
                             entidade
                                 ? `Visão de Atendimentos - Entidade: ${entidade}${entidade === "SESI" && unidade ? ` · Unidade: ${unidade}` : ""}`
@@ -679,7 +708,7 @@ export default function DashboardAnualPage() {
                                         formatter={(value: number) => [value.toLocaleString("pt-BR"), "Atendimentos"]}
                                     />
                                     <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={22}>
-                                        {stats.porAssunto.map((_, index) => (
+                                        {rankingAssuntos.map((_, index) => (
                                             <Cell key={`assunto-${index}`} fill={ASSUNTO_COLORS[index % ASSUNTO_COLORS.length]} className="cursor-pointer" />
                                         ))}
                                         <LabelList dataKey="total" position="right" fill="#94a3b8" fontSize={11} formatter={(v: number) => v.toLocaleString("pt-BR")} />
