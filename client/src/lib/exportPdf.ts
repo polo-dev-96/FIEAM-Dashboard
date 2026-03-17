@@ -112,8 +112,7 @@ async function drawCoverPage(
   pdf.text(timestamp(), MX + 18, 115);
 
   // ── Logos — 4 institution logos at top + Polo centered-right
-  const [poloLogo, logoFIEAM, logoSESI, logoSENAI, logoIEL] = await Promise.all([
-    loadImageAsDataUrl("/Icone_Logo.png"),
+  const [logoFIEAM, logoSESI, logoSENAI, logoIEL] = await Promise.all([
     loadImageAsDataUrl("/anexo/FIEAM-removebg-preview.png"),
     loadImageAsDataUrl("/anexo/SESI-removebg-preview.png"),
     loadImageAsDataUrl("/anexo/SENAI-removebg-preview.png"),
@@ -131,14 +130,6 @@ async function drawCoverPage(
     logos.forEach((src, i) => {
       pdf.addImage(src, "PNG", startX + i * (logoW + logoGap), 8, logoW, logoH);
     });
-  }
-
-  // Polo logo — centered vertically on the right
-  if (poloLogo) {
-    const pSize = 38;
-    const pX = PW - MX - pSize / 2 - 20;
-    const pY = PH / 2 - pSize / 2;
-    pdf.addImage(poloLogo, "PNG", pX, pY, pSize, pSize);
   }
 
   // ── Bottom accent line

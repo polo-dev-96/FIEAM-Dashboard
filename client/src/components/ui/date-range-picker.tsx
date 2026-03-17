@@ -173,8 +173,8 @@ export function DateRangePicker({ startDate, endDate, onApply }: DateRangePicker
                 </button>
             </PopoverTrigger>
             <PopoverContent
-                className="w-auto p-0 bg-[#0b1a2e] border border-[#1a3a5c]/80 shadow-2xl shadow-black/40 rounded-2xl overflow-hidden backdrop-blur-xl"
-                align="end"
+                className="w-auto p-0 bg-[#0b1a2e] border border-[#1a3a5c]/80 shadow-2xl shadow-black/40 rounded-2xl overflow-hidden backdrop-blur-xl z-[9999]"
+                align="start"
                 sideOffset={8}
             >
                 <div className="flex min-h-[440px]">

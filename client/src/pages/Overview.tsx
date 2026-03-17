@@ -322,7 +322,7 @@ export default function OverviewPage() {
 
       <div ref={contentRef} className="space-y-6">
       {/* Stats Cards - values adapt to date filter */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-5xl mx-auto">
         <StatCard
           title="Total no Período de Atendimento"
           value={totalPeriodo.toLocaleString("pt-BR")}
@@ -492,7 +492,7 @@ export default function OverviewPage() {
           <CardHeader>
             <CardTitle className="text-white text-lg flex items-center gap-2">
               <Building2 className="w-5 h-5 text-green-400" />
-              Atendimentos por Entidade
+              Atendimentos por Unidade
             </CardTitle>
           </CardHeader>
           <CardContent className="h-[300px]">
