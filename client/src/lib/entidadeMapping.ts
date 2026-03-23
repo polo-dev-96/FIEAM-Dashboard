@@ -57,8 +57,20 @@ export function getCasasForFiltro(
   entidade: Entidade | "" | null,
   unidade: UnidadeSESI | "" | null
 ): string[] {
-  if (!todasAsCasas || !entidade) {
+  if (!todasAsCasas) {
     return [];
+  }
+
+  // "Todas as Entidades" → retorna apenas casas mapeadas (SENAI + SESI + IEL)
+  if (!entidade) {
+    return todasAsCasas.filter(
+      (c) =>
+        SENAI_CASAS.has(c) ||
+        SESI_ESCOLA_CASAS.has(c) ||
+        SESI_CLUBE_CASAS.has(c) ||
+        SESI_SAUDE_CASAS.has(c) ||
+        IEL_CASAS.has(c)
+    );
   }
 
   if (entidade === "SENAI") {

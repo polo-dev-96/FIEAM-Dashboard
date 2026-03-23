@@ -214,6 +214,93 @@ function drawPageChrome(pdf: jsPDF, title: string, pageNum: number, totalPages: 
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+//  FORCE LIGHT MODE — inline style overrides for html2canvas
+// ═══════════════════════════════════════════════════════════════════════
+const DARK_BG_MAP: [string, string][] = [
+  ["rgb(12, 33, 53)",  "#ffffff"],   // #0C2135
+  ["rgb(7, 26, 46)",   "#f1f5f9"],   // #071A2E
+  ["rgb(6, 23, 38)",   "#f8fafc"],   // #061726
+  ["rgb(11, 26, 46)",  "#ffffff"],   // #0b1a2e
+  ["rgb(8, 20, 34)",   "#f8fafc"],   // #081422
+  ["rgb(6, 14, 26)",   "#ffffff"],   // #060e1a
+  ["rgb(10, 25, 41)",  "#f1f5f9"],   // #0a1929
+  ["rgb(13, 31, 51)",  "#f8fafc"],   // #0d1f33
+  ["rgb(10, 22, 40)",  "#f8fafc"],   // #0a1628
+  ["rgb(8, 30, 48)",   "#f1f5f9"],   // #081E30
+];
+
+const DARK_BORDER_MAP: [string, string][] = [
+  ["rgb(22, 90, 138)", "#cbd5e1"],   // #165A8A
+  ["rgb(26, 58, 92)",  "#e2e8f0"],   // #1a3a5c
+];
+
+const LIGHT_TEXT_MAP: [string, string][] = [
+  ["rgb(255, 255, 255)", "#0f172a"],  // white
+  ["rgb(243, 244, 246)", "#1e293b"],  // gray-100
+  ["rgb(229, 231, 235)", "#334155"],  // gray-200
+  ["rgb(209, 213, 219)", "#475569"],  // gray-300
+  ["rgb(156, 163, 175)", "#64748b"],  // gray-400
+];
+
+function forceLightInlineStyles(root: HTMLElement): () => void {
+  const saved: Array<{ el: HTMLElement; bg: string; color: string; borderColor: string }> = [];
+
+  // Also temporarily strip bg-[#071A2E] class from ALL elements in the page
+  // so the body:has(div.bg-[#071A2E]) "login always-dark" CSS rule no longer matches
+  const stripped: Array<{ el: Element; cls: string }> = [];
+  document.querySelectorAll('[class*="071A2E"]').forEach((el) => {
+    const match = el.className.match(/bg-\[#071A2E\](\/\d+)?/);
+    if (match) {
+      stripped.push({ el, cls: match[0] });
+      el.classList.remove(match[0]);
+    }
+  });
+
+  // Force reflow so computed styles update
+  void root.offsetHeight;
+
+  const allEls = [root, ...Array.from(root.querySelectorAll("*"))] as HTMLElement[];
+  for (const el of allEls) {
+    const cs = getComputedStyle(el);
+    let touched = false;
+    const orig = { bg: el.style.backgroundColor, color: el.style.color, borderColor: el.style.borderColor };
+
+    for (const [dark, light] of DARK_BG_MAP) {
+      if (cs.backgroundColor === dark) {
+        el.style.backgroundColor = light;
+        touched = true;
+        // Fix text readability on now-light background
+        for (const [lt, dt] of LIGHT_TEXT_MAP) {
+          if (cs.color === lt) { el.style.color = dt; break; }
+        }
+        break;
+      }
+    }
+
+    for (const [dark, light] of DARK_BORDER_MAP) {
+      if (cs.borderTopColor === dark) {
+        el.style.borderColor = light;
+        touched = true;
+        break;
+      }
+    }
+
+    if (touched) saved.push({ el, ...orig });
+  }
+
+  return () => {
+    for (const { el, bg, color, borderColor } of saved) {
+      el.style.backgroundColor = bg;
+      el.style.color = color;
+      el.style.borderColor = borderColor;
+    }
+    for (const { el, cls } of stripped) {
+      el.classList.add(cls);
+    }
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 //  MAIN EXPORT FUNCTION
 // ═══════════════════════════════════════════════════════════════════════
 export interface PdfExportOptions {
@@ -235,7 +322,10 @@ export async function exportElementToPdf(
   const pdfOnlyEls = container.querySelectorAll("[data-pdf-only]") as NodeListOf<HTMLElement>;
   pdfOnlyEls.forEach((el) => (el.style.display = ""));
 
-  await new Promise((r) => setTimeout(r, 200));
+  await new Promise((r) => setTimeout(r, 300));
+
+  // ── Force light inline styles (bypasses CSS specificity issues)
+  const restoreLight = forceLightInlineStyles(container);
 
   // ── Capture DOM sections
   const children = Array.from(container.children) as HTMLElement[];
@@ -253,6 +343,7 @@ export async function exportElementToPdf(
   }
 
   // ── Restore UI state
+  restoreLight();
   pdfOnlyEls.forEach((el) => (el.style.display = "none"));
   if (prevTheme) {
     document.documentElement.setAttribute("data-theme", prevTheme);

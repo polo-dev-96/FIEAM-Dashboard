@@ -492,12 +492,12 @@ export default function OverviewPage() {
           <CardHeader>
             <CardTitle className="text-white text-lg flex items-center gap-2">
               <Building2 className="w-5 h-5 text-green-400" />
-              Atendimentos por Unidade
+              Atendimentos por Entidade
             </CardTitle>
           </CardHeader>
           <CardContent className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={atendimentosPorEntidade} layout="vertical" margin={{ left: 10 }}>
+              <BarChart data={atendimentosPorEntidade} layout="vertical" margin={{ left: 10, right: 50 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#165A8A" />
                 <XAxis type="number" stroke="#6b7280" fontSize={11} />
                 <YAxis
@@ -516,7 +516,7 @@ export default function OverviewPage() {
                   {atendimentosPorEntidade.map((_, index) => (
                     <Cell key={`casa-${index}`} fill={COLORS[(index + 4) % COLORS.length]} />
                   ))}
-                  <LabelList dataKey="total" position="right" fill="#94a3b8" fontSize={11} formatter={(v: number) => v.toLocaleString("pt-BR")} />
+                  <LabelList dataKey="total" position="right" fill="#94a3b8" fontSize={11} formatter={(v: number) => v.toLocaleString("pt-BR")} offset={8} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
