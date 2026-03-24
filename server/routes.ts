@@ -156,6 +156,24 @@ export async function registerRoutes(
           LIMIT 10
         `, filterParams);
 
+        // Atendimentos por opcaoselecionada (3 opções específicas)
+        const [porOpcaoSelecionada] = await conn.query<RowDataPacket[]>(`
+          SELECT
+            TRIM(opcaoselecionada) AS nome,
+            COUNT(DISTINCT protocolo) AS total
+          FROM \`${TABLE_NAME}\`
+          WHERE \`data e hora de fim\` IS NOT NULL
+            AND TRIM(opcaoselecionada) IN (
+              'DENÚNCIAS/CANAL DE ÉTICA E INTEGRIDADE',
+              'ELOGIOS/ RECLAMAÇÕES/ SUGESTÕES',
+              'INFORMAÇÕES LAI – LEI 12.527/11'
+            )
+            ${dateFilter}
+            ${casaFilter}
+          GROUP BY TRIM(opcaoselecionada)
+          ORDER BY total DESC
+        `, filterParams);
+
         // Volume ao longo do tempo (filtered by date range or last 30 days)
         let timelineFilter = dateFilter;
         const timelineParams = [...dateParams, ...casaParams];
@@ -188,6 +206,7 @@ export async function registerRoutes(
           porCanal: porCanal || [],
           porCasa: porCasa || [],
           porResumo: porResumo || [],
+          porOpcaoSelecionada: porOpcaoSelecionada || [],
           timeline: timeline || [],
         });
       } catch (queryErr) {
@@ -679,6 +698,78 @@ export async function registerRoutes(
       res.json(rows);
     } catch (error) {
       console.error("Erro ao buscar drilldown:", error);
+      res.status(500).json({ message: "Erro ao buscar dados detalhados" });
+    }
+  });
+
+  // GET /api/opcao-drilldown - Drill-down for opcaoselecionada chart (Overview)
+  app.get("/api/opcao-drilldown", async (req, res) => {
+    try {
+      const { startDate, endDate, casa, opcao } = req.query;
+
+      let dateFilter = "";
+      const dateParams: string[] = [];
+      if (startDate && endDate) {
+        dateFilter = `AND DATE(\`data e hora de fim\`) >= ? AND DATE(\`data e hora de fim\`) <= ?`;
+        dateParams.push(String(startDate), String(endDate));
+      }
+
+      let casaFilter = "";
+      const casaParams: string[] = [];
+      if (casa) {
+        const casaArr = Array.isArray(casa) ? casa.map(String) : [String(casa)];
+        const filtered = casaArr.filter(c => c !== 'Todas');
+        if (filtered.length > 0) {
+          const hasFalta = filtered.includes('Falta de Interação');
+          const realCasas = filtered.filter(c => c !== 'Falta de Interação');
+          const conditions: string[] = [];
+          if (realCasas.length > 0) {
+            conditions.push(`TRIM(casa) IN (${realCasas.map(() => '?').join(',')})`);
+            casaParams.push(...realCasas);
+          }
+          if (hasFalta) {
+            conditions.push(`(TRIM(casa) = '' OR casa IS NULL)`);
+          }
+          casaFilter = `AND (${conditions.join(' OR ')})`;
+        }
+      }
+
+      const opcaoFilter = opcao ? `AND TRIM(opcaoselecionada) = ?` : '';
+      const opcaoParams = opcao ? [String(opcao)] : [];
+
+      const allParams = [...dateParams, ...casaParams, ...dateParams, ...casaParams, ...opcaoParams];
+
+      const [rows] = await pool.query<RowDataPacket[]>(`
+        SELECT
+          t.protocolo,
+          t.contato,
+          t.identificador,
+          t.canal,
+          t.\`tipo de canal\` AS tipoCanal,
+          t.\`data e hora de inicio\` AS dataHoraInicio,
+          t.\`data e hora de fim\` AS dataHoraFim,
+          t.\`resumo da conversa\` AS resumoConversa,
+          COALESCE(NULLIF(TRIM(t.casa), ''), 'Falta de Interação') AS casa,
+          TRIM(t.opcaoselecionada) AS opcaoSelecionada
+        FROM \`${TABLE_NAME}\` t
+        INNER JOIN (
+          SELECT MAX(id) AS max_id
+          FROM \`${TABLE_NAME}\`
+          WHERE \`data e hora de fim\` IS NOT NULL
+            ${dateFilter}
+            ${casaFilter}
+          GROUP BY protocolo
+        ) latest ON t.id = latest.max_id
+        WHERE 1=1
+          ${dateFilter}
+          ${casaFilter}
+          ${opcaoFilter}
+        ORDER BY t.\`data e hora de fim\` DESC
+      `, allParams);
+
+      res.json(rows);
+    } catch (error) {
+      console.error("Erro ao buscar opcao-drilldown:", error);
       res.status(500).json({ message: "Erro ao buscar dados detalhados" });
     }
   });

@@ -7,6 +7,7 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { SelectCustom } from "@/components/ui/select-custom";
 import { ExportReportDialog } from "@/components/ui/export-report-dialog";
@@ -16,7 +17,7 @@ import {
 } from "lucide-react";
 import { format, differenceInCalendarDays, differenceInCalendarMonths, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { agruparAssuntos, getCasasForFiltro, mapCasaToEntidadeUnidade, type AssuntoAggregado, type Entidade, type UnidadeSESI } from "@/lib/entidadeMapping";
 
 interface StatsData {
@@ -30,6 +31,7 @@ interface StatsData {
   porCanal: Array<{ nome: string; total: number }>;
   porCasa: Array<{ nome: string; total: number }>;
   porResumo: Array<{ nome: string; total: number }>;
+  porOpcaoSelecionada: Array<{ nome: string; total: number }>;
   timeline: Array<{ data: string; total: number }>;
 }
 
@@ -45,6 +47,25 @@ interface Atendimento {
   resumoConversa: string;
   casa: string;
 }
+
+interface DrilldownRecord {
+  protocolo: string;
+  contato: string;
+  identificador: string;
+  canal: string;
+  tipoCanal: string;
+  dataHoraInicio: string;
+  dataHoraFim: string;
+  resumoConversa: string;
+  casa: string;
+  opcaoSelecionada: string;
+}
+
+const OPCOES_SELECIONADAS_LABELS = [
+  'DENÚNCIAS/CANAL DE ÉTICA E INTEGRIDADE',
+  'ELOGIOS/ RECLAMAÇÕES/ SUGESTÕES',
+  'INFORMAÇÕES LAI – LEI 12.527/11',
+];
 
 const REFRESH_INTERVAL = 60000; // 60 seconds
 
@@ -97,6 +118,20 @@ export default function OverviewPage() {
     return getCasasForFiltro(casasList, entidade || null, unidade || null);
   }, [casasList, entidade, unidade]);
 
+  // Drilldown state for opcaoselecionada
+  const [drilldownOpcao, setDrilldownOpcao] = useState<{ open: boolean; title: string; opcao: string }>({ open: false, title: '', opcao: '' });
+  const [drilldownPage, setDrilldownPage] = useState(1);
+  const DRILLDOWN_PER_PAGE = 10;
+
+  const openDrilldownOpcao = useCallback((opcao: string) => {
+    setDrilldownPage(1);
+    setDrilldownOpcao({ open: true, title: opcao, opcao });
+  }, []);
+
+  const closeDrilldownOpcao = useCallback(() => {
+    setDrilldownOpcao(d => ({ ...d, open: false }));
+  }, []);
+
   // Table state
   const [activeTab, setActiveTab] = useState("Todos");
   const [pageSize, setPageSize] = useState(10);
@@ -114,6 +149,13 @@ export default function OverviewPage() {
     queryKey: ["recentes", dateRange.startDate, dateRange.endDate, selectedCasas],
     queryFn: () => apiRequest(`/api/recentes?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}${casaParam}`),
     refetchInterval: REFRESH_INTERVAL,
+  });
+
+  // Drilldown query for opcaoselecionada
+  const { data: drilldownData, isLoading: drilldownLoading } = useQuery<DrilldownRecord[]>({
+    queryKey: ["opcao-drilldown", dateRange.startDate, dateRange.endDate, selectedCasas, drilldownOpcao.opcao],
+    queryFn: () => apiRequest(`/api/opcao-drilldown?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}${casaParam}&opcao=${encodeURIComponent(drilldownOpcao.opcao)}`),
+    enabled: drilldownOpcao.open && !!drilldownOpcao.opcao,
   });
 
   // Update last updated time whenever data refetches
@@ -203,8 +245,8 @@ export default function OverviewPage() {
     };
   }, [stats?.totais?.total, dateRange.startDate, dateRange.endDate]);
 
-  // ─── Dados agregados por Entidade/Unidade ──────────────────────────
-  const atendimentosPorEntidade = useMemo(() => {
+  // ─── Dados agregados por Unidade (SESI SAÚDE, SESI ESCOLA, SESI CLUBE, SENAI, IEL) ──────────────────────────
+  const atendimentosPorUnidade = useMemo(() => {
     const origem = stats?.porCasa || [];
     const mapa = new Map<string, number>();
 
@@ -220,6 +262,33 @@ export default function OverviewPage() {
       .map(([nome, total]) => ({ nome, total }))
       .sort((a, b) => b.total - a.total);
   }, [stats?.porCasa]);
+
+  // ─── Dados agregados por Entidade (apenas SENAI, SESI, IEL) ──────────────────────────
+  const atendimentosPorEntidade = useMemo(() => {
+    const origem = stats?.porCasa || [];
+    const mapa = new Map<string, number>();
+
+    for (const item of origem) {
+      const { entidade } = mapCasaToEntidadeUnidade(item.nome);
+      if (!entidade) continue;
+      const atual = mapa.get(entidade) || 0;
+      mapa.set(entidade, atual + (item.total || 0));
+    }
+
+    return Array.from(mapa.entries())
+      .map(([nome, total]) => ({ nome, total }))
+      .sort((a, b) => b.total - a.total);
+  }, [stats?.porCasa]);
+
+  // Ensure all 3 opcoes always appear, filling missing with 0
+  const opcoesSelecionadasCompletas = useMemo(() => {
+    const dados = stats?.porOpcaoSelecionada || [];
+    const mapaExistente = new Map(dados.map(d => [d.nome, d.total]));
+    return OPCOES_SELECIONADAS_LABELS.map(nome => ({
+      nome,
+      total: mapaExistente.get(nome) || 0,
+    }));
+  }, [stats?.porOpcaoSelecionada]);
 
   const topAssuntosAggregados: AssuntoAggregado[] = useMemo(() => {
     return agruparAssuntos((stats?.porResumo || []) as AssuntoAggregado[]);
@@ -487,17 +556,17 @@ export default function OverviewPage() {
           </CardContent>
         </Card>
 
-        {/* Por Casa — Dynamic height based on number of items */}
+        {/* Por Unidade — Dynamic height based on number of items */}
         <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
           <CardHeader>
             <CardTitle className="text-white text-lg flex items-center gap-2">
               <Building2 className="w-5 h-5 text-green-400" />
-              Atendimentos por Entidade
+              Atendimentos por Unidade
             </CardTitle>
           </CardHeader>
           <CardContent className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={atendimentosPorEntidade} layout="vertical" margin={{ left: 10, right: 50 }}>
+              <BarChart data={atendimentosPorUnidade} layout="vertical" margin={{ left: 10, right: 50 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#165A8A" />
                 <XAxis type="number" stroke="#6b7280" fontSize={11} />
                 <YAxis
@@ -513,8 +582,94 @@ export default function OverviewPage() {
                   formatter={(value: number) => [value, "Atendimentos"]}
                 />
                 <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={28}>
-                  {atendimentosPorEntidade.map((_, index) => (
+                  {atendimentosPorUnidade.map((_, index) => (
                     <Cell key={`casa-${index}`} fill={COLORS[(index + 4) % COLORS.length]} />
+                  ))}
+                  <LabelList dataKey="total" position="right" fill="#94a3b8" fontSize={11} formatter={(v: number) => v.toLocaleString("pt-BR")} offset={8} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* New Charts Row: Atendimentos por Entidade + Qtd de Opções Selecionadas */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Atendimentos por Entidade (apenas SENAI, SESI, IEL) */}
+        <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
+          <CardHeader>
+            <CardTitle className="text-white text-lg flex items-center gap-2">
+              <Building2 className="w-5 h-5 text-orange-400" />
+              Atendimentos por Entidade
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={atendimentosPorEntidade} layout="vertical" margin={{ left: 10, right: 50 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#165A8A" />
+                <XAxis type="number" stroke="#6b7280" fontSize={11} />
+                <YAxis
+                  type="category"
+                  dataKey="nome"
+                  width={100}
+                  stroke="#9ca3af"
+                  fontSize={11}
+                  tick={{ fill: '#9ca3af' }}
+                />
+                <RechartsTooltip
+                  {...TOOLTIP_STYLE}
+                  formatter={(value: number) => [value, "Atendimentos"]}
+                />
+                <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={32}>
+                  {atendimentosPorEntidade.map((_, index) => (
+                    <Cell key={`entidade-${index}`} fill={COLORS[(index + 1) % COLORS.length]} />
+                  ))}
+                  <LabelList dataKey="total" position="right" fill="#94a3b8" fontSize={11} formatter={(v: number) => v.toLocaleString("pt-BR")} offset={8} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Qtd de Opções Selecionadas */}
+        <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
+          <CardHeader>
+            <CardTitle className="text-white text-lg flex items-center gap-2">
+              <MessageSquare className="w-5 h-5 text-cyan-400" />
+              Qtd de Opções Selecionadas
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={opcoesSelecionadasCompletas}
+                layout="vertical"
+                margin={{ left: 10, right: 50 }}
+                onClick={(data: any) => {
+                  if (data?.activePayload?.[0]) {
+                    const nome = data.activePayload[0].payload.nome;
+                    openDrilldownOpcao(nome);
+                  }
+                }}
+                style={{ cursor: 'pointer' }}
+              >
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#165A8A" />
+                <XAxis type="number" stroke="#6b7280" fontSize={11} />
+                <YAxis
+                  type="category"
+                  dataKey="nome"
+                  width={220}
+                  stroke="#9ca3af"
+                  fontSize={10}
+                  tick={{ fill: '#9ca3af' }}
+                />
+                <RechartsTooltip
+                  {...TOOLTIP_STYLE}
+                  formatter={(value: number) => [value, "Atendimentos"]}
+                />
+                <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={28}>
+                  {opcoesSelecionadasCompletas.map((_, index) => (
+                    <Cell key={`opcao-${index}`} fill={COLORS[(index + 7) % COLORS.length]} className="cursor-pointer" />
                   ))}
                   <LabelList dataKey="total" position="right" fill="#94a3b8" fontSize={11} formatter={(v: number) => v.toLocaleString("pt-BR")} offset={8} />
                 </Bar>
@@ -571,7 +726,7 @@ export default function OverviewPage() {
           <CardContent className="px-4 pb-4 space-y-2.5">
             {(() => {
               const canalLider = stats.porCanal?.[0];
-              const casaLider = atendimentosPorEntidade?.[0];
+              const casaLider = atendimentosPorUnidade?.[0];
               return (
                 <>
                   {canalLider && (
@@ -583,7 +738,7 @@ export default function OverviewPage() {
                   )}
                   {casaLider && (
                     <div className="bg-[#081E30] rounded-lg p-3 border border-[#165A8A]/40">
-                      <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold">Entidade Líder</span>
+                      <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold">Unidade Líder</span>
                       <p className="text-white font-bold text-sm mt-0.5">{casaLider.nome}</p>
                       <p className="text-gray-400 text-[10px]">{casaLider.total.toLocaleString("pt-BR")} atendimentos</p>
                     </div>
@@ -718,6 +873,111 @@ export default function OverviewPage() {
         </CardContent>
       </Card>
       </div>
+
+      {/* Drilldown Modal for Opções Selecionadas */}
+      <Dialog open={drilldownOpcao.open} onOpenChange={(open) => !open && closeDrilldownOpcao()}>
+        <DialogContent className="bg-[#0C2135] border-[#165A8A] text-white max-w-[95vw] w-[1200px] max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-white text-lg flex items-center gap-2">
+              <Filter className="w-5 h-5 text-blue-400" />
+              {drilldownOpcao.title}
+            </DialogTitle>
+            <DialogDescription className="text-gray-400">
+              Atendimentos filtrados • {dateRange.startDate} a {dateRange.endDate}
+              {drilldownData && ` • ${drilldownData.length.toLocaleString('pt-BR')} registros`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-auto min-h-0">
+            {drilldownLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <RefreshCw className="w-6 h-6 text-blue-500 animate-spin" />
+                <span className="text-gray-400 ml-3">Carregando...</span>
+              </div>
+            ) : drilldownData && drilldownData.length > 0 ? (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-[#165A8A]">
+                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Protocolo</th>
+                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Contato</th>
+                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Canal</th>
+                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Início</th>
+                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Fim</th>
+                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Resumo</th>
+                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Casa</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {drilldownData
+                        .slice((drilldownPage - 1) * DRILLDOWN_PER_PAGE, drilldownPage * DRILLDOWN_PER_PAGE)
+                        .map((row, idx) => {
+                          const formatDate = (d: string) => {
+                            if (!d) return '—';
+                            try { return format(new Date(d), 'dd/MM/yyyy HH:mm'); }
+                            catch { return d; }
+                          };
+                          return (
+                            <tr key={`${row.protocolo}-${idx}`} className="border-b border-[#165A8A]/50 hover:bg-white/5 transition-colors">
+                              <td className="py-2.5 px-3 text-blue-300 font-mono text-xs">{row.protocolo}</td>
+                              <td className="py-2.5 px-3 text-gray-200">{row.contato || row.identificador || '—'}</td>
+                              <td className="py-2.5 px-3">
+                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300">
+                                  {row.canal}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 text-gray-300 text-xs">{formatDate(row.dataHoraInicio)}</td>
+                              <td className="py-2.5 px-3 text-gray-300 text-xs">{formatDate(row.dataHoraFim)}</td>
+                              <td className="py-2.5 px-3 text-gray-200 max-w-[200px] truncate">{row.resumoConversa || '—'}</td>
+                              <td className="py-2.5 px-3">
+                                <span className={`text-xs font-medium ${row.casa === 'Falta de Interação' ? 'text-red-400' : 'text-emerald-400'}`}>
+                                  {row.casa}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination */}
+                {drilldownData.length > DRILLDOWN_PER_PAGE && (
+                  <div className="flex items-center justify-between pt-4 mt-2 border-t border-[#165A8A]">
+                    <span className="text-xs text-gray-400">
+                      Mostrando {((drilldownPage - 1) * DRILLDOWN_PER_PAGE) + 1}-{Math.min(drilldownPage * DRILLDOWN_PER_PAGE, drilldownData.length)} de {drilldownData.length.toLocaleString('pt-BR')}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setDrilldownPage(p => Math.max(1, p - 1))}
+                        disabled={drilldownPage === 1}
+                        className="px-3 py-1 text-xs text-gray-300 bg-white/5 rounded-lg hover:bg-white/10 disabled:opacity-30 transition-colors"
+                      >
+                        ‹ Anterior
+                      </button>
+                      <span className="text-xs text-gray-400">
+                        {drilldownPage} / {Math.ceil(drilldownData.length / DRILLDOWN_PER_PAGE)}
+                      </span>
+                      <button
+                        onClick={() => setDrilldownPage(p => Math.min(Math.ceil(drilldownData.length / DRILLDOWN_PER_PAGE), p + 1))}
+                        disabled={drilldownPage >= Math.ceil(drilldownData.length / DRILLDOWN_PER_PAGE)}
+                        className="px-3 py-1 text-xs text-gray-300 bg-white/5 rounded-lg hover:bg-white/10 disabled:opacity-30 transition-colors"
+                      >
+                        Próximo ›
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="flex items-center justify-center py-16 text-gray-500">
+                Nenhum atendimento encontrado para esta opção.
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }
