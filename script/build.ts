@@ -7,6 +7,7 @@ const allowlist = [
   "express",
   "mysql2",
   "nanoid",
+  "bcryptjs",
 ];
 
 async function buildAll() {
