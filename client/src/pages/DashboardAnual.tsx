@@ -16,7 +16,8 @@ import {
 } from "lucide-react";
 import { useState, useMemo, useCallback, useRef } from "react";
 import { format } from "date-fns";
-import { agruparAssuntos, Entidade, UnidadeSESI, getCasasForFiltro } from "@/lib/entidadeMapping";
+import { agruparAssuntos, Entidade, UnidadeSESI, getCasasForFiltro, getCasasForFiltroGerente, getEquipesForEntidade } from "@/lib/entidadeMapping";
+import { useAuth } from "@/lib/AuthContext";
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -118,11 +119,14 @@ function EvolucaoTooltip({ active, payload, label }: any) {
 
 export default function DashboardAnualPage() {
     const contentRef = useRef<HTMLDivElement>(null);
+    const { user } = useAuth();
+    const isGerente = user?.nivel_acesso === "gerente";
     const currentYear = new Date().getFullYear();
     const [selectedYear, setSelectedYear] = useState(currentYear);
     const [selectedMonths, setSelectedMonths] = useState<number[]>([]);
     const [entidade, setEntidade] = useState<Entidade | "">("");
     const [unidade, setUnidade] = useState<UnidadeSESI | "">("");
+    const [equipe, setEquipe] = useState<string>("");
     const [drilldown, setDrilldown] = useState<DrilldownState>({ open: false, title: '', tipo: '', valor: '' });
     const [drilldownPage, setDrilldownPage] = useState(1);
     const ITEMS_PER_PAGE = 10;
@@ -142,9 +146,17 @@ export default function DashboardAnualPage() {
         queryFn: () => apiRequest("/api/casas"),
     });
 
+    const equipesOptions = useMemo(() => {
+        if (!isGerente) return [];
+        return getEquipesForEntidade(casasList, entidade || null);
+    }, [isGerente, casasList, entidade]);
+
     const selectedCasas = useMemo(() => {
+        if (isGerente) {
+            return getCasasForFiltroGerente(casasList, entidade || null, equipe || null);
+        }
         return getCasasForFiltro(casasList, entidade || null, unidade || null);
-    }, [casasList, entidade, unidade]);
+    }, [isGerente, casasList, entidade, unidade, equipe]);
 
     // Converter período do filtro anual para datas de exportação
     const exportDateRange = useMemo(() => {
@@ -271,6 +283,7 @@ export default function DashboardAnualPage() {
                         onValueChange={(value) => {
                             setEntidade(value as Entidade | "");
                             setUnidade("");
+                            setEquipe("");
                         }}
                         placeholder="Todas as Entidades"
                         panelTitle="Entidades"
@@ -278,24 +291,39 @@ export default function DashboardAnualPage() {
                             { value: "", label: "Todas as Entidades" },
                             { value: "SENAI", label: "SENAI" },
                             { value: "SESI", label: "SESI" },
-                            { value: "IEL", label: "IEL" }
+                            { value: "IEL", label: "IEL" },
+                            ...(isGerente ? [{ value: "Outros", label: "Outros" }] : []),
                         ]}
                     />
 
-                    {/* Filtro de Unidade (apenas SESI) */}
-                    <SelectCustom
-                        value={unidade || ""}
-                        onValueChange={(value) => setUnidade(value as UnidadeSESI | "")}
-                        placeholder="Todas as Unidades"
-                        disabled={entidade !== "SESI"}
-                        panelTitle="Unidades"
-                        options={[
-                            { value: "", label: "Todas as Unidades" },
-                            { value: "SESI ESCOLA", label: "SESI ESCOLA" },
-                            { value: "SESI CLUBE", label: "SESI CLUBE" },
-                            { value: "SESI SAÚDE", label: "SESI SAÚDE" }
-                        ]}
-                    />
+                    {/* Filtro de Equipe (gerente) ou Unidade (admin/SESI) */}
+                    {isGerente ? (
+                        <SelectCustom
+                            value={equipe || ""}
+                            onValueChange={(value) => setEquipe(value)}
+                            placeholder="Todas as Equipes"
+                            disabled={!entidade}
+                            panelTitle="Equipes"
+                            options={[
+                                { value: "", label: "Todas as Equipes" },
+                                ...equipesOptions,
+                            ]}
+                        />
+                    ) : (
+                        <SelectCustom
+                            value={unidade || ""}
+                            onValueChange={(value) => setUnidade(value as UnidadeSESI | "")}
+                            placeholder="Todas as Unidades"
+                            disabled={entidade !== "SESI"}
+                            panelTitle="Unidades"
+                            options={[
+                                { value: "", label: "Todas as Unidades" },
+                                { value: "SESI ESCOLA", label: "SESI ESCOLA" },
+                                { value: "SESI CLUBE", label: "SESI CLUBE" },
+                                { value: "SESI SAÚDE", label: "SESI SAÚDE" }
+                            ]}
+                        />
+                    )}
                     {/* Month + Year picker */}
                     <MonthPicker
                         selectedMonths={selectedMonths}

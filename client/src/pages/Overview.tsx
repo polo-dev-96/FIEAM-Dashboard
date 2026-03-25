@@ -18,7 +18,8 @@ import {
 import { format, differenceInCalendarDays, differenceInCalendarMonths, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { agruparAssuntos, getCasasForFiltro, mapCasaToEntidadeUnidade, type AssuntoAggregado, type Entidade, type UnidadeSESI } from "@/lib/entidadeMapping";
+import { agruparAssuntos, getCasasForFiltro, getCasasForFiltroGerente, getEquipesForEntidade, mapCasaToEntidadeUnidade, mapCasaToEntidadeGerente, type AssuntoAggregado, type Entidade, type UnidadeSESI } from "@/lib/entidadeMapping";
+import { useAuth } from "@/lib/AuthContext";
 
 interface StatsData {
   totais: {
@@ -99,13 +100,16 @@ export default function OverviewPage() {
   const contentRef = useRef<HTMLDivElement>(null);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [countdown, setCountdown] = useState(60);
+  const { user } = useAuth();
+  const isGerente = user?.nivel_acesso === "gerente";
 
   // Date range state (default: current month)
   const [dateRange, setDateRange] = useState(getDefaultDates);
 
-  // Filtros de Entidade/Unidade
+  // Filtros de Entidade/Unidade (admin) ou Entidade/Equipe (gerente)
   const [entidade, setEntidade] = useState<Entidade | "">("");
   const [unidade, setUnidade] = useState<UnidadeSESI | "">("");
+  const [equipe, setEquipe] = useState<string>("");
 
   // Lista de todas as casas (vinda da API)
   const { data: casasList } = useQuery<string[]>({
@@ -113,10 +117,19 @@ export default function OverviewPage() {
     queryFn: () => apiRequest("/api/casas"),
   });
 
-  // Casas efetivamente usadas nos filtros de API, derivadas de Entidade/Unidade
+  // Equipes dinâmicas para o gerente (baseadas na entidade selecionada)
+  const equipesOptions = useMemo(() => {
+    if (!isGerente) return [];
+    return getEquipesForEntidade(casasList, entidade || null);
+  }, [isGerente, casasList, entidade]);
+
+  // Casas efetivamente usadas nos filtros de API, derivadas de Entidade/Unidade ou Equipe
   const selectedCasas = useMemo(() => {
+    if (isGerente) {
+      return getCasasForFiltroGerente(casasList, entidade || null, equipe || null);
+    }
     return getCasasForFiltro(casasList, entidade || null, unidade || null);
-  }, [casasList, entidade, unidade]);
+  }, [isGerente, casasList, entidade, unidade, equipe]);
 
   // Drilldown state for opcaoselecionada
   const [drilldownOpcao, setDrilldownOpcao] = useState<{ open: boolean; title: string; opcao: string }>({ open: false, title: '', opcao: '' });
@@ -138,10 +151,11 @@ export default function OverviewPage() {
   const [currentPage, setCurrentPage] = useState(1);
 
   const casaParam = selectedCasas.length > 0 ? selectedCasas.map(c => `&casa=${encodeURIComponent(c)}`).join('') : "";
+  const gerenteParams = isGerente ? "&allOpcoes=true&allCasas=true" : "";
 
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<StatsData>({
-    queryKey: ["stats", dateRange.startDate, dateRange.endDate, selectedCasas],
-    queryFn: () => apiRequest(`/api/stats?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}${casaParam}`),
+    queryKey: ["stats", dateRange.startDate, dateRange.endDate, selectedCasas, isGerente],
+    queryFn: () => apiRequest(`/api/stats?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}${casaParam}${gerenteParams}`),
     refetchInterval: REFRESH_INTERVAL,
   });
 
@@ -245,11 +259,21 @@ export default function OverviewPage() {
     };
   }, [stats?.totais?.total, dateRange.startDate, dateRange.endDate]);
 
-  // ─── Dados agregados por Unidade (SESI SAÚDE, SESI ESCOLA, SESI CLUBE, SENAI, IEL) ──────────────────────────
+  // ─── Dados agregados por Unidade/Equipe ──────────────────────────
   const atendimentosPorUnidade = useMemo(() => {
     const origem = stats?.porCasa || [];
-    const mapa = new Map<string, number>();
 
+    // Gerente: mostra casas brutas (equipes) diretamente — TOP 10, sem "Falta de Interação"
+    if (isGerente) {
+      return origem
+        .filter((item) => item.nome !== "Falta de Interação")
+        .map((item) => ({ nome: item.nome, total: item.total }))
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 10);
+    }
+
+    // Admin: agrupa por Unidade (SESI SAÚDE, SESI ESCOLA, SESI CLUBE, SENAI, IEL)
+    const mapa = new Map<string, number>();
     for (const item of origem) {
       const { entidade, unidade } = mapCasaToEntidadeUnidade(item.nome);
       if (!entidade) continue;
@@ -261,34 +285,44 @@ export default function OverviewPage() {
     return Array.from(mapa.entries())
       .map(([nome, total]) => ({ nome, total }))
       .sort((a, b) => b.total - a.total);
-  }, [stats?.porCasa]);
+  }, [stats?.porCasa, isGerente]);
 
-  // ─── Dados agregados por Entidade (apenas SENAI, SESI, IEL) ──────────────────────────
+  // ─── Dados agregados por Entidade ──────────────────────────
   const atendimentosPorEntidade = useMemo(() => {
     const origem = stats?.porCasa || [];
     const mapa = new Map<string, number>();
 
     for (const item of origem) {
-      const { entidade } = mapCasaToEntidadeUnidade(item.nome);
-      if (!entidade) continue;
-      const atual = mapa.get(entidade) || 0;
-      mapa.set(entidade, atual + (item.total || 0));
+      // Gerente: inclui "Outros" para casas não mapeadas
+      const ent = isGerente
+        ? mapCasaToEntidadeGerente(item.nome)
+        : mapCasaToEntidadeUnidade(item.nome).entidade;
+      if (!ent) continue;
+      const atual = mapa.get(ent) || 0;
+      mapa.set(ent, atual + (item.total || 0));
     }
 
     return Array.from(mapa.entries())
       .map(([nome, total]) => ({ nome, total }))
       .sort((a, b) => b.total - a.total);
-  }, [stats?.porCasa]);
+  }, [stats?.porCasa, isGerente]);
 
-  // Ensure all 3 opcoes always appear, filling missing with 0
+  // ─── Opções Selecionadas ──────────────────────────
   const opcoesSelecionadasCompletas = useMemo(() => {
     const dados = stats?.porOpcaoSelecionada || [];
+
+    // Gerente: usa todas as opções retornadas pela API
+    if (isGerente) {
+      return dados.sort((a, b) => b.total - a.total);
+    }
+
+    // Admin: fixa nas 3 labels conhecidas
     const mapaExistente = new Map(dados.map(d => [d.nome, d.total]));
     return OPCOES_SELECIONADAS_LABELS.map(nome => ({
       nome,
       total: mapaExistente.get(nome) || 0,
     }));
-  }, [stats?.porOpcaoSelecionada]);
+  }, [stats?.porOpcaoSelecionada, isGerente]);
 
   const topAssuntosAggregados: AssuntoAggregado[] = useMemo(() => {
     return agruparAssuntos((stats?.porResumo || []) as AssuntoAggregado[]);
@@ -337,6 +371,7 @@ export default function OverviewPage() {
             onValueChange={(value) => {
               setEntidade(value as Entidade | "");
               setUnidade("");
+              setEquipe("");
             }}
             placeholder="Todas as Entidades"
             panelTitle="Entidades"
@@ -344,24 +379,39 @@ export default function OverviewPage() {
               { value: "", label: "Todas as Entidades" },
               { value: "SENAI", label: "SENAI" },
               { value: "SESI", label: "SESI" },
-              { value: "IEL", label: "IEL" }
+              { value: "IEL", label: "IEL" },
+              ...(isGerente ? [{ value: "Outros", label: "Outros" }] : []),
             ]}
           />
 
-          {/* Filtro de Unidade (apenas SESI) */}
-          <SelectCustom
-            value={unidade || ""}
-            onValueChange={(value) => setUnidade(value as UnidadeSESI | "")}
-            placeholder="Todas as Unidades"
-            disabled={entidade !== "SESI"}
-            panelTitle="Unidades"
-            options={[
-              { value: "", label: "Todas as Unidades" },
-              { value: "SESI ESCOLA", label: "SESI ESCOLA" },
-              { value: "SESI CLUBE", label: "SESI CLUBE" },
-              { value: "SESI SAÚDE", label: "SESI SAÚDE" }
-            ]}
-          />
+          {/* Filtro de Equipe (gerente) ou Unidade (admin/SESI) */}
+          {isGerente ? (
+            <SelectCustom
+              value={equipe || ""}
+              onValueChange={(value) => setEquipe(value)}
+              placeholder="Todas as Equipes"
+              disabled={!entidade}
+              panelTitle="Equipes"
+              options={[
+                { value: "", label: "Todas as Equipes" },
+                ...equipesOptions,
+              ]}
+            />
+          ) : (
+            <SelectCustom
+              value={unidade || ""}
+              onValueChange={(value) => setUnidade(value as UnidadeSESI | "")}
+              placeholder="Todas as Unidades"
+              disabled={entidade !== "SESI"}
+              panelTitle="Unidades"
+              options={[
+                { value: "", label: "Todas as Unidades" },
+                { value: "SESI ESCOLA", label: "SESI ESCOLA" },
+                { value: "SESI CLUBE", label: "SESI CLUBE" },
+                { value: "SESI SAÚDE", label: "SESI SAÚDE" }
+              ]}
+            />
+          )}
           <DateRangePicker
             startDate={dateRange.startDate}
             endDate={dateRange.endDate}
@@ -375,7 +425,7 @@ export default function OverviewPage() {
             endDate={dateRange.endDate}
             pdfSubtitle={
               entidade
-                ? `Dashboard de atendimentos em tempo real · Entidade: ${entidade}${entidade === "SESI" && unidade ? ` · Unidade: ${unidade}` : ""}`
+                ? `Dashboard de atendimentos em tempo real · Entidade: ${entidade}${isGerente && equipe ? ` · Equipe: ${equipe}` : entidade === "SESI" && unidade ? ` · Unidade: ${unidade}` : ""}`
                 : "Dashboard de atendimentos em tempo real · Todas as Entidades"
             }
           />
@@ -530,7 +580,7 @@ export default function OverviewPage() {
           </CardHeader>
           <CardContent className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats.porCanal} layout="vertical" margin={{ left: 10 }}>
+              <BarChart data={stats.porCanal} layout="vertical" margin={{ left: 10, right: 50 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#165A8A" />
                 <XAxis type="number" stroke="#6b7280" fontSize={11} />
                 <YAxis
@@ -556,12 +606,12 @@ export default function OverviewPage() {
           </CardContent>
         </Card>
 
-        {/* Por Unidade — Dynamic height based on number of items */}
+        {/* Por Unidade/Equipe — Dynamic height based on number of items */}
         <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
           <CardHeader>
             <CardTitle className="text-white text-lg flex items-center gap-2">
               <Building2 className="w-5 h-5 text-green-400" />
-              Atendimentos por Unidade
+              {isGerente ? "Atendimentos por Equipe" : "Atendimentos por Unidade"}
             </CardTitle>
           </CardHeader>
           <CardContent className="h-[300px]">
@@ -594,7 +644,7 @@ export default function OverviewPage() {
       </div>
 
       {/* New Charts Row: Atendimentos por Entidade + Qtd de Opções Selecionadas */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
         {/* Atendimentos por Entidade (apenas SENAI, SESI, IEL) */}
         <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
           <CardHeader>
@@ -603,7 +653,7 @@ export default function OverviewPage() {
               Atendimentos por Entidade
             </CardTitle>
           </CardHeader>
-          <CardContent className="h-[300px]">
+          <CardContent style={{ height: `${Math.max(150, atendimentosPorEntidade.length * 50 + 40)}px` }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={atendimentosPorEntidade} layout="vertical" margin={{ left: 10, right: 50 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#165A8A" />
@@ -639,7 +689,7 @@ export default function OverviewPage() {
               Qtd de Opções Selecionadas
             </CardTitle>
           </CardHeader>
-          <CardContent className="h-[300px]">
+          <CardContent className={isGerente && opcoesSelecionadasCompletas.length > 5 ? "h-[500px]" : "h-[300px]"}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={opcoesSelecionadasCompletas}
@@ -738,7 +788,7 @@ export default function OverviewPage() {
                   )}
                   {casaLider && (
                     <div className="bg-[#081E30] rounded-lg p-3 border border-[#165A8A]/40">
-                      <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold">Unidade Líder</span>
+                      <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold">{isGerente ? "Equipe Líder" : "Unidade Líder"}</span>
                       <p className="text-white font-bold text-sm mt-0.5">{casaLider.nome}</p>
                       <p className="text-gray-400 text-[10px]">{casaLider.total.toLocaleString("pt-BR")} atendimentos</p>
                     </div>

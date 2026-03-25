@@ -1,6 +1,8 @@
-export type Entidade = "SENAI" | "SESI" | "IEL";
+export type Entidade = "SENAI" | "SESI" | "IEL" | "Outros";
 
 export type UnidadeSESI = "SESI ESCOLA" | "SESI CLUBE" | "SESI SAÚDE";
+
+export type Equipe = string;
 
 export interface EntidadeUnidade {
   entidade: Entidade | null;
@@ -52,6 +54,46 @@ export function mapCasaToEntidadeUnidade(casa: string | null | undefined): Entid
   return { entidade: null };
 }
 
+export function mapCasaToEntidadeGerente(casa: string | null | undefined): Entidade | null {
+  if (!casa) return "Outros";
+  const { entidade } = mapCasaToEntidadeUnidade(casa);
+  return entidade || "Outros";
+}
+
+function isMappedCasa(c: string): boolean {
+  return (
+    SENAI_CASAS.has(c) ||
+    SESI_ESCOLA_CASAS.has(c) ||
+    SESI_CLUBE_CASAS.has(c) ||
+    SESI_SAUDE_CASAS.has(c) ||
+    IEL_CASAS.has(c)
+  );
+}
+
+export function getEquipesForEntidade(
+  casasList: string[] | undefined,
+  entidade: Entidade | "" | null
+): { value: string; label: string }[] {
+  if (!casasList || !entidade) return [];
+
+  let filtered: string[];
+  if (entidade === "SENAI") {
+    filtered = casasList.filter((c) => SENAI_CASAS.has(c));
+  } else if (entidade === "SESI") {
+    filtered = casasList.filter(
+      (c) => SESI_ESCOLA_CASAS.has(c) || SESI_CLUBE_CASAS.has(c) || SESI_SAUDE_CASAS.has(c)
+    );
+  } else if (entidade === "IEL") {
+    filtered = casasList.filter((c) => IEL_CASAS.has(c));
+  } else if (entidade === "Outros") {
+    filtered = casasList.filter((c) => !isMappedCasa(c) && c !== "Falta de Interação");
+  } else {
+    filtered = [];
+  }
+
+  return filtered.filter((c) => c !== "Falta de Interação").sort().map((c) => ({ value: c, label: c }));
+}
+
 export function getCasasForFiltro(
   todasAsCasas: string[] | undefined,
   entidade: Entidade | "" | null,
@@ -63,14 +105,7 @@ export function getCasasForFiltro(
 
   // "Todas as Entidades" → retorna apenas casas mapeadas (SENAI + SESI + IEL)
   if (!entidade) {
-    return todasAsCasas.filter(
-      (c) =>
-        SENAI_CASAS.has(c) ||
-        SESI_ESCOLA_CASAS.has(c) ||
-        SESI_CLUBE_CASAS.has(c) ||
-        SESI_SAUDE_CASAS.has(c) ||
-        IEL_CASAS.has(c)
-    );
+    return todasAsCasas.filter((c) => isMappedCasa(c));
   }
 
   if (entidade === "SENAI") {
@@ -100,6 +135,43 @@ export function getCasasForFiltro(
     if (unidade === "SESI SAÚDE") {
       return todasAsCasas.filter((c) => SESI_SAUDE_CASAS.has(c));
     }
+  }
+
+  if (entidade === "Outros") {
+    return todasAsCasas.filter((c) => !isMappedCasa(c));
+  }
+
+  return [];
+}
+
+// Gerente mode: "Todas as Entidades" returns ALL casas (including unmapped)
+export function getCasasForFiltroGerente(
+  todasAsCasas: string[] | undefined,
+  entidade: Entidade | "" | null,
+  equipe: string | null
+): string[] {
+  if (!todasAsCasas) return [];
+
+  // Equipe específica selecionada → retorna só essa casa
+  if (equipe) {
+    return todasAsCasas.filter((c) => c === equipe);
+  }
+
+  // "Todas as Entidades" → retorna TODAS as casas (sem filtro)
+  if (!entidade) {
+    return []; // empty = no filter = all data
+  }
+
+  // Entidade específica
+  if (entidade === "SENAI") return todasAsCasas.filter((c) => SENAI_CASAS.has(c));
+  if (entidade === "IEL") return todasAsCasas.filter((c) => IEL_CASAS.has(c));
+  if (entidade === "SESI") {
+    return todasAsCasas.filter(
+      (c) => SESI_ESCOLA_CASAS.has(c) || SESI_CLUBE_CASAS.has(c) || SESI_SAUDE_CASAS.has(c)
+    );
+  }
+  if (entidade === "Outros") {
+    return todasAsCasas.filter((c) => !isMappedCasa(c));
   }
 
   return [];

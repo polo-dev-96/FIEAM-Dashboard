@@ -33,9 +33,18 @@ async function seed() {
       ["admin@polotelecom.com.br", hash]
     );
 
+    // Usuário Gerente (acesso total com visão expandida)
+    await conn.query(
+      `INSERT INTO usuarios (email, senha_hash, nivel_acesso, ativo)
+       VALUES (?, ?, 'gerente', 1)
+       ON DUPLICATE KEY UPDATE senha_hash = VALUES(senha_hash), nivel_acesso = VALUES(nivel_acesso)`,
+      ["ariana.costa@fieam.org.br", hash]
+    );
+
     console.log("✅ Usuários inseridos com sucesso!");
     console.log("   - senai@polotelecom.com (visualizador)");
     console.log("   - admin@polotelecom.com.br (admin)");
+    console.log("   - ariana.costa@fieam.org.br (gerente)");
   } finally {
     conn.release();
     await pool.end();

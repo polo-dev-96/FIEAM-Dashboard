@@ -78,7 +78,7 @@ export async function registerRoutes(
       const conn = await pool.getConnection();
 
       try {
-        const { startDate, endDate, casa } = req.query;
+        const { startDate, endDate, casa, allOpcoes, allCasas } = req.query;
 
         // Build date filter clause
         let dateFilter = "";
@@ -156,6 +156,7 @@ export async function registerRoutes(
         `, filterParams);
 
         // Atendimentos por casa (protocolos distintos) — COALESCE empty/null to 'Falta de Interação'
+        const porCasaLimit = allCasas === 'true' ? '' : 'LIMIT 10';
         const [porCasa] = await conn.query<RowDataPacket[]>(`
           SELECT
             COALESCE(NULLIF(TRIM(casa), ''), 'Falta de Interação') AS nome,
@@ -166,7 +167,7 @@ export async function registerRoutes(
             ${casaFilter}
           GROUP BY nome
           ORDER BY total DESC
-          LIMIT 10
+          ${porCasaLimit}
         `, filterParams);
 
         // Atendimentos por resumo da conversa (protocolos distintos)
@@ -185,18 +186,21 @@ export async function registerRoutes(
           LIMIT 10
         `, filterParams);
 
-        // Atendimentos por opcaoselecionada (3 opções específicas)
+        // Atendimentos por opcaoselecionada
+        const opcaoFilterClause = allOpcoes === 'true'
+          ? `AND TRIM(opcaoselecionada) != '' AND opcaoselecionada IS NOT NULL`
+          : `AND TRIM(opcaoselecionada) IN (
+              'DENÚNCIAS/CANAL DE ÉTICA E INTEGRIDADE',
+              'ELOGIOS/ RECLAMAÇÕES/ SUGESTÕES',
+              'INFORMAÇÕES LAI – LEI 12.527/11'
+            )`;
         const [porOpcaoSelecionada] = await conn.query<RowDataPacket[]>(`
           SELECT
             TRIM(opcaoselecionada) AS nome,
             COUNT(DISTINCT protocolo) AS total
           FROM \`${TABLE_NAME}\`
           WHERE \`data e hora de fim\` IS NOT NULL
-            AND TRIM(opcaoselecionada) IN (
-              'DENÚNCIAS/CANAL DE ÉTICA E INTEGRIDADE',
-              'ELOGIOS/ RECLAMAÇÕES/ SUGESTÕES',
-              'INFORMAÇÕES LAI – LEI 12.527/11'
-            )
+            ${opcaoFilterClause}
             ${dateFilter}
             ${casaFilter}
           GROUP BY TRIM(opcaoselecionada)
