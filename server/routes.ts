@@ -3,27 +3,56 @@ import type { Server } from "http";
 import pool, { TABLE_NAME } from "./db";
 import type { RowDataPacket } from "mysql2";
 import ExcelJS from "exceljs";
+import bcrypt from "bcryptjs";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
 
-  // POST /api/login - Autenticação simples com credenciais do .env
-  app.post("/api/login", (req, res) => {
+  // POST /api/login - Autenticação com banco de dados (tabela usuarios)
+  app.post("/api/login", async (req, res) => {
     const { email, password } = req.body;
-    const validEmail = process.env.LOGIN_EMAIL;
-    const validPassword = process.env.LOGIN_PASSWORD;
 
-    if (!validEmail || !validPassword) {
-      return res.status(500).json({ message: "Credenciais não configuradas no servidor" });
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email e senha são obrigatórios" });
     }
 
-    if (email === validEmail && password === validPassword) {
-      return res.json({ success: true, token: Buffer.from(`${email}:${Date.now()}`).toString("base64") });
-    }
+    try {
+      const [rows] = await pool.query<RowDataPacket[]>(
+        "SELECT id, email, senha_hash, nivel_acesso FROM usuarios WHERE email = ? AND ativo = 1",
+        [email]
+      );
 
-    return res.status(401).json({ message: "Email ou senha inválidos" });
+      if (rows.length === 0) {
+        return res.status(401).json({ message: "Email ou senha inválidos" });
+      }
+
+      const user = rows[0];
+      const senhaCorreta = await bcrypt.compare(password, user.senha_hash);
+
+      if (!senhaCorreta) {
+        return res.status(401).json({ message: "Email ou senha inválidos" });
+      }
+
+      // Atualiza data_atualizacao com o horário do último acesso
+      await pool.query("UPDATE usuarios SET data_atualizacao = NOW() WHERE id = ?", [user.id]);
+
+      const token = Buffer.from(`${user.id}:${user.email}:${Date.now()}`).toString("base64");
+
+      return res.json({
+        success: true,
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          nivel_acesso: user.nivel_acesso,
+        },
+      });
+    } catch (error) {
+      console.error("Erro no login:", error);
+      return res.status(500).json({ message: "Erro interno do servidor" });
+    }
   });
 
   // GET /api/stats - Metricas agregadas do dashboard

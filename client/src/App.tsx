@@ -14,11 +14,12 @@ import DashboardAnualPage from "@/pages/DashboardAnual";
 import NotFound from "@/pages/not-found";
 
 function Router() {
+  const { canAccess } = useAuth();
   return (
     <Switch>
       <Route path="/" component={OverviewPage} />
-      <Route path="/protocolo" component={SearchProtocolPage} />
-      <Route path="/telefone" component={SearchPhonePage} />
+      {canAccess("/protocolo") && <Route path="/protocolo" component={SearchProtocolPage} />}
+      {canAccess("/telefone") && <Route path="/telefone" component={SearchPhonePage} />}
       <Route path="/anual" component={DashboardAnualPage} />
       <Route component={NotFound} />
     </Switch>

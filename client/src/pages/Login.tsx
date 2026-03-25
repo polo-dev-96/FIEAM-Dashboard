@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Eye, EyeOff, Lock, Mail, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Lock, Mail, Loader2, BarChart3, Shield, Activity } from "lucide-react";
+import type { UserInfo } from "@/lib/AuthContext";
 
 interface LoginPageProps {
-  onLogin: (token: string) => void;
+  onLogin: (token: string, user: UserInfo) => void;
 }
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
@@ -11,6 +12,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [focused, setFocused] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,7 +33,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         return;
       }
 
-      onLogin(data.token);
+      onLogin(data.token, data.user);
     } catch {
       setError("Erro de conexão com o servidor");
     } finally {
@@ -40,82 +42,173 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   };
 
   return (
-    <div className="min-h-screen bg-[#071A2E] flex items-center justify-center p-4">
-      {/* Background decorations */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-[#009FE3]/10 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-[#0077B3]/10 rounded-full blur-3xl" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-[#009FE3]/5 rounded-full blur-3xl" />
+    <div className="min-h-screen flex">
+      {/* Left Panel — Branding */}
+      <div className="hidden lg:flex lg:w-[55%] relative overflow-hidden bg-gradient-to-br from-[#0A2A4A] via-[#0D3B66] to-[#094074]">
+        {/* Subtle pattern overlay */}
+        <div className="absolute inset-0 opacity-[0.03]" style={{
+          backgroundImage: `radial-gradient(circle at 1px 1px, white 1px, transparent 0)`,
+          backgroundSize: '40px 40px'
+        }} />
+
+        {/* Gradient orbs */}
+        <div className="absolute -top-32 -left-32 w-96 h-96 bg-[#009FE3]/15 rounded-full blur-[100px]" />
+        <div className="absolute -bottom-48 -right-48 w-[500px] h-[500px] bg-[#0077B3]/20 rounded-full blur-[120px]" />
+        <div className="absolute top-1/2 left-1/3 w-72 h-72 bg-[#009FE3]/8 rounded-full blur-[80px]" />
+
+        <div className="relative z-10 flex flex-col justify-between p-12 w-full">
+          {/* Top — Logo + Brand */}
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10 flex items-center justify-center">
+              <img src="/Icone_Logo.png" alt="Logo" className="w-8 h-8 object-contain" />
+            </div>
+            <div>
+              <h2 className="text-white text-xl font-bold tracking-tight">FIEAM</h2>
+              <p className="text-white/40 text-xs font-medium tracking-widest uppercase">Sistema Indústria</p>
+            </div>
+          </div>
+
+          {/* Center — Hero text */}
+          <div className="space-y-8">
+            <div className="space-y-4">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#009FE3]/10 border border-[#009FE3]/20">
+                <div className="w-1.5 h-1.5 rounded-full bg-[#009FE3] animate-pulse" />
+                <span className="text-[#009FE3] text-xs font-semibold tracking-wide uppercase">Dashboard Ativo</span>
+              </div>
+              <h1 className="text-5xl font-extrabold text-white leading-[1.15] tracking-tight">
+                Painel de<br />
+                <span className="bg-gradient-to-r from-[#009FE3] to-[#47BCF7] bg-clip-text text-transparent">
+                  Atendimentos
+                </span>
+              </h1>
+              <p className="text-white/50 text-lg leading-relaxed max-w-md">
+                Acompanhe métricas, analise dados e tome decisões estratégicas em tempo real.
+              </p>
+            </div>
+
+            {/* Feature cards */}
+            <div className="grid grid-cols-1 gap-3 max-w-sm">
+              {[
+                { icon: BarChart3, label: "Relatórios em tempo real", desc: "Dados atualizados automaticamente" },
+                { icon: Shield, label: "Acesso seguro", desc: "Controle por nível de permissão" },
+                { icon: Activity, label: "Métricas inteligentes", desc: "Análises por entidade e período" },
+              ].map((feat, i) => (
+                <div key={i} className="flex items-center gap-4 p-3 rounded-xl bg-white/[0.04] border border-white/[0.06] backdrop-blur-sm">
+                  <div className="w-10 h-10 rounded-lg bg-[#009FE3]/10 flex items-center justify-center flex-shrink-0">
+                    <feat.icon className="w-5 h-5 text-[#009FE3]" />
+                  </div>
+                  <div>
+                    <p className="text-white/90 text-sm font-semibold">{feat.label}</p>
+                    <p className="text-white/35 text-xs">{feat.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Bottom — Logos */}
+          <div className="flex items-center gap-6">
+            <img src="/anexo/FIEAM-removebg-preview.png" alt="FIEAM" className="h-6 object-contain opacity-40 hover:opacity-70 transition-opacity" />
+            <img src="/anexo/SESI-removebg-preview.png" alt="SESI" className="h-6 object-contain opacity-40 hover:opacity-70 transition-opacity" />
+            <img src="/anexo/SENAI-removebg-preview.png" alt="SENAI" className="h-6 object-contain opacity-40 hover:opacity-70 transition-opacity" />
+            <img src="/anexo/IEL-removebg-preview.png" alt="IEL" className="h-6 object-contain opacity-40 hover:opacity-70 transition-opacity" />
+          </div>
+        </div>
       </div>
 
-      <div className="relative z-10 w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center mb-4">
-            <img src="/Icone_Logo.png" alt="Logo" className="w-16 h-16 object-contain" />
-          </div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Polo BI</h1>
-          <p className="text-gray-400 mt-1 text-sm">Sistema de Dashboard FIEAM</p>
-        </div>
+      {/* Right Panel — Login Form */}
+      <div className="flex-1 flex items-center justify-center bg-[#060F1A] relative overflow-hidden">
+        {/* Subtle background glow */}
+        <div className="absolute top-0 right-0 w-80 h-80 bg-[#009FE3]/5 rounded-full blur-[100px]" />
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-[#0077B3]/5 rounded-full blur-[80px]" />
 
-        {/* Card */}
-        <div className="bg-[#0C2135] border border-[#165A8A] rounded-2xl p-8 shadow-2xl shadow-black/20">
-          <div className="mb-6">
-            <h2 className="text-xl font-semibold text-white">Entrar</h2>
-            <p className="text-gray-400 text-sm mt-1">Faça login para acessar o dashboard</p>
+        <div className="relative z-10 w-full max-w-[420px] px-8">
+          {/* Mobile logo — shown only on small screens */}
+          <div className="lg:hidden text-center mb-10">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-[#0C2135] border border-[#1A3A5C] mb-4">
+              <img src="/Icone_Logo.png" alt="Logo" className="w-10 h-10 object-contain" />
+            </div>
+            <h1 className="text-2xl font-bold text-white">FIEAM</h1>
+            <p className="text-gray-500 text-sm mt-1">Sistema Indústria</p>
+          </div>
+
+          {/* Form header */}
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold text-white tracking-tight">Bem-vindo de volta</h2>
+            <p className="text-gray-500 text-sm mt-2">Insira suas credenciais para continuar</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Email */}
             <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium text-gray-300">
+              <label htmlFor="email" className="text-[13px] font-semibold text-gray-400 uppercase tracking-wider">
                 Email
               </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-gray-500" />
+              <div className={`relative rounded-xl transition-all duration-300 ${
+                focused === 'email'
+                  ? 'ring-2 ring-[#009FE3]/40 shadow-lg shadow-[#009FE3]/5'
+                  : ''
+              }`}>
+                <div className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors duration-200 ${
+                  focused === 'email' ? 'text-[#009FE3]' : 'text-gray-600'
+                }`}>
+                  <Mail className="w-[18px] h-[18px]" />
+                </div>
                 <input
                   id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  onFocus={() => setFocused('email')}
+                  onBlur={() => setFocused(null)}
                   placeholder="seu@email.com"
                   required
-                  className="w-full pl-10 pr-4 py-3 bg-[#061726] border border-[#165A8A] rounded-xl text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-[#009FE3]/50 focus:border-[#009FE3] transition-all duration-200"
+                  className="w-full pl-12 pr-4 py-3.5 bg-[#0B1929] border border-[#1A3A5C] rounded-xl text-white placeholder-gray-600 text-sm focus:outline-none focus:border-[#009FE3]/60 transition-all duration-200"
                 />
               </div>
             </div>
 
             {/* Password */}
             <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium text-gray-300">
+              <label htmlFor="password" className="text-[13px] font-semibold text-gray-400 uppercase tracking-wider">
                 Senha
               </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-gray-500" />
+              <div className={`relative rounded-xl transition-all duration-300 ${
+                focused === 'password'
+                  ? 'ring-2 ring-[#009FE3]/40 shadow-lg shadow-[#009FE3]/5'
+                  : ''
+              }`}>
+                <div className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors duration-200 ${
+                  focused === 'password' ? 'text-[#009FE3]' : 'text-gray-600'
+                }`}>
+                  <Lock className="w-[18px] h-[18px]" />
+                </div>
                 <input
                   id="password"
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
+                  onFocus={() => setFocused('password')}
+                  onBlur={() => setFocused(null)}
+                  placeholder="Digite sua senha"
                   required
-                  className="w-full pl-10 pr-12 py-3 bg-[#061726] border border-[#165A8A] rounded-xl text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-[#009FE3]/50 focus:border-[#009FE3] transition-all duration-200"
+                  className="w-full pl-12 pr-12 py-3.5 bg-[#0B1929] border border-[#1A3A5C] rounded-xl text-white placeholder-gray-600 text-sm focus:outline-none focus:border-[#009FE3]/60 transition-all duration-200"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400 transition-colors duration-200"
                 >
-                  {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                  {showPassword ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
                 </button>
               </div>
             </div>
 
             {/* Error */}
             {error && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-400 text-sm flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
-                {error}
+              <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-red-500/8 border border-red-500/20">
+                <div className="w-2 h-2 rounded-full bg-red-400 flex-shrink-0 animate-pulse" />
+                <span className="text-red-400 text-sm">{error}</span>
               </div>
             )}
 
@@ -123,31 +216,38 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 bg-gradient-to-r from-[#009FE3] to-[#0077B3] hover:from-[#008CCE] hover:to-[#006A9F] text-white font-semibold rounded-xl transition-all duration-200 shadow-lg shadow-[#009FE3]/20 hover:shadow-[#009FE3]/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="group relative w-full py-3.5 rounded-xl text-white font-semibold text-sm transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
             >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Entrando...
-                </>
-              ) : (
-                "Entrar"
-              )}
+              <div className="absolute inset-0 bg-gradient-to-r from-[#009FE3] to-[#0077B3] transition-opacity duration-300 group-hover:opacity-90" />
+              <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-r from-[#009FE3] via-[#00B4FF] to-[#009FE3] bg-[length:200%_100%] animate-[shimmer_2s_ease-in-out_infinite]" />
+              <div className="absolute inset-[1px] rounded-[11px] bg-gradient-to-b from-white/10 to-transparent opacity-50" />
+              <span className="relative flex items-center justify-center gap-2">
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Entrando...
+                  </>
+                ) : (
+                  "Entrar"
+                )}
+              </span>
             </button>
           </form>
-        </div>
 
-        {/* Footer logos */}
-        <div className="flex items-center justify-center gap-4 mt-8 opacity-60">
-          <img src="/anexo/FIEAM-removebg-preview.png" alt="FIEAM" className="h-7 object-contain" />
-          <img src="/anexo/SESI-removebg-preview.png" alt="SESI" className="h-7 object-contain" />
-          <img src="/anexo/SENAI-removebg-preview.png" alt="SENAI" className="h-7 object-contain" />
-          <img src="/anexo/IEL-removebg-preview.png" alt="IEL" className="h-7 object-contain" />
+          {/* Divider */}
+          <div className="mt-8 pt-8 border-t border-[#1A3A5C]/50">
+            {/* Mobile footer logos */}
+            <div className="lg:hidden flex items-center justify-center gap-4 mb-4">
+              <img src="/anexo/FIEAM-removebg-preview.png" alt="FIEAM" className="h-5 object-contain opacity-30" />
+              <img src="/anexo/SESI-removebg-preview.png" alt="SESI" className="h-5 object-contain opacity-30" />
+              <img src="/anexo/SENAI-removebg-preview.png" alt="SENAI" className="h-5 object-contain opacity-30" />
+              <img src="/anexo/IEL-removebg-preview.png" alt="IEL" className="h-5 object-contain opacity-30" />
+            </div>
+            <p className="text-center text-gray-600 text-xs">
+              &copy; {new Date().getFullYear()} Polo Telecom &middot; FIEAM
+            </p>
+          </div>
         </div>
-
-        <p className="text-center text-gray-600 text-xs mt-4">
-          &copy; {new Date().getFullYear()} Polo Telecom &middot; FIEAM
-        </p>
       </div>
     </div>
   );

@@ -30,7 +30,7 @@ export function Sidebar() {
   const [location] = useLocation();
   const [isOpen, setIsOpen] = useState(false);
   const { collapsed, toggle } = useSidebar();
-  const { logout } = useAuth();
+  const { logout, canAccess } = useAuth();
   const { isDark, toggleTheme } = useTheme();
 
   return (
@@ -81,7 +81,7 @@ export function Sidebar() {
 
           {/* Navigation */}
           <nav className={cn("flex-1 px-4 space-y-1 overflow-y-auto", collapsed && "px-2 pt-4")}>
-            {navItems.map((item) => {
+            {navItems.filter((item) => canAccess(item.href)).map((item) => {
               const isActive = location === item.href;
               return (
                 <Link key={item.href} href={item.href} className="block" onClick={() => setIsOpen(false)}>

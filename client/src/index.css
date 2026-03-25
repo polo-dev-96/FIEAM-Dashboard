@@ -82,6 +82,11 @@
   animation: fade-in 0.5s ease-out, slide-in-from-bottom-4 0.5s ease-out;
 }
 
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 /* ─── Light Mode Overrides ─────────────────────────────────────────── */
 
 /* Surface backgrounds */
@@ -333,49 +338,40 @@
 }
 
 /* ─── Login page — ALWAYS dark mode (ignore theme toggle) ──────────────── */
-body:has(div.bg-\[\#071A2E\]) .bg-\[\#071A2E\] {
-  background-color: #071A2E !important;
+[data-theme="light"] .bg-\[\#060F1A\] {
+  background-color: #060F1A !important;
 }
-body:has(div.bg-\[\#071A2E\]) .bg-\[\#0C2135\] {
-  background-color: #0C2135 !important;
-  border-color: #165A8A !important;
+[data-theme="light"] .bg-\[\#0B1929\] {
+  background-color: #0B1929 !important;
+  border-color: #1A3A5C !important;
 }
-body:has(div.bg-\[\#071A2E\]) .bg-\[\#061726\] {
-  background-color: #061726 !important;
-  border-color: #165A8A !important;
-}
-body:has(div.bg-\[\#071A2E\]) .text-white {
+[data-theme="light"] .bg-\[\#060F1A\] .text-white {
   color: #ffffff !important;
 }
-body:has(div.bg-\[\#071A2E\]) .text-gray-300 {
-  color: #d1d5db !important;
-}
-body:has(div.bg-\[\#071A2E\]) .text-gray-400 {
+[data-theme="light"] .bg-\[\#060F1A\] .text-gray-400 {
   color: #9ca3af !important;
 }
-body:has(div.bg-\[\#071A2E\]) .text-gray-500 {
+[data-theme="light"] .bg-\[\#060F1A\] .text-gray-500 {
   color: #6b7280 !important;
 }
-body:has(div.bg-\[\#071A2E\]) .text-gray-600 {
+[data-theme="light"] .bg-\[\#060F1A\] .text-gray-600 {
   color: #4b5563 !important;
 }
-body:has(div.bg-\[\#071A2E\]) .placeholder-gray-500::placeholder {
-  color: #6b7280 !important;
+[data-theme="light"] .bg-\[\#060F1A\] input {
+  background-color: #0B1929 !important;
+  border-color: #1A3A5C !important;
+  color: #ffffff !important;
 }
-body:has(div.bg-\[\#071A2E\]) .border-\[\#165A8A\] {
-  border-color: #165A8A !important;
+[data-theme="light"] .bg-\[\#060F1A\] input::placeholder {
+  color: #4b5563 !important;
 }
-body:has(div.bg-\[\#071A2E\]) .from-\[\#009FE3\] {
-  --tw-gradient-from: #009FE3 !important;
+[data-theme="light"] .bg-\[\#060F1A\] button {
+  background-color: transparent !important;
+  border-color: transparent !important;
+  color: inherit !important;
 }
-body:has(div.bg-\[\#071A2E\]) .to-\[\#0077B3\] {
-  --tw-gradient-to: #0077B3 !important;
-}
-body:has(div.bg-\[\#071A2E\]) .hover\:from-\[\#008CCE\]:hover {
-  --tw-gradient-from: #008CCE !important;
-}
-body:has(div.bg-\[\#071A2E\]) .hover\:to-\[\#006A9F\]:hover {
-  --tw-gradient-to: #006A9F !important;
+[data-theme="light"] .bg-\[\#060F1A\] svg {
+  color: inherit !important;
 }
 
 /* DayPicker calendar in light mode */
