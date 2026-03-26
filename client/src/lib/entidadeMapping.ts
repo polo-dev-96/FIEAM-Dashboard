@@ -9,7 +9,7 @@ export interface EntidadeUnidade {
   unidade?: UnidadeSESI;
 }
 
-const SENAI_CASAS = new Set<string>(["I.A Senai PF", "PF-SENAI"]);
+const SENAI_CASAS = new Set<string>(["I.A Senai PF", "I.A SENAI PF", "PF-SENAI", "PF- SENAI"]);
 
 const SESI_ESCOLA_CASAS = new Set<string>([
   "I.A SESI ESCOLA PF",
@@ -70,11 +70,13 @@ function isMappedCasa(c: string): boolean {
   );
 }
 
+
 export function getEquipesForEntidade(
   casasList: string[] | undefined,
   entidade: Entidade | "" | null
 ): { value: string; label: string }[] {
   if (!casasList || !entidade) return [];
+
 
   let filtered: string[];
   if (entidade === "SENAI") {
@@ -91,7 +93,7 @@ export function getEquipesForEntidade(
     filtered = [];
   }
 
-  return filtered.filter((c) => c !== "Falta de Interação").sort().map((c) => ({ value: c, label: c }));
+  return filtered.sort().map((c) => ({ value: c, label: c }));
 }
 
 export function getCasasForFiltro(
@@ -180,6 +182,7 @@ export function getCasasForFiltroGerente(
 export interface AssuntoAggregado {
   nome: string;
   total: number;
+  originalNames?: string[];
 }
 
 export function normalizeAssuntoKey(raw: string): string {
@@ -220,6 +223,7 @@ export function normalizeAssuntoKey(raw: string): string {
 
 export function agruparAssuntos(data: AssuntoAggregado[]): AssuntoAggregado[] {
   const mapa = new Map<string, number>();
+  const originals = new Map<string, string[]>();
 
   for (const item of data || []) {
     const key = normalizeAssuntoKey(item.nome);
@@ -230,13 +234,17 @@ export function agruparAssuntos(data: AssuntoAggregado[]): AssuntoAggregado[] {
     } else {
       mapa.set(key, item.total);
     }
+    const orig = originals.get(key) || [];
+    orig.push(item.nome);
+    originals.set(key, orig);
   }
 
   // Convert back to array with properly capitalized display names
   return Array.from(mapa.entries())
     .map(([key, total]) => ({
-      nome: key.charAt(0).toUpperCase() + key.slice(1), // Capitalize first letter
-      total
+      nome: key.charAt(0).toUpperCase() + key.slice(1),
+      total,
+      originalNames: originals.get(key) || [],
     }))
     .sort((a, b) => b.total - a.total);
 }

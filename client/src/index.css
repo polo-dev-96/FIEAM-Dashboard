@@ -382,3 +382,23 @@
 [data-theme="light"] .bg-\[\#0b1a2e\] .text-gray-500 {
   color: #94a3b8 !important;
 }
+
+/* ─── Professional Filter Bar light mode overrides ─────────────────── */
+[data-theme="light"] .bg-gray-50 {
+  background-color: #f8fafc !important;
+}
+[data-theme="light"] .bg-white {
+  background-color: #ffffff !important;
+}
+[data-theme="light"] .border-gray-200 {
+  border-color: #e2e8f0 !important;
+}
+[data-theme="light"] .text-gray-600 {
+  color: #4b5563 !important;
+}
+[data-theme="light"] .text-gray-800 {
+  color: #1f2937 !important;
+}
+[data-theme="light"] .bg-gray-100 {
+  background-color: #f1f5f9 !important;
+}

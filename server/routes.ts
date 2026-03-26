@@ -690,8 +690,11 @@ export async function registerRoutes(
           extraParams.push(valorStr);
         }
       } else if (tipoStr === "assunto") {
-        extraFilter = `AND \`resumo da conversa\` = ?`;
-        extraParams.push(valorStr);
+        const assuntoValues = valorStr.split('|||').map(s => s.trim()).filter(Boolean);
+        if (assuntoValues.length > 0) {
+          extraFilter = `AND \`resumo da conversa\` IN (${assuntoValues.map(() => '?').join(',')})`;
+          extraParams.push(...assuntoValues);
+        }
       } else if (tipoStr === "prazo") {
         if (valorStr === "dentro") {
           extraFilter = `AND TIMESTAMPDIFF(HOUR, t.\`data e hora de inicio\`, t.\`data e hora de fim\`) <= 24`;

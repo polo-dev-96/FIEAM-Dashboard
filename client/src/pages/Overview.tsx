@@ -13,7 +13,8 @@ import { SelectCustom } from "@/components/ui/select-custom";
 import { ExportReportDialog } from "@/components/ui/export-report-dialog";
 import {
   MessageSquare, CalendarDays, TrendingUp,
-  RefreshCw, Users, Building2, ChevronLeft, ChevronRight, Filter, Cloud
+  RefreshCw, Users, Building2, ChevronLeft, ChevronRight, Filter, Cloud,
+  CalendarRange, Settings2
 } from "lucide-react";
 import { format, differenceInCalendarDays, differenceInCalendarMonths, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -353,89 +354,161 @@ export default function OverviewPage() {
 
   return (
       <Layout title="Visão Geral" subtitle="Dashboard de atendimentos em tempo real">
-      {/* Refresh Info Bar + Date Filter */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-[#0C2135] rounded-xl px-4 py-3 border border-[#165A8A] gap-3">
-        <div className="flex items-center gap-3">
+      {/* Refresh Info Bar + Professional Filter Layout - Theme Aware */}
+      <div className="rounded-xl border border-gray-200 dark:border-[#165A8A] overflow-hidden bg-white dark:bg-[#0C2135] shadow-sm">
+        {/* Header */}
+        <div className="px-5 py-3 border-b border-gray-200 dark:border-[#165A8A]/40 bg-gray-50 dark:bg-[#081E30]/50 flex items-center gap-3">
           <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          <span className="text-xs text-gray-400">
-            Última atualização: {format(lastUpdated, "HH:mm:ss", { locale: ptBR })}
+          <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 tracking-wide">
+            Visão Geral em Tempo Real
           </span>
-          <span className="text-xs text-gray-500">
-            • Próxima em {countdown}s
+          <div className="flex-1" />
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            Última atualização: {format(lastUpdated, "HH:mm:ss", { locale: ptBR })} • Próxima em {countdown}s
           </span>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Filtro de Entidade */}
-          <SelectCustom
-            value={entidade || ""}
-            onValueChange={(value) => {
-              setEntidade(value as Entidade | "");
-              setUnidade("");
-              setEquipe("");
-            }}
-            placeholder="Todas as Entidades"
-            panelTitle="Entidades"
-            options={[
-              { value: "", label: "Todas as Entidades" },
-              { value: "SENAI", label: "SENAI" },
-              { value: "SESI", label: "SESI" },
-              { value: "IEL", label: "IEL" },
-              ...(isGerente ? [{ value: "Outros", label: "Outros" }] : []),
-            ]}
-          />
 
-          {/* Filtro de Equipe (gerente) ou Unidade (admin/SESI) */}
-          {isGerente ? (
-            <SelectCustom
-              value={equipe || ""}
-              onValueChange={(value) => setEquipe(value)}
-              placeholder="Todas as Equipes"
-              disabled={!entidade}
-              panelTitle="Equipes"
-              options={[
-                { value: "", label: "Todas as Equipes" },
-                ...equipesOptions,
-              ]}
-            />
-          ) : (
-            <SelectCustom
-              value={unidade || ""}
-              onValueChange={(value) => setUnidade(value as UnidadeSESI | "")}
-              placeholder="Todas as Unidades"
-              disabled={entidade !== "SESI"}
-              panelTitle="Unidades"
-              options={[
-                { value: "", label: "Todas as Unidades" },
-                { value: "SESI ESCOLA", label: "SESI ESCOLA" },
-                { value: "SESI CLUBE", label: "SESI CLUBE" },
-                { value: "SESI SAÚDE", label: "SESI SAÚDE" }
-              ]}
-            />
+        {/* Filters Grid */}
+        <div className="p-5 bg-white dark:bg-[#0C2135]">
+          <div className="flex flex-col lg:flex-row gap-5">
+            {/* Group 1: Entity & Team */}
+            <div className="flex flex-col sm:flex-row gap-4 flex-1">
+              {/* Entidade */}
+              <div className="flex flex-col gap-1.5 min-w-[180px]">
+                <label className="text-[10px] uppercase tracking-wider text-gray-600 dark:text-gray-500 font-bold flex items-center gap-1.5">
+                  <Building2 className="w-3 h-3" />
+                  Entidade
+                </label>
+                <SelectCustom
+                  value={entidade || ""}
+                  onValueChange={(value) => {
+                    setEntidade(value as Entidade | "");
+                    setUnidade("");
+                    setEquipe("");
+                  }}
+                  placeholder="Todas as Entidades"
+                  panelTitle="Selecionar Entidade"
+                  options={[
+                    { value: "", label: "Todas as Entidades" },
+                    { value: "SENAI", label: "SENAI" },
+                    { value: "SESI", label: "SESI" },
+                    { value: "IEL", label: "IEL" },
+                    ...(isGerente ? [{ value: "Outros", label: "Outros" }] : []),
+                  ]}
+                />
+              </div>
+
+              {/* Equipe/Unidade */}
+              <div className="flex flex-col gap-1.5 min-w-[180px]">
+                <label className="text-[10px] uppercase tracking-wider text-gray-600 dark:text-gray-500 font-bold flex items-center gap-1.5">
+                  <Users className="w-3 h-3" />
+                  {isGerente ? "Equipe" : "Unidade"}
+                </label>
+                {isGerente ? (
+                  <SelectCustom
+                    value={equipe || ""}
+                    onValueChange={(value) => setEquipe(value)}
+                    placeholder="Todas as Equipes"
+                    disabled={!entidade}
+                    panelTitle="Selecionar Equipe"
+                    options={[
+                      { value: "", label: "Todas as Equipes" },
+                      ...equipesOptions,
+                    ]}
+                  />
+                ) : (
+                  <SelectCustom
+                    value={unidade || ""}
+                    onValueChange={(value) => setUnidade(value as UnidadeSESI | "")}
+                    placeholder="Todas as Unidades"
+                    disabled={entidade !== "SESI"}
+                    panelTitle="Selecionar Unidade"
+                    options={[
+                      { value: "", label: "Todas as Unidades" },
+                      { value: "SESI ESCOLA", label: "SESI ESCOLA" },
+                      { value: "SESI CLUBE", label: "SESI CLUBE" },
+                      { value: "SESI SAÚDE", label: "SESI SAÚDE" }
+                    ]}
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div className="hidden lg:block w-px bg-gray-200 dark:bg-[#165A8A]/30" />
+
+            {/* Group 2: Period */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] uppercase tracking-wider text-gray-600 dark:text-gray-500 font-bold flex items-center gap-1.5">
+                <CalendarRange className="w-3 h-3" />
+                Período
+              </label>
+              <DateRangePicker
+                startDate={dateRange.startDate}
+                endDate={dateRange.endDate}
+                onApply={(s, e) => setDateRange({ startDate: s, endDate: e })}
+              />
+            </div>
+
+            {/* Divider */}
+            <div className="hidden lg:block w-px bg-gray-200 dark:bg-[#165A8A]/30" />
+
+            {/* Group 3: Actions */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] uppercase tracking-wider text-gray-600 dark:text-gray-500 font-bold flex items-center gap-1.5">
+                <Settings2 className="w-3 h-3" />
+                Ações
+              </label>
+              <div className="flex items-center gap-2">
+                <ExportReportDialog
+                  selectedCasas={selectedCasas}
+                  contentRef={contentRef}
+                  pdfTitle="Visão Geral - Dashboard FIEAM"
+                  startDate={dateRange.startDate}
+                  endDate={dateRange.endDate}
+                  pdfSubtitle={
+                    entidade
+                      ? `Dashboard de atendimentos em tempo real · Entidade: ${entidade}${isGerente && equipe ? ` · Equipe: ${equipe}` : entidade === "SESI" && unidade ? ` · Unidade: ${unidade}` : ""}`
+                      : "Dashboard de atendimentos em tempo real · Todas as Entidades"
+                  }
+                />
+                <button
+                  onClick={handleManualRefresh}
+                  className="flex items-center justify-center gap-2 px-3 py-2.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-[#060e1a]/80 border border-gray-200 dark:border-[#1a3a5c]/80 rounded-xl hover:border-[#009FE3]/40 hover:bg-white dark:hover:bg-[#0a1929] hover:text-[#009FE3] dark:hover:text-white transition-all duration-300"
+                  title="Atualizar dados"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Active Filters Summary */}
+          {entidade && (
+            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-[#165A8A]/20 flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] text-gray-600 dark:text-gray-500 uppercase tracking-wider">Filtros ativos:</span>
+              {entidade && (
+                <span className="px-2 py-1 bg-[#009FE3]/10 text-[#009FE3] text-[10px] font-medium rounded-md border border-[#009FE3]/20">
+                  {entidade}
+                </span>
+              )}
+              {(isGerente ? equipe : unidade) && (
+                <span className="px-2 py-1 bg-[#009FE3]/10 text-[#009FE3] text-[10px] font-medium rounded-md border border-[#009FE3]/20">
+                  {isGerente ? equipe : unidade}
+                </span>
+              )}
+              <button
+                onClick={() => {
+                  setEntidade("");
+                  setUnidade("");
+                  setEquipe("");
+                }}
+                className="ml-auto text-[10px] text-gray-500 hover:text-red-400 transition-colors"
+              >
+                Limpar filtros
+              </button>
+            </div>
           )}
-          <DateRangePicker
-            startDate={dateRange.startDate}
-            endDate={dateRange.endDate}
-            onApply={(s, e) => setDateRange({ startDate: s, endDate: e })}
-          />
-          <ExportReportDialog
-            selectedCasas={selectedCasas}
-            contentRef={contentRef}
-            pdfTitle="Visão Geral - Dashboard FIEAM"
-            startDate={dateRange.startDate}
-            endDate={dateRange.endDate}
-            pdfSubtitle={
-              entidade
-                ? `Dashboard de atendimentos em tempo real · Entidade: ${entidade}${isGerente && equipe ? ` · Equipe: ${equipe}` : entidade === "SESI" && unidade ? ` · Unidade: ${unidade}` : ""}`
-                : "Dashboard de atendimentos em tempo real · Todas as Entidades"
-            }
-          />
-          <button
-            onClick={handleManualRefresh}
-            className="flex items-center gap-2 text-xs text-gray-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-white/5"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            Atualizar
-          </button>
         </div>
       </div>
 
