@@ -207,6 +207,22 @@ export async function registerRoutes(
           ORDER BY total DESC
         `, filterParams);
 
+        // Atendimentos por patrocinados
+        const [porPatrocinados] = await conn.query<RowDataPacket[]>(`
+          SELECT
+            TRIM(patrocinados) AS nome,
+            COUNT(DISTINCT protocolo) AS total
+          FROM \`${TABLE_NAME}\`
+          WHERE \`data e hora de fim\` IS NOT NULL
+            AND patrocinados IS NOT NULL
+            AND TRIM(patrocinados) != ''
+            AND TRIM(patrocinados) != 'false'
+            ${dateFilter}
+            ${casaFilter}
+          GROUP BY TRIM(patrocinados)
+          ORDER BY total DESC
+        `, filterParams);
+
         // Volume ao longo do tempo (filtered by date range or last 30 days)
         let timelineFilter = dateFilter;
         const timelineParams = [...dateParams, ...casaParams];
@@ -240,6 +256,7 @@ export async function registerRoutes(
           porCasa: porCasa || [],
           porResumo: porResumo || [],
           porOpcaoSelecionada: porOpcaoSelecionada || [],
+          porPatrocinados: porPatrocinados || [],
           timeline: timeline || [],
         });
       } catch (queryErr) {
@@ -770,8 +787,9 @@ export async function registerRoutes(
         }
       }
 
-      const opcaoFilter = opcao ? `AND TRIM(opcaoselecionada) = ?` : '';
-      const opcaoParams = opcao ? [String(opcao)] : [];
+      const opcaoArr = opcao ? (Array.isArray(opcao) ? opcao.map(String) : [String(opcao)]) : [];
+      const opcaoFilter = opcaoArr.length > 0 ? `AND TRIM(opcaoselecionada) IN (${opcaoArr.map(() => '?').join(',')})` : '';
+      const opcaoParams = opcaoArr;
 
       const allParams = [...dateParams, ...casaParams, ...dateParams, ...casaParams, ...opcaoParams];
 

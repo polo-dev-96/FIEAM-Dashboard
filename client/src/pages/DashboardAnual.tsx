@@ -10,6 +10,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { MonthPicker } from "@/components/ui/month-picker";
 import { SelectCustom } from "@/components/ui/select-custom";
+import { SelectMulti } from "@/components/ui/select-multi";
 import { ExportReportDialog } from "@/components/ui/export-report-dialog";
 import {
     RefreshCw, TrendingUp, Headphones, FileText, Clock, Filter,
@@ -17,7 +18,7 @@ import {
 } from "lucide-react";
 import { useState, useMemo, useCallback, useRef } from "react";
 import { format } from "date-fns";
-import { agruparAssuntos, Entidade, UnidadeSESI, getCasasForFiltro, getCasasForFiltroGerente, getEquipesForEntidade } from "@/lib/entidadeMapping";
+import { agruparAssuntos, Entidade, UnidadeSESI, getCasasForFiltro, getCasasForFiltroGerente, getEquipesForEntidade, getCasasForEquipeLabels, isArianaUser } from "@/lib/entidadeMapping";
 import { useAuth } from "@/lib/AuthContext";
 
 // ─── Types ─────────────────────────────────────────────────────────
@@ -125,9 +126,9 @@ export default function DashboardAnualPage() {
     const currentYear = new Date().getFullYear();
     const [selectedYear, setSelectedYear] = useState(currentYear);
     const [selectedMonths, setSelectedMonths] = useState<number[]>([]);
-    const [entidade, setEntidade] = useState<Entidade | "">("");
-    const [unidade, setUnidade] = useState<UnidadeSESI | "">("");
-    const [equipe, setEquipe] = useState<string>("");
+    const [selectedEntidades, setSelectedEntidades] = useState<Entidade[]>([]); // <--- Updated state for multi-select
+    const [unidade, setUnidade] = useState<UnidadeSESI | "">("")
+    const [selectedEquipes, setSelectedEquipes] = useState<string[]>([]); // <--- Updated state for multi-select
     const [drilldown, setDrilldown] = useState<DrilldownState>({ open: false, title: '', tipo: '', valor: '' });
     const [drilldownPage, setDrilldownPage] = useState(1);
     const ITEMS_PER_PAGE = 10;
@@ -149,15 +150,52 @@ export default function DashboardAnualPage() {
 
     const equipesOptions = useMemo(() => {
         if (!isGerente) return [];
-        return getEquipesForEntidade(casasList, entidade || null);
-    }, [isGerente, casasList, entidade]);
+        const allEquipes = new Map<string, string>();
+        if (selectedEntidades.length === 0) {
+            (casasList || []).forEach(casa => {
+                allEquipes.set(casa, casa);
+            });
+        } else {
+            selectedEntidades.forEach(ent => {
+                const equipes = getEquipesForEntidade(casasList, ent);
+                equipes.forEach(eq => {
+                    allEquipes.set(eq.value, eq.label);
+                });
+            });
+        }
+        return Array.from(allEquipes.entries()).map(([value, label]) => ({ value, label }));
+    }, [isGerente, casasList, selectedEntidades]);
 
     const selectedCasas = useMemo(() => {
+        if (!casasList) return [];
+        
         if (isGerente) {
-            return getCasasForFiltroGerente(casasList, entidade || null, equipe || null);
+            if (selectedEquipes.length > 0) {
+                return getCasasForEquipeLabels(casasList, selectedEntidades, selectedEquipes);
+            }
+            if (selectedEntidades.length > 0) {
+                const allCasas = new Set<string>();
+                selectedEntidades.forEach(ent => {
+                    const casas = getCasasForFiltroGerente(casasList, ent, null);
+                    casas.forEach(c => allCasas.add(c));
+                });
+                return Array.from(allCasas);
+            }
+            // Para Ariana, "Todas as Entidades" deve filtrar apenas casas mapeadas
+            if (isArianaUser()) {
+                const allCasas = new Set<string>();
+                (["SENAI", "SESI", "IEL", "Outros"] as Entidade[]).forEach(ent => {
+                    const casas = getCasasForFiltroGerente(casasList, ent, null);
+                    casas.forEach(c => allCasas.add(c));
+                });
+                return Array.from(allCasas);
+            }
+            return [];
         }
-        return getCasasForFiltro(casasList, entidade || null, unidade || null);
-    }, [isGerente, casasList, entidade, unidade, equipe]);
+        
+        const entidade = selectedEntidades[0] || null;
+        return getCasasForFiltro(casasList, entidade, unidade || null);
+    }, [isGerente, casasList, selectedEntidades, unidade, selectedEquipes]);
 
     // Converter período do filtro anual para datas de exportação
     const exportDateRange = useMemo(() => {
@@ -292,17 +330,15 @@ export default function DashboardAnualPage() {
                                     <Building2 className="w-3 h-3" />
                                     Entidade
                                 </label>
-                                <SelectCustom
-                                    value={entidade || ""}
-                                    onValueChange={(value) => {
-                                        setEntidade(value as Entidade | "");
-                                        setUnidade("");
-                                        setEquipe("");
+                                <SelectMulti
+                                    values={selectedEntidades}
+                                    onValuesChange={(values) => {
+                                        setSelectedEntidades(values as Entidade[]);
+                                        setSelectedEquipes([]);
                                     }}
                                     placeholder="Todas as Entidades"
-                                    panelTitle="Selecionar Entidade"
+                                    panelTitle="Selecionar Entidades"
                                     options={[
-                                        { value: "", label: "Todas as Entidades" },
                                         { value: "SENAI", label: "SENAI" },
                                         { value: "SESI", label: "SESI" },
                                         { value: "IEL", label: "IEL" },
@@ -318,23 +354,20 @@ export default function DashboardAnualPage() {
                                     {isGerente ? "Equipe" : "Unidade"}
                                 </label>
                                 {isGerente ? (
-                                    <SelectCustom
-                                        value={equipe || ""}
-                                        onValueChange={(value) => setEquipe(value)}
+                                    <SelectMulti
+                                        values={selectedEquipes}
+                                        onValuesChange={setSelectedEquipes}
                                         placeholder="Todas as Equipes"
-                                        disabled={!entidade}
-                                        panelTitle="Selecionar Equipe"
-                                        options={[
-                                            { value: "", label: "Todas as Equipes" },
-                                            ...equipesOptions,
-                                        ]}
+                                        disabled={selectedEntidades.length === 0}
+                                        panelTitle="Selecionar Equipes"
+                                        options={equipesOptions}
                                     />
                                 ) : (
                                     <SelectCustom
                                         value={unidade || ""}
                                         onValueChange={(value) => setUnidade(value as UnidadeSESI | "")}
                                         placeholder="Todas as Unidades"
-                                        disabled={entidade !== "SESI"}
+                                        disabled={selectedEntidades[0] !== "SESI"}
                                         panelTitle="Selecionar Unidade"
                                         options={[
                                             { value: "", label: "Todas as Unidades" },
@@ -381,8 +414,8 @@ export default function DashboardAnualPage() {
                                     startDate={exportDateRange.startDate}
                                     endDate={exportDateRange.endDate}
                                     pdfSubtitle={
-                                        entidade
-                                            ? `Visão de Atendimentos - Entidade: ${entidade}${entidade === "SESI" && unidade ? ` · Unidade: ${unidade}` : ""}`
+                                        selectedEntidades.length > 0
+                                            ? `Visão de Atendimentos - Entidades: ${selectedEntidades.join(", ")}${selectedEntidades[0] === "SESI" && unidade ? ` · Unidade: ${unidade}` : ""}`
                                             : "Visão de Atendimentos - Todas as Entidades"
                                     }
                                 />
@@ -398,19 +431,19 @@ export default function DashboardAnualPage() {
                     </div>
 
                     {/* Active Filters Summary */}
-                    {(entidade || selectedMonths.length > 0) && (
+                    {(selectedEntidades.length > 0 || selectedEquipes.length > 0 || selectedMonths.length > 0) && (
                         <div className="mt-4 pt-4 border-t border-gray-200 dark:border-[#165A8A]/20 flex items-center gap-2 flex-wrap">
                             <span className="text-[10px] text-gray-600 dark:text-gray-500 uppercase tracking-wider">Filtros ativos:</span>
-                            {entidade && (
-                                <span className="px-2 py-1 bg-[#009FE3]/10 text-[#009FE3] text-[10px] font-medium rounded-md border border-[#009FE3]/20">
-                                    {entidade}
+                            {selectedEntidades.map(ent => (
+                                <span key={ent} className="px-2 py-1 bg-[#009FE3]/10 text-[#009FE3] text-[10px] font-medium rounded-md border border-[#009FE3]/20">
+                                    {ent}
                                 </span>
-                            )}
-                            {(isGerente ? equipe : unidade) && (
-                                <span className="px-2 py-1 bg-[#009FE3]/10 text-[#009FE3] text-[10px] font-medium rounded-md border border-[#009FE3]/20">
-                                    {isGerente ? equipe : unidade}
+                            ))}
+                            {selectedEquipes.map(eq => (
+                                <span key={eq} className="px-2 py-1 bg-[#009FE3]/10 text-[#009FE3] text-[10px] font-medium rounded-md border border-[#009FE3]/20">
+                                    {eq}
                                 </span>
-                            )}
+                            ))}
                             {selectedMonths.length > 0 && (
                                 <span className="px-2 py-1 bg-[#009FE3]/10 text-[#009FE3] text-[10px] font-medium rounded-md border border-[#009FE3]/20">
                                     {selectedMonths.length} {selectedMonths.length === 1 ? 'mês' : 'meses'}
@@ -418,9 +451,9 @@ export default function DashboardAnualPage() {
                             )}
                             <button
                                 onClick={() => {
-                                    setEntidade("");
+                                    setSelectedEntidades([]);
+                                    setSelectedEquipes([]);
                                     setUnidade("");
-                                    setEquipe("");
                                     setSelectedMonths([]);
                                 }}
                                 className="ml-auto text-[10px] text-gray-500 hover:text-red-400 transition-colors"

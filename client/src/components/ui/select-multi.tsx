@@ -1,57 +1,92 @@
 import { useState, useCallback, useEffect } from "react";
-import { ChevronDown, Check, Search } from "lucide-react";
+import { ChevronDown, Check, Search, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
-interface SelectCustomProps {
-    value: string;
-    onValueChange: (value: string) => void;
+interface SelectMultiProps {
+    values: string[];
+    onValuesChange: (values: string[]) => void;
     placeholder: string;
     options: { value: string; label: string }[];
     disabled?: boolean;
     panelTitle?: string;
     className?: string;
+    maxDisplay?: number;
 }
 
-export function SelectCustom({
-    value,
-    onValueChange,
+export function SelectMulti({
+    values,
+    onValuesChange,
     placeholder,
     options,
     disabled = false,
     panelTitle,
     className = "",
-}: SelectCustomProps) {
+    maxDisplay = 2,
+}: SelectMultiProps) {
     const [open, setOpen] = useState(false);
-    const [pending, setPending] = useState(value);
+    const [pending, setPending] = useState<string[]>(values);
     const [search, setSearch] = useState("");
     const showSearch = options.length > 6;
 
-    // Sync pending with external value when popover opens
     useEffect(() => {
         if (open) {
-            setPending(value);
+            setPending(values);
             setSearch("");
         }
-    }, [open, value]);
+    }, [open, values]);
 
-    const selectedOption = options.find(opt => opt.value === value);
-    const displayText = selectedOption?.label || placeholder;
+    const getDisplayText = () => {
+        if (values.length === 0) return placeholder;
+        if (values.length === 1) {
+            const opt = options.find(o => o.value === values[0]);
+            return opt?.label || values[0];
+        }
+        const selectedLabels = values
+            .slice(0, maxDisplay)
+            .map(v => options.find(o => o.value === v)?.label || v);
+        const remaining = values.length - maxDisplay;
+        if (remaining > 0) {
+            return `${selectedLabels.join(", ")} +${remaining}`;
+        }
+        return selectedLabels.join(", ");
+    };
+
+    const displayText = getDisplayText();
 
     const filteredOptions = search.trim()
         ? options.filter(opt => opt.label.toLowerCase().includes(search.toLowerCase()))
         : options;
 
     const handleConfirm = useCallback(() => {
-        onValueChange(pending);
+        onValuesChange(pending);
         setOpen(false);
-    }, [onValueChange, pending]);
+    }, [onValuesChange, pending]);
 
     const handleCancel = useCallback(() => {
-        setPending(value);
+        setPending(values);
         setOpen(false);
-    }, [value]);
+    }, [values]);
 
-    const pendingChanged = pending !== value;
+    const toggleOption = useCallback((value: string) => {
+        setPending(prev => {
+            if (prev.includes(value)) {
+                return prev.filter(v => v !== value);
+            }
+            return [...prev, value];
+        });
+    }, []);
+
+    const clearAll = useCallback(() => {
+        setPending([]);
+    }, []);
+
+    const selectAll = useCallback(() => {
+        setPending(options.map(o => o.value));
+    }, [options]);
+
+    const pendingChanged = pending.length !== values.length || 
+        pending.some(v => !values.includes(v)) ||
+        values.some(v => !pending.includes(v));
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
@@ -61,25 +96,41 @@ export function SelectCustom({
                     disabled={disabled}
                     type="button"
                 >
-                    <span className={`font-bold truncate flex-1 text-left ${value ? "text-gray-900" : "text-gray-500"}`}>{displayText}</span>
+                    <span className={`font-bold truncate flex-1 text-left ${values.length > 0 ? "text-gray-900" : "text-gray-500"}`}>{displayText}</span>
+                    {values.length > 0 && (
+                        <span 
+                            className="flex items-center justify-center w-5 h-5 rounded-full bg-[#009FE3] text-white text-[10px] font-bold shrink-0"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onValuesChange([]);
+                            }}
+                        >
+                            <X className="w-3 h-3" />
+                        </span>
+                    )}
                     <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 shrink-0 ${open ? "rotate-180" : ""} group-hover:text-[#009FE3]`} />
                 </button>
             </PopoverTrigger>
             <PopoverContent
-                className="w-[var(--radix-popover-trigger-width)] min-w-[240px] p-0 bg-white border border-gray-200 shadow-xl rounded-2xl overflow-hidden"
+                className="w-[var(--radix-popover-trigger-width)] min-w-[280px] p-0 bg-white border border-gray-200 shadow-xl rounded-2xl overflow-hidden"
                 align="start"
                 sideOffset={8}
             >
                 {/* Header */}
                 {panelTitle && (
                     <div className="px-4 pt-3 pb-2 border-b border-gray-100 bg-gray-50/80">
-                        <p className="text-[10px] uppercase tracking-[0.15em] text-[#009FE3] font-extrabold">
-                            {panelTitle}
-                        </p>
+                        <div className="flex items-center justify-between">
+                            <p className="text-[10px] uppercase tracking-[0.15em] text-[#009FE3] font-extrabold">
+                                {panelTitle}
+                            </p>
+                            <span className="text-[10px] text-gray-400 font-medium">
+                                {pending.length} selecionado{pending.length !== 1 ? 's' : ''}
+                            </span>
+                        </div>
                     </div>
                 )}
 
-                {/* Search (only for long lists) */}
+                {/* Search */}
                 {showSearch && (
                     <div className="px-3 pt-3 pb-1">
                         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 focus-within:border-[#009FE3] focus-within:ring-2 focus-within:ring-[#009FE3]/20 transition-all">
@@ -96,14 +147,33 @@ export function SelectCustom({
                     </div>
                 )}
 
+                {/* Select All / Clear All */}
+                <div className="px-3 py-2 flex items-center gap-2 border-b border-gray-100">
+                    <button
+                        onClick={selectAll}
+                        className="text-[10px] text-[#009FE3] hover:text-[#0077B5] transition-colors font-bold"
+                        type="button"
+                    >
+                        Selecionar todos
+                    </button>
+                    <span className="text-gray-300">|</span>
+                    <button
+                        onClick={clearAll}
+                        className="text-[10px] text-gray-400 hover:text-gray-700 transition-colors font-medium"
+                        type="button"
+                    >
+                        Limpar
+                    </button>
+                </div>
+
                 {/* Options */}
-                <div className="p-2 space-y-0.5 max-h-[260px] overflow-y-auto">
+                <div className="p-2 space-y-0.5 max-h-[280px] overflow-y-auto">
                     {filteredOptions.map((option) => {
-                        const isSelected = pending === option.value;
+                        const isSelected = pending.includes(option.value);
                         return (
                             <button
                                 key={option.value}
-                                onClick={() => setPending(option.value)}
+                                onClick={() => toggleOption(option.value)}
                                 className={`w-full text-left px-3 py-2.5 text-xs rounded-lg transition-all duration-150 flex items-center justify-between gap-2 ${
                                     isSelected
                                         ? "bg-[#009FE3]/8 text-[#009FE3] font-bold"
@@ -112,9 +182,13 @@ export function SelectCustom({
                                 type="button"
                             >
                                 <span className="truncate">{option.label}</span>
-                                {isSelected && (
-                                    <Check className="w-4 h-4 text-[#009FE3] shrink-0" />
-                                )}
+                                <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors shrink-0 ${
+                                    isSelected
+                                        ? "bg-[#009FE3] border-[#009FE3]"
+                                        : "border-gray-300 hover:border-gray-400"
+                                }`}>
+                                    {isSelected && <Check className="w-3 h-3 text-white" />}
+                                </div>
                             </button>
                         );
                     })}
@@ -141,7 +215,7 @@ export function SelectCustom({
                                 : "bg-[#009FE3] text-white hover:bg-[#0088CC]"
                         }`}
                     >
-                        Confirmar
+                        Confirmar ({pending.length})
                     </button>
                 </div>
             </PopoverContent>

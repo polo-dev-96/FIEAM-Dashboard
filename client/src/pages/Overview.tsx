@@ -10,6 +10,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { SelectCustom } from "@/components/ui/select-custom";
+import { SelectMulti } from "@/components/ui/select-multi";
 import { ExportReportDialog } from "@/components/ui/export-report-dialog";
 import {
   MessageSquare, CalendarDays, TrendingUp,
@@ -19,7 +20,7 @@ import {
 import { format, differenceInCalendarDays, differenceInCalendarMonths, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { agruparAssuntos, getCasasForFiltro, getCasasForFiltroGerente, getEquipesForEntidade, mapCasaToEntidadeUnidade, mapCasaToEntidadeGerente, type AssuntoAggregado, type Entidade, type UnidadeSESI } from "@/lib/entidadeMapping";
+import { agruparAssuntos, getCasasForFiltro, getCasasForFiltroGerente, getEquipesForEntidade, getCasasForEquipeLabels, mapCasaToEntidadeUnidade, mapCasaToEntidadeGerente, isArianaUser, type AssuntoAggregado, type Entidade, type UnidadeSESI } from "@/lib/entidadeMapping";
 import { useAuth } from "@/lib/AuthContext";
 
 interface StatsData {
@@ -34,6 +35,7 @@ interface StatsData {
   porCasa: Array<{ nome: string; total: number }>;
   porResumo: Array<{ nome: string; total: number }>;
   porOpcaoSelecionada: Array<{ nome: string; total: number }>;
+  porPatrocinados: Array<{ nome: string; total: number }>;
   timeline: Array<{ data: string; total: number }>;
 }
 
@@ -68,6 +70,28 @@ const OPCOES_SELECIONADAS_LABELS = [
   'ELOGIOS/ RECLAMAÇÕES/ SUGESTÕES',
   'INFORMAÇÕES LAI – LEI 12.527/11',
 ];
+
+// Classificação PF (Para Você) e PJ (Para Empresa) baseado em opcaoselecionada
+const PF_OPCOES = new Set([
+  'MATRICULAS SESI ESCOLA 2026',
+  'CORRIDA NACIONAL DO SESI',
+  'SENAI',
+  'SESI SAÚDE',
+  'SESI ODONTOLOGIA',
+  'SESI CLUBE',
+  'EJA / SUPLETIVO',
+  'IEL',
+  'DENÚNCIAS/CANAL DE ÉTICA E INTEGRIDADE',
+  'ELOGIOS/ RECLAMAÇÕES/ SUGESTÕES',
+  'INFORMAÇÕES LAI – LEI 12.527/11',
+  'GRATUIDADE',
+]);
+
+const PJ_OPCOES = new Set([
+  'Solicitacão de visita Comercial',
+  'Solicitação de visita Comercial',
+  'Informações ou Proposta Comercial',
+]);
 
 const REFRESH_INTERVAL = 60000; // 60 seconds
 
@@ -107,10 +131,10 @@ export default function OverviewPage() {
   // Date range state (default: current month)
   const [dateRange, setDateRange] = useState(getDefaultDates);
 
-  // Filtros de Entidade/Unidade (admin) ou Entidade/Equipe (gerente)
-  const [entidade, setEntidade] = useState<Entidade | "">("");
+  // Filtros de Entidade/Unidade (admin) ou Entidade/Equipe (gerente) - agora com multiseleção
+  const [selectedEntidades, setSelectedEntidades] = useState<Entidade[]>([]);
   const [unidade, setUnidade] = useState<UnidadeSESI | "">("");
-  const [equipe, setEquipe] = useState<string>("");
+  const [selectedEquipes, setSelectedEquipes] = useState<string[]>([]);
 
   // Lista de todas as casas (vinda da API)
   const { data: casasList } = useQuery<string[]>({
@@ -118,19 +142,61 @@ export default function OverviewPage() {
     queryFn: () => apiRequest("/api/casas"),
   });
 
-  // Equipes dinâmicas para o gerente (baseadas na entidade selecionada)
+  // Equipes dinâmicas para o gerente (baseadas nas entidades selecionadas)
   const equipesOptions = useMemo(() => {
     if (!isGerente) return [];
-    return getEquipesForEntidade(casasList, entidade || null);
-  }, [isGerente, casasList, entidade]);
-
-  // Casas efetivamente usadas nos filtros de API, derivadas de Entidade/Unidade ou Equipe
-  const selectedCasas = useMemo(() => {
-    if (isGerente) {
-      return getCasasForFiltroGerente(casasList, entidade || null, equipe || null);
+    // Combina equipes de todas as entidades selecionadas
+    const allEquipes = new Map<string, string>();
+    if (selectedEntidades.length === 0) {
+      // Nenhuma entidade selecionada = todas as equipes disponíveis
+      (casasList || []).forEach(casa => {
+        allEquipes.set(casa, casa);
+      });
+    } else {
+      selectedEntidades.forEach(ent => {
+        const equipes = getEquipesForEntidade(casasList, ent);
+        equipes.forEach(eq => {
+          allEquipes.set(eq.value, eq.label);
+        });
+      });
     }
-    return getCasasForFiltro(casasList, entidade || null, unidade || null);
-  }, [isGerente, casasList, entidade, unidade, equipe]);
+    return Array.from(allEquipes.entries()).map(([value, label]) => ({ value, label }));
+  }, [isGerente, casasList, selectedEntidades]);
+
+  // Casas efetivamente usadas nos filtros de API, derivadas de Entidades/Unidade ou Equipes
+  const selectedCasas = useMemo(() => {
+    if (!casasList) return [];
+    
+    if (isGerente) {
+      // Se equipes específicas selecionadas, expande labels para raw casas
+      if (selectedEquipes.length > 0) {
+        return getCasasForEquipeLabels(casasList, selectedEntidades, selectedEquipes);
+      }
+      // Se entidades selecionadas mas nenhuma equipe, busca casas de todas as entidades
+      if (selectedEntidades.length > 0) {
+        const allCasas = new Set<string>();
+        selectedEntidades.forEach(ent => {
+          const casas = getCasasForFiltroGerente(casasList, ent, null);
+          casas.forEach(c => allCasas.add(c));
+        });
+        return Array.from(allCasas);
+      }
+      // Para Ariana, "Todas as Entidades" deve filtrar apenas casas mapeadas (exclui as excluídas)
+      if (isArianaUser()) {
+        const allCasas = new Set<string>();
+        (["SENAI", "SESI", "IEL", "Outros"] as Entidade[]).forEach(ent => {
+          const casas = getCasasForFiltroGerente(casasList, ent, null);
+          casas.forEach(c => allCasas.add(c));
+        });
+        return Array.from(allCasas);
+      }
+      return []; // empty = no filter = all data
+    }
+    
+    // Admin: usa a primeira entidade selecionada ou nenhuma
+    const entidade = selectedEntidades[0] || null;
+    return getCasasForFiltro(casasList, entidade, unidade || null);
+  }, [isGerente, casasList, selectedEntidades, unidade, selectedEquipes]);
 
   // Drilldown state for opcaoselecionada
   const [drilldownOpcao, setDrilldownOpcao] = useState<{ open: boolean; title: string; opcao: string }>({ open: false, title: '', opcao: '' });
@@ -144,6 +210,19 @@ export default function OverviewPage() {
 
   const closeDrilldownOpcao = useCallback(() => {
     setDrilldownOpcao(d => ({ ...d, open: false }));
+  }, []);
+
+  // PF/PJ drilldown state
+  const [drilldownPfPj, setDrilldownPfPj] = useState<{ open: boolean; tipo: 'PF' | 'PJ'; title: string }>({ open: false, tipo: 'PF', title: '' });
+  const [drilldownPfPjPage, setDrilldownPfPjPage] = useState(1);
+
+  const openDrilldownPfPj = useCallback((tipo: 'PF' | 'PJ') => {
+    setDrilldownPfPjPage(1);
+    setDrilldownPfPj({ open: true, tipo, title: tipo === 'PF' ? 'Para Você (PF)' : 'Para Empresa (PJ)' });
+  }, []);
+
+  const closeDrilldownPfPj = useCallback(() => {
+    setDrilldownPfPj(d => ({ ...d, open: false }));
   }, []);
 
   // Table state
@@ -171,6 +250,18 @@ export default function OverviewPage() {
     queryKey: ["opcao-drilldown", dateRange.startDate, dateRange.endDate, selectedCasas, drilldownOpcao.opcao],
     queryFn: () => apiRequest(`/api/opcao-drilldown?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}${casaParam}&opcao=${encodeURIComponent(drilldownOpcao.opcao)}`),
     enabled: drilldownOpcao.open && !!drilldownOpcao.opcao,
+  });
+
+  // Drilldown query for PF/PJ chart
+  const pfPjOpcaoParam = useMemo(() => {
+    const opcoes = drilldownPfPj.tipo === 'PF' ? Array.from(PF_OPCOES) : Array.from(PJ_OPCOES);
+    return opcoes.map(o => `&opcao=${encodeURIComponent(o)}`).join('');
+  }, [drilldownPfPj.tipo]);
+
+  const { data: drilldownPfPjData, isLoading: drilldownPfPjLoading } = useQuery<DrilldownRecord[]>({
+    queryKey: ["pfpj-drilldown", dateRange.startDate, dateRange.endDate, selectedCasas, drilldownPfPj.tipo],
+    queryFn: () => apiRequest(`/api/opcao-drilldown?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}${casaParam}${pfPjOpcaoParam}`),
+    enabled: drilldownPfPj.open,
   });
 
   // Update last updated time whenever data refetches
@@ -312,18 +403,50 @@ export default function OverviewPage() {
   const opcoesSelecionadasCompletas = useMemo(() => {
     const dados = stats?.porOpcaoSelecionada || [];
 
-    // Gerente: usa todas as opções retornadas pela API
+    // Filtrar entradas "false" e vazias
+    const dadosFiltrados = dados.filter(d => d.nome && d.nome !== "false" && d.nome.trim() !== "");
+
+    // Gerente: usa todas as opções retornadas pela API (Top 10)
     if (isGerente) {
-      return dados.sort((a, b) => b.total - a.total);
+      return dadosFiltrados.sort((a, b) => b.total - a.total).slice(0, 10);
     }
 
     // Admin: fixa nas 3 labels conhecidas
-    const mapaExistente = new Map(dados.map(d => [d.nome, d.total]));
+    const mapaExistente = new Map(dadosFiltrados.map(d => [d.nome, d.total]));
     return OPCOES_SELECIONADAS_LABELS.map(nome => ({
       nome,
       total: mapaExistente.get(nome) || 0,
     }));
   }, [stats?.porOpcaoSelecionada, isGerente]);
+
+  // ─── Patrocinados (Top 10) ──────────────────────────
+  const patrocinadosData = useMemo(() => {
+    const dados = stats?.porPatrocinados || [];
+    return dados
+      .filter(d => d.nome && d.nome !== "false" && d.nome.trim() !== "" && d.nome !== "null" && d.nome !== "undefined")
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 10);
+  }, [stats?.porPatrocinados]);
+
+  // ─── PF e PJ ──────────────────────────
+  const pfPjData = useMemo(() => {
+    const dados = stats?.porOpcaoSelecionada || [];
+    let pfTotal = 0;
+    let pjTotal = 0;
+    for (const d of dados) {
+      if (!d.nome || d.nome === "false" || d.nome.trim() === "") continue;
+      const trimmed = d.nome.trim();
+      if (PF_OPCOES.has(trimmed)) {
+        pfTotal += d.total;
+      } else if (PJ_OPCOES.has(trimmed)) {
+        pjTotal += d.total;
+      }
+    }
+    return [
+      { nome: "PF", total: pfTotal },
+      { nome: "PJ", total: pjTotal },
+    ];
+  }, [stats?.porOpcaoSelecionada]);
 
   const topAssuntosAggregados: AssuntoAggregado[] = useMemo(() => {
     return agruparAssuntos((stats?.porResumo || []) as AssuntoAggregado[]);
@@ -379,17 +502,15 @@ export default function OverviewPage() {
                   <Building2 className="w-3 h-3" />
                   Entidade
                 </label>
-                <SelectCustom
-                  value={entidade || ""}
-                  onValueChange={(value) => {
-                    setEntidade(value as Entidade | "");
-                    setUnidade("");
-                    setEquipe("");
+                <SelectMulti
+                  values={selectedEntidades}
+                  onValuesChange={(values) => {
+                    setSelectedEntidades(values as Entidade[]);
+                    setSelectedEquipes([]); // Limpa equipes quando entidade muda
                   }}
                   placeholder="Todas as Entidades"
-                  panelTitle="Selecionar Entidade"
+                  panelTitle="Selecionar Entidades"
                   options={[
-                    { value: "", label: "Todas as Entidades" },
                     { value: "SENAI", label: "SENAI" },
                     { value: "SESI", label: "SESI" },
                     { value: "IEL", label: "IEL" },
@@ -405,23 +526,20 @@ export default function OverviewPage() {
                   {isGerente ? "Equipe" : "Unidade"}
                 </label>
                 {isGerente ? (
-                  <SelectCustom
-                    value={equipe || ""}
-                    onValueChange={(value) => setEquipe(value)}
+                  <SelectMulti
+                    values={selectedEquipes}
+                    onValuesChange={setSelectedEquipes}
                     placeholder="Todas as Equipes"
-                    disabled={!entidade}
-                    panelTitle="Selecionar Equipe"
-                    options={[
-                      { value: "", label: "Todas as Equipes" },
-                      ...equipesOptions,
-                    ]}
+                    disabled={selectedEntidades.length === 0}
+                    panelTitle="Selecionar Equipes"
+                    options={equipesOptions}
                   />
                 ) : (
                   <SelectCustom
                     value={unidade || ""}
                     onValueChange={(value) => setUnidade(value as UnidadeSESI | "")}
                     placeholder="Todas as Unidades"
-                    disabled={entidade !== "SESI"}
+                    disabled={selectedEntidades[0] !== "SESI"}
                     panelTitle="Selecionar Unidade"
                     options={[
                       { value: "", label: "Todas as Unidades" },
@@ -467,8 +585,8 @@ export default function OverviewPage() {
                   startDate={dateRange.startDate}
                   endDate={dateRange.endDate}
                   pdfSubtitle={
-                    entidade
-                      ? `Dashboard de atendimentos em tempo real · Entidade: ${entidade}${isGerente && equipe ? ` · Equipe: ${equipe}` : entidade === "SESI" && unidade ? ` · Unidade: ${unidade}` : ""}`
+                    selectedEntidades.length > 0
+                      ? `Dashboard de atendimentos em tempo real · Entidades: ${selectedEntidades.join(", ")}${isGerente && selectedEquipes.length > 0 ? ` · Equipes: ${selectedEquipes.join(", ")}` : selectedEntidades[0] === "SESI" && unidade ? ` · Unidade: ${unidade}` : ""}`
                       : "Dashboard de atendimentos em tempo real · Todas as Entidades"
                   }
                 />
@@ -484,24 +602,24 @@ export default function OverviewPage() {
           </div>
 
           {/* Active Filters Summary */}
-          {entidade && (
+          {(selectedEntidades.length > 0 || selectedEquipes.length > 0) && (
             <div className="mt-4 pt-4 border-t border-gray-200 dark:border-[#165A8A]/20 flex items-center gap-2 flex-wrap">
               <span className="text-[10px] text-gray-600 dark:text-gray-500 uppercase tracking-wider">Filtros ativos:</span>
-              {entidade && (
-                <span className="px-2 py-1 bg-[#009FE3]/10 text-[#009FE3] text-[10px] font-medium rounded-md border border-[#009FE3]/20">
-                  {entidade}
+              {selectedEntidades.map(ent => (
+                <span key={ent} className="px-2 py-1 bg-[#009FE3]/10 text-[#009FE3] text-[10px] font-medium rounded-md border border-[#009FE3]/20">
+                  {ent}
                 </span>
-              )}
-              {(isGerente ? equipe : unidade) && (
-                <span className="px-2 py-1 bg-[#009FE3]/10 text-[#009FE3] text-[10px] font-medium rounded-md border border-[#009FE3]/20">
-                  {isGerente ? equipe : unidade}
+              ))}
+              {selectedEquipes.map(eq => (
+                <span key={eq} className="px-2 py-1 bg-[#009FE3]/10 text-[#009FE3] text-[10px] font-medium rounded-md border border-[#009FE3]/20">
+                  {eq}
                 </span>
-              )}
+              ))}
               <button
                 onClick={() => {
-                  setEntidade("");
+                  setSelectedEntidades([]);
+                  setSelectedEquipes([]);
                   setUnidade("");
-                  setEquipe("");
                 }}
                 className="ml-auto text-[10px] text-gray-500 hover:text-red-400 transition-colors"
               >
@@ -716,9 +834,9 @@ export default function OverviewPage() {
         </Card>
       </div>
 
-      {/* New Charts Row: Atendimentos por Entidade + Qtd de Opções Selecionadas */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-        {/* Atendimentos por Entidade (apenas SENAI, SESI, IEL) */}
+      {/* Row: Atendimentos por Entidade + Atendimentos por PF e PJ (PF/PJ only for Ariana) */}
+      <div className={`grid grid-cols-1 ${isArianaUser() ? 'lg:grid-cols-2' : ''} gap-4 items-start`}>
+        {/* Atendimentos por Entidade */}
         <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
           <CardHeader>
             <CardTitle className="text-white text-lg flex items-center gap-2">
@@ -754,24 +872,26 @@ export default function OverviewPage() {
           </CardContent>
         </Card>
 
-        {/* Qtd de Opções Selecionadas */}
+        {/* Atendimentos por PF e PJ — somente para Ariana */}
+        {isArianaUser() && (
         <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
           <CardHeader>
             <CardTitle className="text-white text-lg flex items-center gap-2">
-              <MessageSquare className="w-5 h-5 text-cyan-400" />
-              Qtd de Opções Selecionadas
+              <Users className="w-5 h-5 text-emerald-400" />
+              Atendimentos por PF e PJ
+              <span className="text-xs text-gray-400 font-normal ml-2">Clique para detalhes</span>
             </CardTitle>
           </CardHeader>
-          <CardContent className={isGerente && opcoesSelecionadasCompletas.length > 5 ? "h-[500px]" : "h-[300px]"}>
+          <CardContent className="h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={opcoesSelecionadasCompletas}
+                data={pfPjData}
                 layout="vertical"
-                margin={{ left: 10, right: 50 }}
+                margin={{ left: 10, right: 60 }}
                 onClick={(data: any) => {
                   if (data?.activePayload?.[0]) {
-                    const nome = data.activePayload[0].payload.nome;
-                    openDrilldownOpcao(nome);
+                    const tipo = data.activePayload[0].payload.nome as 'PF' | 'PJ';
+                    openDrilldownPfPj(tipo);
                   }
                 }}
                 style={{ cursor: 'pointer' }}
@@ -781,26 +901,120 @@ export default function OverviewPage() {
                 <YAxis
                   type="category"
                   dataKey="nome"
-                  width={220}
+                  width={40}
                   stroke="#9ca3af"
-                  fontSize={10}
-                  tick={{ fill: '#9ca3af' }}
+                  fontSize={13}
+                  tick={{ fill: '#9ca3af', fontWeight: 700 }}
                 />
                 <RechartsTooltip
                   {...TOOLTIP_STYLE}
-                  formatter={(value: number) => [value, "Atendimentos"]}
+                  formatter={(value: number, _: any, entry: any) => {
+                    const label = entry?.payload?.nome === "PF" ? "Para Você (PF)" : "Para Empresa (PJ)";
+                    return [value.toLocaleString("pt-BR"), label];
+                  }}
                 />
-                <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={28}>
-                  {opcoesSelecionadasCompletas.map((_, index) => (
-                    <Cell key={`opcao-${index}`} fill={COLORS[(index + 7) % COLORS.length]} className="cursor-pointer" />
-                  ))}
-                  <LabelList dataKey="total" position="right" fill="#94a3b8" fontSize={11} formatter={(v: number) => v.toLocaleString("pt-BR")} offset={8} />
+                <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={36}>
+                  <Cell key="pf" fill="#009FE3" className="cursor-pointer" />
+                  <Cell key="pj" fill="#F37021" className="cursor-pointer" />
+                  <LabelList dataKey="total" position="right" fill="#94a3b8" fontSize={12} fontWeight={700} formatter={(v: number) => v.toLocaleString("pt-BR")} offset={10} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
+        )}
       </div>
+
+      {/* Qtd de Opções Selecionadas — Top 10 — Full width */}
+      <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
+        <CardHeader>
+          <CardTitle className="text-white text-lg flex items-center gap-2">
+            <MessageSquare className="w-5 h-5 text-cyan-400" />
+            Qtd de Opções Selecionadas
+            <span className="text-xs text-gray-400 font-normal ml-2">Top 10</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent style={{ height: `${Math.max(200, opcoesSelecionadasCompletas.length * 42 + 40)}px` }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={opcoesSelecionadasCompletas}
+              layout="vertical"
+              margin={{ left: 10, right: 60 }}
+              onClick={(data: any) => {
+                if (data?.activePayload?.[0]) {
+                  const nome = data.activePayload[0].payload.nome;
+                  openDrilldownOpcao(nome);
+                }
+              }}
+              style={{ cursor: 'pointer' }}
+            >
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#165A8A" />
+              <XAxis type="number" stroke="#6b7280" fontSize={11} />
+              <YAxis
+                type="category"
+                dataKey="nome"
+                width={260}
+                stroke="#9ca3af"
+                fontSize={11}
+                tick={{ fill: '#9ca3af' }}
+              />
+              <RechartsTooltip
+                {...TOOLTIP_STYLE}
+                formatter={(value: number) => [value, "Atendimentos"]}
+              />
+              <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={28}>
+                {opcoesSelecionadasCompletas.map((_, index) => (
+                  <Cell key={`opcao-${index}`} fill={COLORS[(index + 7) % COLORS.length]} className="cursor-pointer" />
+                ))}
+                <LabelList dataKey="total" position="right" fill="#94a3b8" fontSize={11} formatter={(v: number) => v.toLocaleString("pt-BR")} offset={8} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      {/* Qtd de Atendimentos por Patrocinados — Top 10 — Somente para Ariana */}
+      {isArianaUser() && (
+      <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
+        <CardHeader>
+          <CardTitle className="text-white text-lg flex items-center gap-2">
+            <Users className="w-5 h-5 text-purple-400" />
+            Qtd de Atendimentos por Patrocinados
+            <span className="text-xs text-gray-400 font-normal ml-2">Top 10</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent style={{ height: `${Math.max(200, patrocinadosData.length * 42 + 40)}px` }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={patrocinadosData}
+              layout="vertical"
+              margin={{ left: 10, right: 60 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#165A8A" />
+              <XAxis type="number" stroke="#6b7280" fontSize={11} />
+              <YAxis
+                type="category"
+                dataKey="nome"
+                width={260}
+                stroke="#9ca3af"
+                fontSize={11}
+                tick={{ fill: '#9ca3af' }}
+              />
+              <RechartsTooltip
+                {...TOOLTIP_STYLE}
+                formatter={(value: number) => [value, "Atendimentos"]}
+              />
+              <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={28}>
+                {patrocinadosData.map((_, index) => (
+                  <Cell key={`patrocinado-${index}`} fill={COLORS[(index + 10) % COLORS.length]} />
+                ))}
+                <LabelList dataKey="total" position="right" fill="#94a3b8" fontSize={11} formatter={(v: number) => v.toLocaleString("pt-BR")} offset={8} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+      )}
 
       {/* Top Assuntos — Tag Chips + Destaques */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
@@ -925,7 +1139,7 @@ export default function OverviewPage() {
                   <th className="text-left py-3 px-4 text-gray-400 font-medium">Início</th>
                   <th className="text-left py-3 px-4 text-gray-400 font-medium">Fim</th>
                   <th className="text-left py-3 px-4 text-gray-400 font-medium">Resumo</th>
-                  <th className="text-left py-3 px-4 text-gray-400 font-medium">Casa</th>
+                  <th className="text-left py-3 px-4 text-gray-400 font-medium">Equipe</th>
                 </tr>
               </thead>
               <tbody>
@@ -1029,7 +1243,7 @@ export default function OverviewPage() {
                         <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Início</th>
                         <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Fim</th>
                         <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Resumo</th>
-                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Casa</th>
+                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Equipe</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1096,6 +1310,110 @@ export default function OverviewPage() {
             ) : (
               <div className="flex items-center justify-center py-16 text-gray-500">
                 Nenhum atendimento encontrado para esta opção.
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* PF/PJ Drilldown Dialog */}
+      <Dialog open={drilldownPfPj.open} onOpenChange={(open) => { if (!open) closeDrilldownPfPj(); }}>
+        <DialogContent className="max-w-5xl max-h-[85vh] bg-[#0C2135] border-[#165A8A] text-white flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-white text-lg flex items-center gap-2">
+              <Users className="w-5 h-5 text-emerald-400" />
+              {drilldownPfPj.title}
+            </DialogTitle>
+            <DialogDescription className="text-gray-400">
+              Atendimentos filtrados • {dateRange.startDate} a {dateRange.endDate}
+              {drilldownPfPjData && ` • ${drilldownPfPjData.length.toLocaleString('pt-BR')} registros`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-auto min-h-0">
+            {drilldownPfPjLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <RefreshCw className="w-6 h-6 text-blue-500 animate-spin" />
+                <span className="text-gray-400 ml-3">Carregando...</span>
+              </div>
+            ) : drilldownPfPjData && drilldownPfPjData.length > 0 ? (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-[#165A8A]">
+                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Protocolo</th>
+                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Contato</th>
+                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Canal</th>
+                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Início</th>
+                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Fim</th>
+                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Opção</th>
+                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Equipe</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {drilldownPfPjData
+                        .slice((drilldownPfPjPage - 1) * DRILLDOWN_PER_PAGE, drilldownPfPjPage * DRILLDOWN_PER_PAGE)
+                        .map((row, idx) => {
+                          const formatDate = (d: string) => {
+                            if (!d) return '—';
+                            try { return format(new Date(d), 'dd/MM/yyyy HH:mm'); }
+                            catch { return d; }
+                          };
+                          return (
+                            <tr key={`${row.protocolo}-${idx}`} className="border-b border-[#165A8A]/50 hover:bg-white/5 transition-colors">
+                              <td className="py-2.5 px-3 text-blue-300 font-mono text-xs">{row.protocolo}</td>
+                              <td className="py-2.5 px-3 text-gray-200">{row.contato || row.identificador || '—'}</td>
+                              <td className="py-2.5 px-3">
+                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300">
+                                  {row.canal}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 text-gray-300 text-xs">{formatDate(row.dataHoraInicio)}</td>
+                              <td className="py-2.5 px-3 text-gray-300 text-xs">{formatDate(row.dataHoraFim)}</td>
+                              <td className="py-2.5 px-3 text-cyan-300 text-xs">{row.opcaoSelecionada || '—'}</td>
+                              <td className="py-2.5 px-3">
+                                <span className={`text-xs font-medium ${row.casa === 'Falta de Interação' ? 'text-red-400' : 'text-emerald-400'}`}>
+                                  {row.casa}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {drilldownPfPjData.length > DRILLDOWN_PER_PAGE && (
+                  <div className="flex items-center justify-between pt-4 mt-2 border-t border-[#165A8A]">
+                    <span className="text-xs text-gray-400">
+                      Mostrando {((drilldownPfPjPage - 1) * DRILLDOWN_PER_PAGE) + 1}-{Math.min(drilldownPfPjPage * DRILLDOWN_PER_PAGE, drilldownPfPjData.length)} de {drilldownPfPjData.length.toLocaleString('pt-BR')}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setDrilldownPfPjPage(p => Math.max(1, p - 1))}
+                        disabled={drilldownPfPjPage === 1}
+                        className="px-3 py-1 text-xs text-gray-300 bg-white/5 rounded-lg hover:bg-white/10 disabled:opacity-30 transition-colors"
+                      >
+                        ‹ Anterior
+                      </button>
+                      <span className="text-xs text-gray-400">
+                        {drilldownPfPjPage} / {Math.ceil(drilldownPfPjData.length / DRILLDOWN_PER_PAGE)}
+                      </span>
+                      <button
+                        onClick={() => setDrilldownPfPjPage(p => Math.min(Math.ceil(drilldownPfPjData.length / DRILLDOWN_PER_PAGE), p + 1))}
+                        disabled={drilldownPfPjPage >= Math.ceil(drilldownPfPjData.length / DRILLDOWN_PER_PAGE)}
+                        className="px-3 py-1 text-xs text-gray-300 bg-white/5 rounded-lg hover:bg-white/10 disabled:opacity-30 transition-colors"
+                      >
+                        Próximo ›
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="flex items-center justify-center py-16 text-gray-500">
+                Nenhum atendimento encontrado.
               </div>
             )}
           </div>
