@@ -93,6 +93,56 @@ const PJ_OPCOES = new Set([
   'Informações ou Proposta Comercial',
 ]);
 
+// Mapeamento de nomes longos de Patrocinados para nomes curtos
+const RENOMEACAO_PATROCINADOS: Record<string, string> = {
+  "Olá! Quero mais informações sobre os JOGOS SESI 2025, por favor.": "Jogos SESI 2025",
+  "Olá! Tenho interesse no pacote Férias Escolares SESI Saúde, quero informações!": "Pacote Férias Escolares",
+  "Olá! Tenho interesse no pacote de Saúde Ocular do SESI Saúde, quero informações!": "Pacote Saúde Ocular",
+  "Quero falar mais sobre o Curso de Tecnologia da Construção a Seco": "Curso Tecnologia da Construção",
+  "Quero falar sobre o curso de Eletricidade Aplicada": "Curso Eletricidade Aplicada",
+  "Olá, gostaria de saber mais informações sobre Matrícula do SESI 2026": "Matrícula SESI 2026",
+  "Jornada Dev": "Jornada Dev",
+  "Quero saber mais informações sobre o curso de Excel Avançado": "Curso Excel Avançado",
+  "Gostaria de mais informações sobre o curso de Comandos Elétricos": "Curso Comandos Elétricos",
+  "Quero falar sobre o curso de Instalação e Higienização de Ar-condicionado": "Curso Higienização de Ar-condicionado",
+  "Quero falar sobre o curso de Mecânico de Refrigeração": "Curso Mecânico de Refrigeração",
+  "Quero informações sobre o curso de Operador de Empilhadeira": "Curso Operador de Empilhadeira",
+  "Quero falar sobre o curso de Eletricista Industrial": "Curso Eletricista Industrial",
+  "Quero Saber mais sobre o curso de Montagem de Quadro de Distribuição": "Curso Quadro de Distribuição",
+  "Quero saber mais informações sobre o curso Informática Básica": "Curso Informática Básica",
+  "Quero saber mais informações sobre o curso Informática Básica e Avançada": "Curso Informática Básica e Avançada",
+  "Quero saber mais informações sobre o curso de Mestre de Obras": "Curso Mestre de Obras",
+  "Quero falar sobre o curso de Orçamento de Obras": "Curso Orçamento de Obras",
+  "Quero informações sobre o curso de Assistente Administrativo": "Curso Assistente Administrativo",
+  "Gostaria de mais informações sobre o curso de Eletricista Instalador": "Curso Eletricista Instalador",
+  "Olá, gostaria de saber mais informações sobre a Colônia de Férias do SESI": "Colônia de Férias SESI",
+  "Gostaria de mais informações sobre o curso técnico em Automação": "Curso Técnico em Automação",
+  "Gostaria de mais informações sobre o curso técnico em Mecânica": "Curso Técnico em Mecânica",
+  "Gostaria de informações sobre o curso de instalação e higienização de split": "Curso Higienização de Split",
+  "Gostaria de informações sobre o curso técnico em Refrigeração e Climatização": "Curso Refrigeração e Climatização",
+  "Gostaria de informações sobre o curso de Mecânico de Refrigeração": "Curso Mecânico de Refrigeração",
+  "Gostaria de mais informações sobre o curso de Cronometrista": "Curso Cronometrista",
+  "Olá! Tenho interesse no curso de Vantagens Tributárias da ZF de Manaus": "Curso Vantagens Tributárias ZFM",
+  "Quero saber mais informações sobre o curso de Montagem de Quadros Elétricos": "Curso Montagem de Quadros Elétricos",
+  "Quero saber mais informações sobre o Curso NR35": "Curso NR35",
+  "Quero saber mais informações sobre o curso de Informática Avançada": "Curso Informática Avançada",
+  "Quero saber sobre o curso de Leitura e Interpretação de Projetos": "Curso Leitura de Projetos",
+  "Quero falar sobre o curso de Eletricista Instalador": "Curso Eletricista Instalador",
+  "Quero falar sobre o curso de Modelagem para Construção Civil": "Curso Modelagem Construção Civil",
+  "Quero falar sobre o curso de Eletricista de Automóveis": "Curso Eletricista de Automóveis",
+  "Quero falar sobre o curso de Mecânico de Manutenção em Automóveis": "Curso Mecânico de Automóveis",
+  "Quero falar sobre o curso de Mecânico de Manutenção em Motocicletas": "Curso Mecânico de Motocicletas",
+  "Quero falar sobre o curso de Mecânico de Manutenção em Motores à Diesel": "Curso Mecânico de Motores Diesel",
+  "Quero falar sobre o curso de Soldador de Eletrodo Revestido": "Curso Soldador Eletrodo Revestido",
+  "PSICÓLOGO": "Psicólogo",
+  "CLÍNICA MEDICA": "Clínica Médica",
+  "NUTRICIONISTA": "Nutricionista",
+  "FISIOTERAPIA": "Fisioterapia",
+  "Marceneiro de Moveis": "Curso Marceneiro de Móveis",
+  "PACOTE ALUNOS SESI": "Pacote Alunos SESI",
+  "CURSOS ELETRICIDADE": "Cursos de Eletricidade",
+};
+
 const REFRESH_INTERVAL = 60000; // 60 seconds
 
 const COLORS = ['#009FE3', '#F37021', '#00A650', '#ED1C24', '#00BCD4', '#8b5cf6', '#0077CC', '#14b8a6', '#6366f1', '#a855f7', '#06b6d4', '#84cc16', '#d946ef', '#0ea5e9', '#f43f5e'];
@@ -419,11 +469,17 @@ export default function OverviewPage() {
     }));
   }, [stats?.porOpcaoSelecionada, isGerente]);
 
-  // ─── Patrocinados (Top 10) ──────────────────────────
+  // ─── Patrocinados (Top 10) — com renomeação e agregação ──────────────────────────
   const patrocinadosData = useMemo(() => {
     const dados = stats?.porPatrocinados || [];
-    return dados
-      .filter(d => d.nome && d.nome !== "false" && d.nome.trim() !== "" && d.nome !== "null" && d.nome !== "undefined")
+    const mapa = new Map<string, number>();
+    for (const d of dados) {
+      if (!d.nome || d.nome === "false" || d.nome.trim() === "" || d.nome === "null" || d.nome === "undefined") continue;
+      const nomeExibicao = RENOMEACAO_PATROCINADOS[d.nome.trim()] || d.nome.trim();
+      mapa.set(nomeExibicao, (mapa.get(nomeExibicao) || 0) + d.total);
+    }
+    return Array.from(mapa.entries())
+      .map(([nome, total]) => ({ nome, total }))
       .sort((a, b) => b.total - a.total)
       .slice(0, 10);
   }, [stats?.porPatrocinados]);
