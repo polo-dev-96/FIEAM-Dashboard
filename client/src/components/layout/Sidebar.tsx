@@ -10,7 +10,8 @@ import {
   ChevronRight,
   LogOut,
   Sun,
-  Moon
+  Moon,
+  Brain
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,7 @@ const navItems = [
   { href: "/protocolo", label: "Pesquisar Protocolo", icon: Search },
   { href: "/telefone", label: "Pesquisar Telefone", icon: Phone },
   { href: "/anual", label: "Dashboard - SAC", icon: CalendarRange },
+  { href: "/openai", label: "Dashboard - OpenAI", icon: Brain },
 ];
 
 export function Sidebar() {

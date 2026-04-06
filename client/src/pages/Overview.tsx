@@ -176,7 +176,7 @@ export default function OverviewPage() {
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [countdown, setCountdown] = useState(60);
   const { user } = useAuth();
-  const isGerente = user?.nivel_acesso === "gerente";
+  const isGerente = user?.nivel_acesso === "gerente" || user?.nivel_acesso === "master";
 
   // Date range state (default: current month)
   const [dateRange, setDateRange] = useState(getDefaultDates);

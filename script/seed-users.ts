@@ -41,10 +41,20 @@ async function seed() {
       ["ariana.costa@fieam.org.br", hash]
     );
 
+    // Usuário Master (acesso total + Dashboard OpenAI)
+    const hashMaster = await bcrypt.hash("fieam@123", 10);
+    await conn.query(
+      `INSERT INTO usuarios (email, senha_hash, nivel_acesso, ativo)
+       VALUES (?, ?, 'master', 1)
+       ON DUPLICATE KEY UPDATE senha_hash = VALUES(senha_hash), nivel_acesso = VALUES(nivel_acesso)`,
+      ["paulo.pereira@fieam.org.br", hashMaster]
+    );
+
     console.log("✅ Usuários inseridos com sucesso!");
     console.log("   - senai@polotelecom.com (visualizador)");
     console.log("   - admin@polotelecom.com.br (admin)");
     console.log("   - ariana.costa@fieam.org.br (gerente)");
+    console.log("   - paulo.pereira@fieam.org.br (master)");
   } finally {
     conn.release();
     await pool.end();

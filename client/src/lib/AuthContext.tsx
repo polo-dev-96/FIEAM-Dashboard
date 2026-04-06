@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback } from "react";
 
-export type NivelAcesso = "admin" | "gerente" | "visualizador" | "entidade";
+export type NivelAcesso = "master" | "admin" | "gerente" | "visualizador" | "entidade";
 
 export interface UserInfo {
   id: number;
@@ -10,6 +10,7 @@ export interface UserInfo {
 
 // Rotas permitidas por nível de acesso
 const ALLOWED_ROUTES: Record<NivelAcesso, string[]> = {
+  master: ["/", "/protocolo", "/telefone", "/anual", "/openai"],
   admin: ["/", "/protocolo", "/telefone", "/anual"],
   gerente: ["/", "/protocolo", "/telefone", "/anual"],
   visualizador: ["/", "/anual"],

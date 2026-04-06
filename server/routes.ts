@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import type { Server } from "http";
-import pool, { TABLE_NAME } from "./db";
+import pool, { TABLE_NAME, poolOpenAI } from "./db";
 import type { RowDataPacket } from "mysql2";
 import ExcelJS from "exceljs";
 import bcrypt from "bcryptjs";
@@ -825,6 +825,196 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Erro ao buscar opcao-drilldown:", error);
       res.status(500).json({ message: "Erro ao buscar dados detalhados" });
+    }
+  });
+
+  // ─── OpenAI Dashboard Routes (base_openai in senai_pf) ────────────
+  // Nota: start_time é varchar no formato "dd-MM-yyyy", value é varchar com prefixo "$"
+  // Usamos STR_TO_DATE e REPLACE para converter corretamente.
+
+  const OPENAI_PARSED_DATE = `STR_TO_DATE(start_time, '%d-%m-%Y')`;
+  const OPENAI_PARSED_VALUE = `CAST(REPLACE(value, '$', '') AS DECIMAL(20,6))`;
+  const OPENAI_VALID_ROW = `start_time IS NOT NULL AND TRIM(start_time) != '' AND start_time != 'Invalid DateTime' AND value IS NOT NULL AND TRIM(value) != ''`;
+
+  // GET /api/openai-projects - Lista de project_name distintos
+  app.get("/api/openai-projects", async (_req, res) => {
+    try {
+      const [rows] = await poolOpenAI.query<RowDataPacket[]>(`
+        SELECT DISTINCT TRIM(project_name) AS nome
+        FROM base_openai
+        WHERE project_name IS NOT NULL AND TRIM(project_name) != ''
+        ORDER BY nome ASC
+      `);
+      res.json(rows.map((r) => r.nome));
+    } catch (error) {
+      console.error("Erro ao buscar projetos OpenAI:", error);
+      res.status(500).json({ message: "Erro ao buscar projetos OpenAI" });
+    }
+  });
+
+  // GET /api/openai-stats - Stats do dashboard OpenAI
+  app.get("/api/openai-stats", async (req, res) => {
+    try {
+      const { startDate, endDate, project } = req.query;
+
+      // Build date filter
+      let dateFilter = "";
+      const dateParams: string[] = [];
+      if (startDate && endDate) {
+        dateFilter = `AND ${OPENAI_PARSED_DATE} >= ? AND ${OPENAI_PARSED_DATE} <= ?`;
+        dateParams.push(String(startDate), String(endDate));
+      }
+
+      // Build project filter (supports multiple values)
+      let projectFilter = "";
+      const projectParams: string[] = [];
+      if (project) {
+        const projArr = Array.isArray(project) ? project.map(String) : [String(project)];
+        if (projArr.length > 0) {
+          projectFilter = `AND TRIM(project_name) IN (${projArr.map(() => '?').join(',')})`;
+          projectParams.push(...projArr);
+        }
+      }
+
+      const filterParams = [...dateParams, ...projectParams];
+
+      // 1. Valor total
+      const [totalResult] = await poolOpenAI.query<RowDataPacket[]>(`
+        SELECT COALESCE(SUM(${OPENAI_PARSED_VALUE}), 0) AS total
+        FROM base_openai
+        WHERE ${OPENAI_VALID_ROW}
+          ${dateFilter}
+          ${projectFilter}
+      `, filterParams);
+
+      // 2. Volume de Gastos por dia (timeline)
+      const [timeline] = await poolOpenAI.query<RowDataPacket[]>(`
+        SELECT
+          DATE_FORMAT(${OPENAI_PARSED_DATE}, '%Y-%m-%d') AS data,
+          SUM(${OPENAI_PARSED_VALUE}) AS total
+        FROM base_openai
+        WHERE ${OPENAI_VALID_ROW}
+          ${dateFilter || `AND ${OPENAI_PARSED_DATE} >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)`}
+          ${projectFilter}
+        GROUP BY DATE_FORMAT(${OPENAI_PARSED_DATE}, '%Y-%m-%d')
+        ORDER BY data ASC
+      `, dateFilter ? filterParams : projectParams);
+
+      // 3. Valores por Unidade (project_name)
+      const [porProjeto] = await poolOpenAI.query<RowDataPacket[]>(`
+        SELECT
+          TRIM(project_name) AS nome,
+          SUM(${OPENAI_PARSED_VALUE}) AS total
+        FROM base_openai
+        WHERE ${OPENAI_VALID_ROW}
+          ${dateFilter || `AND ${OPENAI_PARSED_DATE} >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)`}
+          ${projectFilter}
+        GROUP BY nome
+        ORDER BY total DESC
+      `, dateFilter ? filterParams : projectParams);
+
+      res.json({
+        totalValue: parseFloat(totalResult[0]?.total) || 0,
+        timeline: (timeline || []).map((r: any) => ({ data: r.data, total: parseFloat(r.total) || 0 })),
+        porProjeto: (porProjeto || []).map((r: any) => ({ nome: r.nome, total: parseFloat(r.total) || 0 })),
+      });
+    } catch (error) {
+      console.error("Erro ao buscar stats OpenAI:", error);
+      res.status(500).json({ message: "Erro ao buscar estatísticas OpenAI" });
+    }
+  });
+
+  // GET /api/openai-export-xlsx — Export OpenAI data as XLSX
+  app.get("/api/openai-export-xlsx", async (req, res) => {
+    try {
+      const { startDate, endDate, project, moeda } = req.query;
+
+      let dateFilter = "";
+      const dateParams: string[] = [];
+      if (startDate && endDate) {
+        dateFilter = `AND ${OPENAI_PARSED_DATE} >= ? AND ${OPENAI_PARSED_DATE} <= ?`;
+        dateParams.push(String(startDate), String(endDate));
+      }
+
+      let projectFilter = "";
+      const projectParams: string[] = [];
+      if (project) {
+        const projArr = Array.isArray(project) ? project.map(String) : [String(project)];
+        if (projArr.length > 0) {
+          projectFilter = `AND TRIM(project_name) IN (${projArr.map(() => '?').join(',')})`;
+          projectParams.push(...projArr);
+        }
+      }
+
+      const filterParams = [...dateParams, ...projectParams];
+
+      const [rows] = await poolOpenAI.query<RowDataPacket[]>(`
+        SELECT
+          DATE_FORMAT(${OPENAI_PARSED_DATE}, '%Y-%m-%d') AS data,
+          TRIM(project_name) AS projeto,
+          ${OPENAI_PARSED_VALUE} AS valor
+        FROM base_openai
+        WHERE ${OPENAI_VALID_ROW}
+          ${dateFilter}
+          ${projectFilter}
+        ORDER BY ${OPENAI_PARSED_DATE} DESC
+      `, filterParams);
+
+      // Currency conversion
+      const isBRL = String(moeda || "USD") === "BRL";
+      let taxaCambio = 1;
+      if (isBRL) {
+        try {
+          const response = await fetch("https://economia.awesomeapi.com.br/last/USD-BRL");
+          const data = await response.json();
+          taxaCambio = parseFloat(data.USDBRL?.bid) || 5.0;
+        } catch {
+          taxaCambio = 5.0;
+        }
+      }
+
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "FIEAM Dashboard";
+      workbook.created = new Date();
+
+      const sheet = workbook.addWorksheet("OpenAI Gastos");
+
+      const simboloMoeda = isBRL ? "R$" : "$";
+      sheet.columns = [
+        { header: "Data", key: "data", width: 15 },
+        { header: "Projeto", key: "projeto", width: 30 },
+        { header: `Valor (${simboloMoeda})`, key: "valor", width: 18 },
+      ];
+
+      const headerRow = sheet.getRow(1);
+      headerRow.eachCell((cell) => {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0077C0" } };
+        cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+        cell.alignment = { vertical: "middle", horizontal: "center" };
+        cell.border = { bottom: { style: "thin", color: { argb: "FF003366" } } };
+      });
+      headerRow.height = 28;
+
+      for (const row of rows) {
+        const rawVal = parseFloat(row.valor) || 0;
+        const valorConvertido = isBRL ? rawVal * taxaCambio : rawVal;
+        sheet.addRow({
+          data: row.data ? new Date(row.data + "T12:00:00").toLocaleDateString("pt-BR") : "",
+          projeto: row.projeto || "",
+          valor: valorConvertido.toFixed(4),
+        });
+      }
+
+      sheet.autoFilter = { from: "A1", to: `C${rows.length + 1}` };
+
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="relatorio_openai_${startDate || "all"}_${endDate || "all"}.xlsx"`);
+
+      await workbook.xlsx.write(res);
+      res.end();
+    } catch (error) {
+      console.error("Erro ao exportar XLSX OpenAI:", error);
+      res.status(500).json({ message: "Erro ao exportar XLSX OpenAI" });
     }
   });
 

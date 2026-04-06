@@ -11,6 +11,7 @@ import OverviewPage from "@/pages/Overview";
 import SearchProtocolPage from "@/pages/SearchProtocol";
 import SearchPhonePage from "@/pages/SearchPhone";
 import DashboardAnualPage from "@/pages/DashboardAnual";
+import DashboardOpenAIPage from "@/pages/DashboardOpenAI";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -21,6 +22,7 @@ function Router() {
       {canAccess("/protocolo") && <Route path="/protocolo" component={SearchProtocolPage} />}
       {canAccess("/telefone") && <Route path="/telefone" component={SearchPhonePage} />}
       <Route path="/anual" component={DashboardAnualPage} />
+      {canAccess("/openai") && <Route path="/openai" component={DashboardOpenAIPage} />}
       <Route component={NotFound} />
     </Switch>
   );

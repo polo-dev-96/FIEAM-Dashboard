@@ -122,7 +122,7 @@ function EvolucaoTooltip({ active, payload, label }: any) {
 export default function DashboardAnualPage() {
     const contentRef = useRef<HTMLDivElement>(null);
     const { user } = useAuth();
-    const isGerente = user?.nivel_acesso === "gerente";
+    const isGerente = user?.nivel_acesso === "gerente" || user?.nivel_acesso === "master";
     const currentYear = new Date().getFullYear();
     const [selectedYear, setSelectedYear] = useState(currentYear);
     const [selectedMonths, setSelectedMonths] = useState<number[]>([]);
