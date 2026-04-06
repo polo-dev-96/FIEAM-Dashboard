@@ -232,7 +232,7 @@ export default function OverviewPage() {
         return Array.from(allCasas);
       }
       // Para Ariana, "Todas as Entidades" deve filtrar apenas casas mapeadas (exclui as excluídas)
-      if (isArianaUser()) {
+      if (isArianaUser() || user?.nivel_acesso === "master") {
         const allCasas = new Set<string>();
         (["SENAI", "SESI", "IEL", "Outros"] as Entidade[]).forEach(ent => {
           const casas = getCasasForFiltroGerente(casasList, ent, null);
@@ -891,7 +891,7 @@ export default function OverviewPage() {
       </div>
 
       {/* Row: Atendimentos por Entidade + Atendimentos por PF e PJ (PF/PJ only for Ariana) */}
-      <div className={`grid grid-cols-1 ${isArianaUser() ? 'lg:grid-cols-2' : ''} gap-4 items-start`}>
+      <div className={`grid grid-cols-1 ${(isArianaUser() || user?.nivel_acesso === "master") ? 'lg:grid-cols-2' : ''} gap-4 items-start`}>
         {/* Atendimentos por Entidade */}
         <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
           <CardHeader>
@@ -928,8 +928,8 @@ export default function OverviewPage() {
           </CardContent>
         </Card>
 
-        {/* Atendimentos por PF e PJ — somente para Ariana */}
-        {isArianaUser() && (
+        {/* Atendimentos por PF e PJ — Ariana e Master */}
+        {(isArianaUser() || user?.nivel_acesso === "master") && (
         <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
           <CardHeader>
             <CardTitle className="text-white text-lg flex items-center gap-2">
@@ -1029,8 +1029,8 @@ export default function OverviewPage() {
         </CardContent>
       </Card>
 
-      {/* Qtd de Atendimentos por Patrocinados — Top 10 — Somente para Ariana */}
-      {isArianaUser() && (
+      {/* Qtd de Atendimentos por Patrocinados — Top 10 — Ariana e Master */}
+      {(isArianaUser() || user?.nivel_acesso === "master") && (
       <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
         <CardHeader>
           <CardTitle className="text-white text-lg flex items-center gap-2">
