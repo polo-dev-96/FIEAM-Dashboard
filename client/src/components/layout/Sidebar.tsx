@@ -11,7 +11,8 @@ import {
   LogOut,
   Sun,
   Moon,
-  Brain
+  Brain,
+  Users
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ const navItems = [
   { href: "/telefone", label: "Pesquisar Telefone", icon: Phone },
   { href: "/anual", label: "Dashboard - SAC", icon: CalendarRange },
   { href: "/openai", label: "Dashboard - OpenAI", icon: Brain },
+  { href: "/patrocinados", label: "Dashboard - Patrocinados", icon: Users },
 ];
 
 export function Sidebar() {

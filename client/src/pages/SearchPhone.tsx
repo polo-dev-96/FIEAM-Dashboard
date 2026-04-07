@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import { format, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useTheme } from "@/lib/ThemeContext";
+import { cn } from "@/lib/utils";
 
 interface Atendimento {
     id: number;
@@ -32,6 +34,7 @@ export default function SearchPhonePage() {
     const [error, setError] = useState<string | null>(null);
     const [perPage, setPerPage] = useState<number>(10);
     const [currentPage, setCurrentPage] = useState(1);
+    const { isDark } = useTheme();
 
     // Date range filter
     const [startDate, setStartDate] = useState(() => format(startOfMonth(new Date()), "yyyy-MM-dd"));
@@ -118,13 +121,21 @@ export default function SearchPhonePage() {
                             onChange={(e) => setQuery(e.target.value)}
                             onKeyDown={handleKeyDown}
                             placeholder="Digite o telefone (ex: 93270378 ou 92993270378)..."
-                            className="w-full pl-12 pr-4 py-4 rounded-xl bg-[#0a1628] border border-[#1a3a5c] text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#0047B6]/50 focus:border-[#0047B6]/50 transition-all text-lg"
+                            className={cn(
+                                "w-full pl-12 pr-4 py-4 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#0047B6]/50 focus:border-[#0047B6]/50 transition-all text-lg",
+                                isDark
+                                    ? "bg-[#0a1628] border-[#1a3a5c] text-white placeholder-gray-500"
+                                    : "bg-white border-slate-300 text-gray-900 placeholder-gray-400"
+                            )}
                         />
                     </div>
                     <button
                         onClick={handleSearch}
                         disabled={isLoading || !query.trim()}
-                        className="px-8 py-4 bg-[#0047B6] hover:bg-[#003892] disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-xl font-medium transition-colors flex items-center gap-2"
+                        className={cn(
+                            "px-8 py-4 bg-[#0047B6] hover:bg-[#003892] text-white rounded-xl font-medium transition-colors flex items-center gap-2",
+                            isDark ? "disabled:bg-gray-700 disabled:text-gray-500" : "disabled:bg-gray-300 disabled:text-gray-400"
+                        )}
                     >
                         {isLoading ? (
                             <>
@@ -155,23 +166,26 @@ export default function SearchPhonePage() {
             {results && results.length > 0 && (
                 <div className="space-y-4">
                     <div className="flex items-center justify-between flex-wrap gap-3">
-                        <p className="text-gray-400 text-sm">
-                            <span className="text-white font-semibold">{totalResults}</span> atendimento(s) encontrado(s) para <span className="text-white font-mono">{query}</span>
+                        <p className={cn("text-sm", isDark ? "text-gray-400" : "text-gray-500")}>
+                            <span className={cn("font-semibold", isDark ? "text-white" : "text-gray-900")}>{totalResults}</span> atendimento(s) encontrado(s) para <span className={cn("font-mono", isDark ? "text-white" : "text-gray-900")}>{query}</span>
                             {results[0]?.contato && (
-                                <span className="text-gray-500 ml-2">
-                                    · Contato: <span className="text-gray-300">{results[0].contato}</span>
+                                <span className={cn("ml-2", isDark ? "text-gray-500" : "text-gray-400")}>
+                                    · Contato: <span className={cn(isDark ? "text-gray-300" : "text-gray-700")}>{results[0].contato}</span>
                                 </span>
                             )}
                         </p>
 
                         {/* Display Count Dropdown */}
                         <div className="flex items-center gap-2">
-                            <span className="text-xs text-gray-500">Exibir:</span>
+                            <span className={cn("text-xs", isDark ? "text-gray-500" : "text-gray-400")}>Exibir:</span>
                             <div className="relative">
                                 <select
                                     value={perPage}
                                     onChange={(e) => handlePerPageChange(Number(e.target.value))}
-                                    className="appearance-none bg-[#0a1628] border border-[#1a3a5c] text-gray-200 text-sm rounded-lg pl-3 pr-8 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#009FE3] focus:border-[#009FE3] cursor-pointer transition-all"
+                                    className={cn(
+                                        "appearance-none border text-sm rounded-lg pl-3 pr-8 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#009FE3] focus:border-[#009FE3] cursor-pointer transition-all",
+                                        isDark ? "bg-[#0a1628] border-[#1a3a5c] text-gray-200" : "bg-white border-slate-300 text-gray-700"
+                                    )}
                                 >
                                     {PER_PAGE_OPTIONS.map((opt) => (
                                         <option key={opt} value={opt}>{opt}</option>
@@ -183,51 +197,51 @@ export default function SearchPhonePage() {
                     </div>
 
                     {visibleResults.map((item, idx) => (
-                        <Card key={item.id || idx} className="bg-[#0a1628] border-[#1a3a5c] shadow-lg">
+                        <Card key={item.id || idx} className={cn("shadow-lg", isDark ? "bg-[#0a1628] border-[#1a3a5c]" : "bg-white border-slate-200")}>
                             <CardHeader className="pb-2">
-                                <CardTitle className="text-white flex items-center justify-between">
+                                <CardTitle className={cn("flex items-center justify-between", isDark ? "text-white" : "text-gray-900")}>
                                     <div className="flex items-center gap-2 text-lg">
                                         <FileText className="w-5 h-5 text-blue-400" />
                                         Protocolo: <span className="font-mono text-blue-400">{item.protocolo}</span>
                                     </div>
-                                    <span className="text-xs text-gray-500 font-normal">
+                                    <span className={cn("text-xs font-normal", isDark ? "text-gray-500" : "text-gray-400")}>
                                         #{startIdx + idx + 1} de {totalResults}
                                     </span>
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    <InfoField
+                                    <InfoField isDark={isDark}
                                         icon={<User className="w-4 h-4 text-blue-400" />}
                                         label="Contato"
                                         value={item.contato}
                                     />
-                                    <InfoField
+                                    <InfoField isDark={isDark}
                                         icon={<Phone className="w-4 h-4 text-green-400" />}
                                         label="Identificador"
                                         value={item.identificador}
                                     />
-                                    <InfoField
+                                    <InfoField isDark={isDark}
                                         icon={<Radio className="w-4 h-4 text-purple-400" />}
                                         label="Canal"
                                         value={item.canal}
                                     />
-                                    <InfoField
+                                    <InfoField isDark={isDark}
                                         icon={<Hash className="w-4 h-4 text-amber-400" />}
                                         label="Tipo de Canal"
                                         value={item.tipoCanal}
                                     />
-                                    <InfoField
+                                    <InfoField isDark={isDark}
                                         icon={<Clock className="w-4 h-4 text-cyan-400" />}
                                         label="Início"
                                         value={formatDateTime(item.dataHoraInicio)}
                                     />
-                                    <InfoField
+                                    <InfoField isDark={isDark}
                                         icon={<Clock className="w-4 h-4 text-orange-400" />}
                                         label="Fim"
                                         value={formatDateTime(item.dataHoraFim)}
                                     />
-                                    <InfoField
+                                    <InfoField isDark={isDark}
                                         icon={<Building2 className="w-4 h-4 text-pink-400" />}
                                         label="Casa"
                                         value={item.casa}
@@ -235,12 +249,12 @@ export default function SearchPhonePage() {
                                 </div>
 
                                 {/* Resumo da Conversa */}
-                                <div className="mt-4 p-4 rounded-lg bg-[#060e1a] border border-[#1a3a5c]">
+                                <div className={cn("mt-4 p-4 rounded-lg border", isDark ? "bg-[#060e1a] border-[#1a3a5c]" : "bg-slate-50 border-slate-200")}>
                                     <div className="flex items-center gap-2 mb-2">
-                                        <MessageSquare className="w-4 h-4 text-gray-400" />
-                                        <span className="text-xs text-gray-400 font-medium uppercase tracking-wide">Resumo da Conversa</span>
+                                        <MessageSquare className={cn("w-4 h-4", isDark ? "text-gray-400" : "text-gray-500")} />
+                                        <span className={cn("text-xs font-medium uppercase tracking-wide", isDark ? "text-gray-400" : "text-gray-500")}>Resumo da Conversa</span>
                                     </div>
-                                    <p className="text-gray-300 text-sm leading-relaxed">
+                                    <p className={cn("text-sm leading-relaxed", isDark ? "text-gray-300" : "text-gray-700")}>
                                         {item.resumoConversa || "Sem resumo disponível"}
                                     </p>
                                 </div>
@@ -254,18 +268,24 @@ export default function SearchPhonePage() {
                             <button
                                 onClick={() => goToPage(currentPage - 1)}
                                 disabled={currentPage === 1}
-                                className="flex items-center gap-1.5 px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed rounded-lg hover:bg-white/5"
+                                className={cn(
+                                    "flex items-center gap-1.5 px-4 py-2 text-sm transition-colors disabled:opacity-30 disabled:cursor-not-allowed rounded-lg",
+                                    isDark ? "text-gray-400 hover:text-white hover:bg-white/5" : "text-gray-500 hover:text-gray-900 hover:bg-slate-100"
+                                )}
                             >
                                 <ChevronLeft className="w-4 h-4" />
                                 Anterior
                             </button>
-                            <span className="text-sm text-gray-400">
-                                <span className="text-white font-semibold">{currentPage}</span> / {totalPages}
+                            <span className={cn("text-sm", isDark ? "text-gray-400" : "text-gray-500")}>
+                                <span className={cn("font-semibold", isDark ? "text-white" : "text-gray-900")}>{currentPage}</span> / {totalPages}
                             </span>
                             <button
                                 onClick={() => goToPage(currentPage + 1)}
                                 disabled={currentPage === totalPages}
-                                className="flex items-center gap-1.5 px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed rounded-lg hover:bg-white/5 border border-[#1a3a5c]"
+                                className={cn(
+                                    "flex items-center gap-1.5 px-4 py-2 text-sm transition-colors disabled:opacity-30 disabled:cursor-not-allowed rounded-lg border",
+                                    isDark ? "text-gray-400 hover:text-white hover:bg-white/5 border-[#1a3a5c]" : "text-gray-500 hover:text-gray-900 hover:bg-slate-100 border-slate-300"
+                                )}
                             >
                                 Próximo
                                 <ChevronRight className="w-4 h-4" />
@@ -278,11 +298,11 @@ export default function SearchPhonePage() {
             {/* Empty State (initial) */}
             {!results && !error && !isLoading && (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
-                    <div className="p-6 rounded-full bg-[#0a1628] border border-[#1a3a5c] mb-6">
-                        <Phone className="w-12 h-12 text-gray-600" />
+                    <div className={cn("p-6 rounded-full border mb-6", isDark ? "bg-[#0a1628] border-[#1a3a5c]" : "bg-slate-100 border-slate-200")}>
+                        <Phone className={cn("w-12 h-12", isDark ? "text-gray-600" : "text-gray-400")} />
                     </div>
-                    <h3 className="text-xl font-semibold text-gray-400 mb-2">Pesquisar Telefone</h3>
-                    <p className="text-gray-500 max-w-md text-sm">
+                    <h3 className={cn("text-xl font-semibold mb-2", isDark ? "text-gray-400" : "text-gray-600")}>Pesquisar Telefone</h3>
+                    <p className={cn("max-w-md text-sm", isDark ? "text-gray-500" : "text-gray-400")}>
                         Digite o número de telefone (completo ou parcial) no campo acima para buscar todos os atendimentos associados.
                     </p>
                 </div>
@@ -291,13 +311,13 @@ export default function SearchPhonePage() {
     );
 }
 
-function InfoField({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function InfoField({ icon, label, value, isDark }: { icon: React.ReactNode; label: string; value: string; isDark: boolean }) {
     return (
-        <div className="flex items-start gap-3 p-3 rounded-lg bg-[#060e1a]/50">
+        <div className={cn("flex items-start gap-3 p-3 rounded-lg", isDark ? "bg-[#060e1a]/50" : "bg-slate-50")}>
             <div className="mt-0.5">{icon}</div>
             <div className="min-w-0">
-                <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{label}</p>
-                <p className="text-gray-200 text-sm mt-0.5 break-all">{value || "-"}</p>
+                <p className={cn("text-xs font-medium uppercase tracking-wide", isDark ? "text-gray-500" : "text-gray-400")}>{label}</p>
+                <p className={cn("text-sm mt-0.5 break-all", isDark ? "text-gray-200" : "text-gray-800")}>{value || "-"}</p>
             </div>
         </div>
     );

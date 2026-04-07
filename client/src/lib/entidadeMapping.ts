@@ -112,14 +112,14 @@ const SESI_SAUDE_CASAS = new Set<string>([
 
 const IEL_CASAS = new Set<string>(["PF- IEL"]);
 
-// Função para verificar se o usuário é a Ariana
+// Função para verificar se o usuário usa os filtros avançados (Ariana + Master)
 export function isArianaUser(): boolean {
   const userStr = localStorage.getItem("auth_user");
   if (!userStr) return false;
   try {
     const user = JSON.parse(userStr);
-    // Verifica se o email contém "ariana" (case insensitive)
-    return user.email?.toLowerCase().includes("ariana") || false;
+    // Verifica se o email contém "ariana" (case insensitive) OU se é master
+    return user.email?.toLowerCase().includes("ariana") || user.nivel_acesso === "master" || false;
   } catch {
     return false;
   }
@@ -137,6 +137,11 @@ export function getEquipeDisplayName(casa: string, entidade: Entidade | null): s
 
   // Aplicar renomeação primeiro
   const baseName = getEquipeLabel(casa);
+
+  // Manter casas I.A com seus nomes originais em qualquer entidade
+  if (casa.startsWith("I.A ")) {
+    return casa;
+  }
 
   // Para entidade específica, adicionar prefixo PF-
   if (entidade === "SENAI" && PF_SENAI_CASAS.has(casa)) {

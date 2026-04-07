@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useTheme } from "@/lib/ThemeContext";
+import { cn } from "@/lib/utils";
 
 interface Atendimento {
   id: number;
@@ -27,6 +29,7 @@ export default function SearchProtocolPage() {
   const [results, setResults] = useState<Atendimento[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { isDark } = useTheme();
 
   const handleSearch = async () => {
     const trimmed = query.trim();
@@ -77,13 +80,21 @@ export default function SearchProtocolPage() {
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Digite o número do protocolo..."
-                className="w-full pl-12 pr-4 py-4 rounded-xl bg-[#0a1628] border border-[#1a3a5c] text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#0047B6]/50 focus:border-[#0047B6]/50 transition-all text-lg"
+                className={cn(
+                  "w-full pl-12 pr-4 py-4 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#0047B6]/50 focus:border-[#0047B6]/50 transition-all text-lg",
+                  isDark
+                    ? "bg-[#0a1628] border-[#1a3a5c] text-white placeholder-gray-500"
+                    : "bg-white border-slate-300 text-gray-900 placeholder-gray-400"
+                )}
               />
             </div>
             <button
               onClick={handleSearch}
               disabled={isLoading || !query.trim()}
-              className="px-8 py-4 bg-[#0047B6] hover:bg-[#003892] disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-xl font-medium transition-colors flex items-center gap-2"
+              className={cn(
+                "px-8 py-4 bg-[#0047B6] hover:bg-[#003892] text-white rounded-xl font-medium transition-colors flex items-center gap-2",
+                isDark ? "disabled:bg-gray-700 disabled:text-gray-500" : "disabled:bg-gray-300 disabled:text-gray-400"
+              )}
             >
               {isLoading ? (
                 <>
@@ -114,51 +125,51 @@ export default function SearchProtocolPage() {
       {/* Results */}
       {results && results.length > 0 && (
         <div className="space-y-4">
-          <p className="text-gray-400 text-sm">
-            {results.length} resultado(s) encontrado(s) para o protocolo <span className="text-white font-mono">{query}</span>
+          <p className={cn("text-sm", isDark ? "text-gray-400" : "text-gray-500")}>
+            {results.length} resultado(s) encontrado(s) para o protocolo <span className={cn("font-mono", isDark ? "text-white" : "text-gray-900")}>{query}</span>
           </p>
 
           {results.map((item, idx) => (
-            <Card key={item.id || idx} className="bg-[#0a1628] border-[#1a3a5c] shadow-lg">
+            <Card key={item.id || idx} className={cn("shadow-lg", isDark ? "bg-[#0a1628] border-[#1a3a5c]" : "bg-white border-slate-200")}>
               <CardHeader className="pb-2">
-                <CardTitle className="text-white flex items-center gap-2 text-lg">
+                <CardTitle className={cn("flex items-center gap-2 text-lg", isDark ? "text-white" : "text-gray-900")}>
                   <FileText className="w-5 h-5 text-blue-400" />
                   Protocolo: <span className="font-mono text-blue-400">{item.protocolo}</span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <InfoField
+                  <InfoField isDark={isDark}
                     icon={<User className="w-4 h-4 text-blue-400" />}
                     label="Contato"
                     value={item.contato}
                   />
-                  <InfoField
+                  <InfoField isDark={isDark}
                     icon={<Phone className="w-4 h-4 text-green-400" />}
                     label="Identificador"
                     value={item.identificador}
                   />
-                  <InfoField
+                  <InfoField isDark={isDark}
                     icon={<Radio className="w-4 h-4 text-purple-400" />}
                     label="Canal"
                     value={item.canal}
                   />
-                  <InfoField
+                  <InfoField isDark={isDark}
                     icon={<Hash className="w-4 h-4 text-amber-400" />}
                     label="Tipo de Canal"
                     value={item.tipoCanal}
                   />
-                  <InfoField
+                  <InfoField isDark={isDark}
                     icon={<Clock className="w-4 h-4 text-cyan-400" />}
                     label="Início"
                     value={formatDateTime(item.dataHoraInicio)}
                   />
-                  <InfoField
+                  <InfoField isDark={isDark}
                     icon={<Clock className="w-4 h-4 text-orange-400" />}
                     label="Fim"
                     value={formatDateTime(item.dataHoraFim)}
                   />
-                  <InfoField
+                  <InfoField isDark={isDark}
                     icon={<Building2 className="w-4 h-4 text-pink-400" />}
                     label="Casa"
                     value={item.casa}
@@ -166,12 +177,12 @@ export default function SearchProtocolPage() {
                 </div>
 
                 {/* Resumo da Conversa */}
-                <div className="mt-4 p-4 rounded-lg bg-[#060e1a] border border-[#1a3a5c]">
+                <div className={cn("mt-4 p-4 rounded-lg border", isDark ? "bg-[#060e1a] border-[#1a3a5c]" : "bg-slate-50 border-slate-200")}>
                   <div className="flex items-center gap-2 mb-2">
-                    <MessageSquare className="w-4 h-4 text-gray-400" />
-                    <span className="text-xs text-gray-400 font-medium uppercase tracking-wide">Resumo da Conversa</span>
+                    <MessageSquare className={cn("w-4 h-4", isDark ? "text-gray-400" : "text-gray-500")} />
+                    <span className={cn("text-xs font-medium uppercase tracking-wide", isDark ? "text-gray-400" : "text-gray-500")}>Resumo da Conversa</span>
                   </div>
-                  <p className="text-gray-300 text-sm leading-relaxed">
+                  <p className={cn("text-sm leading-relaxed", isDark ? "text-gray-300" : "text-gray-700")}>
                     {item.resumoConversa || "Sem resumo disponível"}
                   </p>
                 </div>
@@ -184,11 +195,11 @@ export default function SearchProtocolPage() {
       {/* Empty State (initial) */}
       {!results && !error && !isLoading && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="p-6 rounded-full bg-[#0a1628] border border-[#1a3a5c] mb-6">
-            <Search className="w-12 h-12 text-gray-600" />
+          <div className={cn("p-6 rounded-full border mb-6", isDark ? "bg-[#0a1628] border-[#1a3a5c]" : "bg-slate-100 border-slate-200")}>
+            <Search className={cn("w-12 h-12", isDark ? "text-gray-600" : "text-gray-400")} />
           </div>
-          <h3 className="text-xl font-semibold text-gray-400 mb-2">Pesquisar Protocolo</h3>
-          <p className="text-gray-500 max-w-md text-sm">
+          <h3 className={cn("text-xl font-semibold mb-2", isDark ? "text-gray-400" : "text-gray-600")}>Pesquisar Protocolo</h3>
+          <p className={cn("max-w-md text-sm", isDark ? "text-gray-500" : "text-gray-400")}>
             Digite o número do protocolo no campo acima para buscar os detalhes do atendimento.
           </p>
         </div>
@@ -197,13 +208,13 @@ export default function SearchProtocolPage() {
   );
 }
 
-function InfoField({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function InfoField({ icon, label, value, isDark }: { icon: React.ReactNode; label: string; value: string; isDark: boolean }) {
   return (
-    <div className="flex items-start gap-3 p-3 rounded-lg bg-[#060e1a]/50">
+    <div className={cn("flex items-start gap-3 p-3 rounded-lg", isDark ? "bg-[#060e1a]/50" : "bg-slate-50")}>
       <div className="mt-0.5">{icon}</div>
       <div className="min-w-0">
-        <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{label}</p>
-        <p className="text-gray-200 text-sm mt-0.5 break-all">{value || "-"}</p>
+        <p className={cn("text-xs font-medium uppercase tracking-wide", isDark ? "text-gray-500" : "text-gray-400")}>{label}</p>
+        <p className={cn("text-sm mt-0.5 break-all", isDark ? "text-gray-200" : "text-gray-800")}>{value || "-"}</p>
       </div>
     </div>
   );

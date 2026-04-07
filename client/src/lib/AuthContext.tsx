@@ -10,7 +10,7 @@ export interface UserInfo {
 
 // Rotas permitidas por nível de acesso
 const ALLOWED_ROUTES: Record<NivelAcesso, string[]> = {
-  master: ["/", "/protocolo", "/telefone", "/anual", "/openai"],
+  master: ["/", "/protocolo", "/telefone", "/anual", "/openai", "/patrocinados"],
   admin: ["/", "/protocolo", "/telefone", "/anual"],
   gerente: ["/", "/protocolo", "/telefone", "/anual"],
   visualizador: ["/", "/anual"],
