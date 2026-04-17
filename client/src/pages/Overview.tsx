@@ -12,6 +12,9 @@ import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { SelectCustom } from "@/components/ui/select-custom";
 import { SelectMulti } from "@/components/ui/select-multi";
 import { ExportReportDialog } from "@/components/ui/export-report-dialog";
+import { KPICard, StatCard } from "@/components/ui/kpi-card";
+import { ChartCard } from "@/components/ui/chart-card";
+import { FilterToolbar, FilterGroup } from "@/components/ui/filter-toolbar";
 import {
   MessageSquare, CalendarDays, TrendingUp,
   RefreshCw, Users, Building2, ChevronLeft, ChevronRight, Filter, Cloud,
@@ -22,6 +25,8 @@ import { ptBR } from "date-fns/locale";
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { agruparAssuntos, getCasasForFiltro, getCasasForFiltroGerente, getEquipesForEntidade, getCasasForEquipeLabels, mapCasaToEntidadeUnidade, mapCasaToEntidadeGerente, isArianaUser, type AssuntoAggregado, type Entidade, type UnidadeSESI } from "@/lib/entidadeMapping";
 import { useAuth } from "@/lib/AuthContext";
+import { useTheme } from "@/lib/ThemeContext";
+import { cn } from "@/lib/utils";
 
 interface StatsData {
   totais: {
@@ -93,56 +98,6 @@ const PJ_OPCOES = new Set([
   'Informações ou Proposta Comercial',
 ]);
 
-// Mapeamento de nomes longos de Patrocinados para nomes curtos
-const RENOMEACAO_PATROCINADOS: Record<string, string> = {
-  "Olá! Quero mais informações sobre os JOGOS SESI 2025, por favor.": "Jogos SESI 2025",
-  "Olá! Tenho interesse no pacote Férias Escolares SESI Saúde, quero informações!": "Pacote Férias Escolares",
-  "Olá! Tenho interesse no pacote de Saúde Ocular do SESI Saúde, quero informações!": "Pacote Saúde Ocular",
-  "Quero falar mais sobre o Curso de Tecnologia da Construção a Seco": "Curso Tecnologia da Construção",
-  "Quero falar sobre o curso de Eletricidade Aplicada": "Curso Eletricidade Aplicada",
-  "Olá, gostaria de saber mais informações sobre Matrícula do SESI 2026": "Matrícula SESI 2026",
-  "Jornada Dev": "Jornada Dev",
-  "Quero saber mais informações sobre o curso de Excel Avançado": "Curso Excel Avançado",
-  "Gostaria de mais informações sobre o curso de Comandos Elétricos": "Curso Comandos Elétricos",
-  "Quero falar sobre o curso de Instalação e Higienização de Ar-condicionado": "Curso Higienização de Ar-condicionado",
-  "Quero falar sobre o curso de Mecânico de Refrigeração": "Curso Mecânico de Refrigeração",
-  "Quero informações sobre o curso de Operador de Empilhadeira": "Curso Operador de Empilhadeira",
-  "Quero falar sobre o curso de Eletricista Industrial": "Curso Eletricista Industrial",
-  "Quero Saber mais sobre o curso de Montagem de Quadro de Distribuição": "Curso Quadro de Distribuição",
-  "Quero saber mais informações sobre o curso Informática Básica": "Curso Informática Básica",
-  "Quero saber mais informações sobre o curso Informática Básica e Avançada": "Curso Informática Básica e Avançada",
-  "Quero saber mais informações sobre o curso de Mestre de Obras": "Curso Mestre de Obras",
-  "Quero falar sobre o curso de Orçamento de Obras": "Curso Orçamento de Obras",
-  "Quero informações sobre o curso de Assistente Administrativo": "Curso Assistente Administrativo",
-  "Gostaria de mais informações sobre o curso de Eletricista Instalador": "Curso Eletricista Instalador",
-  "Olá, gostaria de saber mais informações sobre a Colônia de Férias do SESI": "Colônia de Férias SESI",
-  "Gostaria de mais informações sobre o curso técnico em Automação": "Curso Técnico em Automação",
-  "Gostaria de mais informações sobre o curso técnico em Mecânica": "Curso Técnico em Mecânica",
-  "Gostaria de informações sobre o curso de instalação e higienização de split": "Curso Higienização de Split",
-  "Gostaria de informações sobre o curso técnico em Refrigeração e Climatização": "Curso Refrigeração e Climatização",
-  "Gostaria de informações sobre o curso de Mecânico de Refrigeração": "Curso Mecânico de Refrigeração",
-  "Gostaria de mais informações sobre o curso de Cronometrista": "Curso Cronometrista",
-  "Olá! Tenho interesse no curso de Vantagens Tributárias da ZF de Manaus": "Curso Vantagens Tributárias ZFM",
-  "Quero saber mais informações sobre o curso de Montagem de Quadros Elétricos": "Curso Montagem de Quadros Elétricos",
-  "Quero saber mais informações sobre o Curso NR35": "Curso NR35",
-  "Quero saber mais informações sobre o curso de Informática Avançada": "Curso Informática Avançada",
-  "Quero saber sobre o curso de Leitura e Interpretação de Projetos": "Curso Leitura de Projetos",
-  "Quero falar sobre o curso de Eletricista Instalador": "Curso Eletricista Instalador",
-  "Quero falar sobre o curso de Modelagem para Construção Civil": "Curso Modelagem Construção Civil",
-  "Quero falar sobre o curso de Eletricista de Automóveis": "Curso Eletricista de Automóveis",
-  "Quero falar sobre o curso de Mecânico de Manutenção em Automóveis": "Curso Mecânico de Automóveis",
-  "Quero falar sobre o curso de Mecânico de Manutenção em Motocicletas": "Curso Mecânico de Motocicletas",
-  "Quero falar sobre o curso de Mecânico de Manutenção em Motores à Diesel": "Curso Mecânico de Motores Diesel",
-  "Quero falar sobre o curso de Soldador de Eletrodo Revestido": "Curso Soldador Eletrodo Revestido",
-  "PSICÓLOGO": "Psicólogo",
-  "CLÍNICA MEDICA": "Clínica Médica",
-  "NUTRICIONISTA": "Nutricionista",
-  "FISIOTERAPIA": "Fisioterapia",
-  "Marceneiro de Moveis": "Curso Marceneiro de Móveis",
-  "PACOTE ALUNOS SESI": "Pacote Alunos SESI",
-  "CURSOS ELETRICIDADE": "Cursos de Eletricidade",
-};
-
 const REFRESH_INTERVAL = 60000; // 60 seconds
 
 const COLORS = ['#009FE3', '#F37021', '#00A650', '#ED1C24', '#00BCD4', '#8b5cf6', '#0077CC', '#14b8a6', '#6366f1', '#a855f7', '#06b6d4', '#84cc16', '#d946ef', '#0ea5e9', '#f43f5e'];
@@ -175,7 +130,9 @@ export default function OverviewPage() {
   const contentRef = useRef<HTMLDivElement>(null);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [countdown, setCountdown] = useState(60);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const { user } = useAuth();
+  const { isDark } = useTheme();
   const isGerente = user?.nivel_acesso === "gerente" || user?.nivel_acesso === "master";
 
   // Date range state (default: current month)
@@ -335,10 +292,11 @@ export default function OverviewPage() {
     setCurrentPage(1);
   }, [activeTab, pageSize]);
 
-  const handleManualRefresh = () => {
-    refetchStats();
-    refetchRecentes();
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    await Promise.all([refetchStats(), refetchRecentes()]);
     setLastUpdated(new Date());
+    setIsRefreshing(false);
     setCountdown(60);
   };
 
@@ -469,21 +427,6 @@ export default function OverviewPage() {
     }));
   }, [stats?.porOpcaoSelecionada, isGerente]);
 
-  // ─── Patrocinados (Top 10) — com renomeação e agregação ──────────────────────────
-  const patrocinadosData = useMemo(() => {
-    const dados = stats?.porPatrocinados || [];
-    const mapa = new Map<string, number>();
-    for (const d of dados) {
-      if (!d.nome || d.nome === "false" || d.nome.trim() === "" || d.nome === "null" || d.nome === "undefined") continue;
-      const nomeExibicao = RENOMEACAO_PATROCINADOS[d.nome.trim()] || d.nome.trim();
-      mapa.set(nomeExibicao, (mapa.get(nomeExibicao) || 0) + d.total);
-    }
-    return Array.from(mapa.entries())
-      .map(([nome, total]) => ({ nome, total }))
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 10);
-  }, [stats?.porPatrocinados]);
-
   // ─── PF e PJ ──────────────────────────
   const pfPjData = useMemo(() => {
     const dados = stats?.porOpcaoSelecionada || [];
@@ -513,8 +456,8 @@ export default function OverviewPage() {
       <Layout title="Visão Geral" subtitle="Dashboard de atendimentos em tempo real">
         <div className="flex items-center justify-center h-[60vh]">
           <div className="flex flex-col items-center gap-4">
-            <RefreshCw className="w-8 h-8 text-blue-500 animate-spin" />
-            <p className="text-gray-400">Carregando dados...</p>
+            <div className="w-10 h-10 border-4 border-[#009FE3]/30 border-t-[#009FE3] rounded-full animate-spin" />
+            <p className={cn("text-sm", isDark ? "text-gray-400" : "text-gray-500")}>Carregando dados...</p>
           </div>
         </div>
       </Layout>
@@ -525,7 +468,7 @@ export default function OverviewPage() {
     return (
       <Layout title="Visão Geral" subtitle="Dashboard de atendimentos em tempo real">
         <div className="flex items-center justify-center h-[60vh]">
-          <p className="text-gray-400">Nenhum dado disponível. Verifique a conexão com o banco de dados.</p>
+          <p className={cn("text-sm", isDark ? "text-gray-400" : "text-gray-500")}>Nenhum dado disponível. Verifique a conexão com o banco de dados.</p>
         </div>
       </Layout>
     );
@@ -533,240 +476,257 @@ export default function OverviewPage() {
 
   return (
       <Layout title="Visão Geral" subtitle="Dashboard de atendimentos em tempo real">
-      {/* Refresh Info Bar + Professional Filter Layout - Theme Aware */}
-      <div className="rounded-xl border border-gray-200 dark:border-[#165A8A] overflow-hidden bg-white dark:bg-[#0C2135] shadow-sm">
-        {/* Header */}
-        <div className="px-5 py-3 border-b border-gray-200 dark:border-[#165A8A]/40 bg-gray-50 dark:bg-[#081E30]/50 flex items-center gap-3">
-          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 tracking-wide">
-            Visão Geral em Tempo Real
-          </span>
-          <div className="flex-1" />
-          <span className="text-xs text-gray-500 dark:text-gray-400">
+      {/* ═══════════════════════════════════════════════════════════════
+         FILTER TOOLBAR - EXECUTIVO
+         ═══════════════════════════════════════════════════════════════ */}
+      <FilterToolbar
+        title="Visão Geral em Tempo Real"
+        onRefresh={handleManualRefresh}
+        isRefreshing={isRefreshing}
+        headerAction={
+          <span 
+            className="text-[11px] font-medium"
+            style={{ color: isDark ? "rgba(255,255,255,0.45)" : "#94A3B8" }}
+          >
             Última atualização: {format(lastUpdated, "HH:mm:ss", { locale: ptBR })} • Próxima em {countdown}s
           </span>
-        </div>
+        }
+      >
+        {/* Entidade */}
+        <FilterGroup label="Entidade">
+          <SelectMulti
+            values={selectedEntidades}
+            onValuesChange={(values) => {
+              setSelectedEntidades(values as Entidade[]);
+              setSelectedEquipes([]);
+            }}
+            placeholder="Todas as Entidades"
+            panelTitle="Selecionar Entidades"
+            options={[
+              { value: "SENAI", label: "SENAI" },
+              { value: "SESI", label: "SESI" },
+              { value: "IEL", label: "IEL" },
+              ...(isGerente ? [{ value: "Outros", label: "Outros" }] : []),
+            ]}
+          />
+        </FilterGroup>
 
-        {/* Filters Grid */}
-        <div className="p-5 bg-white dark:bg-[#0C2135]">
-          <div className="flex flex-col lg:flex-row gap-5">
-            {/* Group 1: Entity & Team */}
-            <div className="flex flex-col sm:flex-row gap-4 flex-1">
-              {/* Entidade */}
-              <div className="flex flex-col gap-1.5 min-w-[180px]">
-                <label className="text-[10px] uppercase tracking-wider text-gray-600 dark:text-gray-500 font-bold flex items-center gap-1.5">
-                  <Building2 className="w-3 h-3" />
-                  Entidade
-                </label>
-                <SelectMulti
-                  values={selectedEntidades}
-                  onValuesChange={(values) => {
-                    setSelectedEntidades(values as Entidade[]);
-                    setSelectedEquipes([]); // Limpa equipes quando entidade muda
-                  }}
-                  placeholder="Todas as Entidades"
-                  panelTitle="Selecionar Entidades"
-                  options={[
-                    { value: "SENAI", label: "SENAI" },
-                    { value: "SESI", label: "SESI" },
-                    { value: "IEL", label: "IEL" },
-                    ...(isGerente ? [{ value: "Outros", label: "Outros" }] : []),
-                  ]}
-                />
-              </div>
-
-              {/* Equipe/Unidade */}
-              <div className="flex flex-col gap-1.5 min-w-[180px]">
-                <label className="text-[10px] uppercase tracking-wider text-gray-600 dark:text-gray-500 font-bold flex items-center gap-1.5">
-                  <Users className="w-3 h-3" />
-                  {isGerente ? "Equipe" : "Unidade"}
-                </label>
-                {isGerente ? (
-                  <SelectMulti
-                    values={selectedEquipes}
-                    onValuesChange={setSelectedEquipes}
-                    placeholder="Todas as Equipes"
-                    disabled={selectedEntidades.length === 0}
-                    panelTitle="Selecionar Equipes"
-                    options={equipesOptions}
-                  />
-                ) : (
-                  <SelectCustom
-                    value={unidade || ""}
-                    onValueChange={(value) => setUnidade(value as UnidadeSESI | "")}
-                    placeholder="Todas as Unidades"
-                    disabled={selectedEntidades[0] !== "SESI"}
-                    panelTitle="Selecionar Unidade"
-                    options={[
-                      { value: "", label: "Todas as Unidades" },
-                      { value: "SESI ESCOLA", label: "SESI ESCOLA" },
-                      { value: "SESI CLUBE", label: "SESI CLUBE" },
-                      { value: "SESI SAÚDE", label: "SESI SAÚDE" }
-                    ]}
-                  />
-                )}
-              </div>
-            </div>
-
-            {/* Divider */}
-            <div className="hidden lg:block w-px bg-gray-200 dark:bg-[#165A8A]/30" />
-
-            {/* Group 2: Period */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] uppercase tracking-wider text-gray-600 dark:text-gray-500 font-bold flex items-center gap-1.5">
-                <CalendarRange className="w-3 h-3" />
-                Período
-              </label>
-              <DateRangePicker
-                startDate={dateRange.startDate}
-                endDate={dateRange.endDate}
-                onApply={(s, e) => setDateRange({ startDate: s, endDate: e })}
-              />
-            </div>
-
-            {/* Divider */}
-            <div className="hidden lg:block w-px bg-gray-200 dark:bg-[#165A8A]/30" />
-
-            {/* Group 3: Actions */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] uppercase tracking-wider text-gray-600 dark:text-gray-500 font-bold flex items-center gap-1.5">
-                <Settings2 className="w-3 h-3" />
-                Ações
-              </label>
-              <div className="flex items-center gap-2">
-                <ExportReportDialog
-                  selectedCasas={selectedCasas}
-                  contentRef={contentRef}
-                  pdfTitle="Visão Geral - Dashboard FIEAM"
-                  startDate={dateRange.startDate}
-                  endDate={dateRange.endDate}
-                  pdfSubtitle={
-                    selectedEntidades.length > 0
-                      ? `Dashboard de atendimentos em tempo real · Entidades: ${selectedEntidades.join(", ")}${isGerente && selectedEquipes.length > 0 ? ` · Equipes: ${selectedEquipes.join(", ")}` : selectedEntidades[0] === "SESI" && unidade ? ` · Unidade: ${unidade}` : ""}`
-                      : "Dashboard de atendimentos em tempo real · Todas as Entidades"
-                  }
-                />
-                <button
-                  onClick={handleManualRefresh}
-                  className="flex items-center justify-center gap-2 px-3 py-2.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-[#060e1a]/80 border border-gray-200 dark:border-[#1a3a5c]/80 rounded-xl hover:border-[#009FE3]/40 hover:bg-white dark:hover:bg-[#0a1929] hover:text-[#009FE3] dark:hover:text-white transition-all duration-300"
-                  title="Atualizar dados"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Active Filters Summary */}
-          {(selectedEntidades.length > 0 || selectedEquipes.length > 0) && (
-            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-[#165A8A]/20 flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] text-gray-600 dark:text-gray-500 uppercase tracking-wider">Filtros ativos:</span>
-              {selectedEntidades.map(ent => (
-                <span key={ent} className="px-2 py-1 bg-[#009FE3]/10 text-[#009FE3] text-[10px] font-medium rounded-md border border-[#009FE3]/20">
-                  {ent}
-                </span>
-              ))}
-              {selectedEquipes.map(eq => (
-                <span key={eq} className="px-2 py-1 bg-[#009FE3]/10 text-[#009FE3] text-[10px] font-medium rounded-md border border-[#009FE3]/20">
-                  {eq}
-                </span>
-              ))}
-              <button
-                onClick={() => {
-                  setSelectedEntidades([]);
-                  setSelectedEquipes([]);
-                  setUnidade("");
-                }}
-                className="ml-auto text-[10px] text-gray-500 hover:text-red-400 transition-colors"
-              >
-                Limpar filtros
-              </button>
-            </div>
+        {/* Equipe/Unidade */}
+        <FilterGroup label={isGerente ? "Equipe" : "Unidade"}>
+          {isGerente ? (
+            <SelectMulti
+              values={selectedEquipes}
+              onValuesChange={setSelectedEquipes}
+              placeholder="Todas as Equipes"
+              disabled={selectedEntidades.length === 0}
+              panelTitle="Selecionar Equipes"
+              options={equipesOptions}
+            />
+          ) : (
+            <SelectCustom
+              value={unidade || ""}
+              onValueChange={(value) => setUnidade(value as UnidadeSESI | "")}
+              placeholder="Todas as Unidades"
+              disabled={selectedEntidades[0] !== "SESI"}
+              panelTitle="Selecionar Unidade"
+              options={[
+                { value: "", label: "Todas as Unidades" },
+                { value: "SESI ESCOLA", label: "SESI ESCOLA" },
+                { value: "SESI CLUBE", label: "SESI CLUBE" },
+                { value: "SESI SAÚDE", label: "SESI SAÚDE" }
+              ]}
+            />
           )}
+        </FilterGroup>
+
+        {/* Período */}
+        <FilterGroup label="Período">
+          <DateRangePicker
+            startDate={dateRange.startDate}
+            endDate={dateRange.endDate}
+            onApply={(s, e) => setDateRange({ startDate: s, endDate: e })}
+          />
+        </FilterGroup>
+
+        {/* Exportar */}
+        <div className="flex flex-col gap-1.5">
+          <label 
+            className="text-[11px] font-semibold uppercase tracking-wider"
+            style={{ color: isDark ? "rgba(255,255,255,0.45)" : "#64748B" }}
+          >
+            Relatório
+          </label>
+          <ExportReportDialog
+            selectedCasas={selectedCasas}
+            contentRef={contentRef}
+            pdfTitle="Visão Geral - Dashboard FIEAM"
+            startDate={dateRange.startDate}
+            endDate={dateRange.endDate}
+            pdfSubtitle={
+              selectedEntidades.length > 0
+                ? `Dashboard de atendimentos em tempo real · Entidades: ${selectedEntidades.join(", ")}${isGerente && selectedEquipes.length > 0 ? ` · Equipes: ${selectedEquipes.join(", ")}` : selectedEntidades[0] === "SESI" && unidade ? ` · Unidade: ${unidade}` : ""}`
+                : "Dashboard de atendimentos em tempo real · Todas as Entidades"
+            }
+          />
         </div>
-      </div>
+      </FilterToolbar>
+
+      {/* Active Filters Summary */}
+      {(selectedEntidades.length > 0 || selectedEquipes.length > 0) && (
+        <div 
+          className="mt-4 flex items-center gap-2 flex-wrap"
+          style={{
+            padding: "12px 16px",
+            borderRadius: "12px",
+            background: isDark ? "rgba(0, 159, 227, 0.05)" : "rgba(0, 159, 227, 0.03)",
+            border: `1px solid ${isDark ? "rgba(0, 159, 227, 0.12)" : "rgba(0, 159, 227, 0.08)"}`,
+          }}
+        >
+          <span 
+            className="text-[11px] font-semibold uppercase tracking-wider"
+            style={{ color: isDark ? "rgba(255,255,255,0.50)" : "#64748B" }}
+          >
+            Filtros ativos:
+          </span>
+          {selectedEntidades.map(ent => (
+            <span 
+              key={ent} 
+              className="px-2.5 py-1 text-[11px] font-medium rounded-md"
+              style={{
+                background: "rgba(0, 159, 227, 0.12)",
+                color: "#009FE3",
+                border: "1px solid rgba(0, 159, 227, 0.20)",
+              }}
+            >
+              {ent}
+            </span>
+          ))}
+          {selectedEquipes.map(eq => (
+            <span 
+              key={eq} 
+              className="px-2.5 py-1 text-[11px] font-medium rounded-md"
+              style={{
+                background: "rgba(0, 159, 227, 0.12)",
+                color: "#009FE3",
+                border: "1px solid rgba(0, 159, 227, 0.20)",
+              }}
+            >
+              {eq}
+            </span>
+          ))}
+          <button
+            onClick={() => {
+              setSelectedEntidades([]);
+              setSelectedEquipes([]);
+              setUnidade("");
+            }}
+            className="ml-auto text-[11px] font-medium transition-colors hover:underline"
+            style={{ color: isDark ? "#E85D75" : "#DC2626" }}
+          >
+            Limpar filtros
+          </button>
+        </div>
+      )}
 
       <div ref={contentRef} className="space-y-6">
-      {/* Stats Cards - values adapt to date filter */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-5xl mx-auto">
-        <StatCard
-          title="Total no Período de Atendimento"
+      {/* ═══════════════════════════════════════════════════════════════
+         KPI CARDS - EXECUTIVO
+         ═══════════════════════════════════════════════════════════════ */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <KPICard
+          title="Total no Período"
+          subtitle={dateRange?.startDate && dateRange?.endDate 
+            ? `${format(new Date(dateRange.startDate), "dd/MM")} - ${format(new Date(dateRange.endDate), "dd/MM/yyyy")}`
+            : "Últimos 12 meses"
+          }
           value={totalPeriodo.toLocaleString("pt-BR")}
           icon={<CalendarDays className="w-5 h-5" />}
           color="blue"
         />
-        <StatCard
-          title="Média de Atendimentos por Mês"
+        <KPICard
+          title="Média Mensal"
           value={Math.round(mediaPorMes).toLocaleString("pt-BR")}
           icon={<TrendingUp className="w-5 h-5" />}
           color="green"
+          trend={{ value: 12, label: "vs. período anterior", positive: true }}
         />
-        <StatCard
-          title="Média de Atendimentos por Dia"
+        <KPICard
+          title="Média Diária"
           value={mediaPorDia.toFixed(1).replace(".", ",")}
           icon={<MessageSquare className="w-5 h-5" />}
           color="red"
         />
       </div>
 
-      {/* Timeline Chart */}
-      <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
-        <CardHeader>
-          <CardTitle className="text-white text-lg flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-blue-400" />
-            Volume de Atendimentos
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={stats.timeline}>
-              <defs>
-                <linearGradient id="colorVolume" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#009FE3" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#009FE3" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#165A8A" />
-              <XAxis
-                dataKey="data"
-                tickFormatter={(val) => {
-                  try {
-                    return format(new Date(val), "dd/MM");
-                  } catch {
-                    return val;
-                  }
-                }}
-                stroke="#6b7280"
-                fontSize={11}
-              />
-              <YAxis stroke="#6b7280" fontSize={11} />
-              <RechartsTooltip
-                {...TOOLTIP_STYLE}
-                labelFormatter={(label) => {
-                  try {
-                    return format(new Date(label), "dd/MM/yyyy");
-                  } catch {
-                    return label;
-                  }
-                }}
-                formatter={(value: number) => [value, "Atendimentos"]}
-              />
-              <Area
-                type="monotone"
-                dataKey="total"
-                stroke="#009FE3"
-                strokeWidth={2}
-                fillOpacity={1}
-                fill="url(#colorVolume)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
+      {/* ═══════════════════════════════════════════════════════════════
+         TIMELINE CHART - VOLUME DE ATENDIMENTOS
+         ═══════════════════════════════════════════════════════════════ */}
+      <ChartCard
+        title="Volume de Atendimentos"
+        subtitle="Evolução temporal dos atendimentos"
+        icon={<TrendingUp className="w-5 h-5" />}
+        color="blue"
+        height={320}
+      >
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={stats.timeline}>
+            <defs>
+              <linearGradient id="colorVolume" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#009FE3" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#009FE3" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid 
+              strokeDasharray="3 3" 
+              vertical={false} 
+              stroke={isDark ? "rgba(0, 159, 227, 0.15)" : "rgba(226, 232, 240, 0.8)"} 
+            />
+            <XAxis
+              dataKey="data"
+              tickFormatter={(val) => {
+                try {
+                  return format(new Date(val), "dd/MM");
+                } catch {
+                  return val;
+                }
+              }}
+              stroke={isDark ? "rgba(255,255,255,0.40)" : "#94A3B8"}
+              fontSize={11}
+              tickLine={false}
+              axisLine={{ stroke: isDark ? "rgba(255,255,255,0.10)" : "#E2E8F0" }}
+            />
+            <YAxis 
+              stroke={isDark ? "rgba(255,255,255,0.40)" : "#94A3B8"} 
+              fontSize={11}
+              tickLine={false}
+              axisLine={false}
+            />
+            <RechartsTooltip
+              {...TOOLTIP_STYLE}
+              labelFormatter={(label) => {
+                try {
+                  return format(new Date(label), "dd/MM/yyyy");
+                } catch {
+                  return label;
+                }
+              }}
+              formatter={(value: number) => [value.toLocaleString("pt-BR"), "Atendimentos"]}
+            />
+            <Area
+              type="monotone"
+              dataKey="total"
+              stroke="#009FE3"
+              strokeWidth={2}
+              fillOpacity={1}
+              fill="url(#colorVolume)"
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </ChartCard>
 
       {/* PDF-only: Daily Volume Table */}
       <div data-pdf-only style={{ display: "none" }}>
-        <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
+        <Card className={cn("shadow-lg", isDark ? "bg-[#0C2135] border-[#165A8A]" : "bg-white border-slate-200")}>
           <CardHeader className="pb-2">
             <CardTitle className="text-white text-base flex items-center gap-2">
               <CalendarDays className="w-4 h-4 text-blue-400" />
@@ -815,95 +775,112 @@ export default function OverviewPage() {
         </Card>
       </div>
 
-      {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* ═══════════════════════════════════════════════════════════════
+         CHARTS GRID - ANÁLISE DETALHADA
+         ═══════════════════════════════════════════════════════════════ */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Por Canal */}
-        <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
-          <CardHeader>
-            <CardTitle className="text-white text-lg flex items-center gap-2">
-              <Users className="w-5 h-5 text-blue-400" />
-              Atendimentos por Meio de Comunicação
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats.porCanal} layout="vertical" margin={{ left: 10, right: 50 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#165A8A" />
-                <XAxis type="number" stroke="#6b7280" fontSize={11} />
-                <YAxis
-                  type="category"
-                  dataKey="nome"
-                  width={140}
-                  stroke="#9ca3af"
-                  fontSize={11}
-                  tick={{ fill: '#9ca3af' }}
-                />
-                <RechartsTooltip
-                  {...TOOLTIP_STYLE}
-                  formatter={(value: number) => [value, "Atendimentos"]}
-                />
-                <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={24}>
-                  {stats.porCanal.map((_, index) => (
-                    <Cell key={`canal-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                  <LabelList dataKey="total" position="right" fill="#94a3b8" fontSize={11} formatter={(v: number) => v.toLocaleString("pt-BR")} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        <ChartCard
+          title="Atendimentos por Canal"
+          subtitle="Distribuição por meio de comunicação"
+          icon={<Users className="w-5 h-5" />}
+          color="blue"
+          height={300}
+        >
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={stats.porCanal} layout="vertical" margin={{ left: 10, right: 50 }}>
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke={isDark ? "rgba(0, 159, 227, 0.10)" : "rgba(226, 232, 240, 0.8)"} />
+              <XAxis 
+                type="number" 
+                stroke={isDark ? "rgba(255,255,255,0.40)" : "#94A3B8"} 
+                fontSize={11}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                type="category"
+                dataKey="nome"
+                width={140}
+                stroke={isDark ? "rgba(255,255,255,0.50)" : "#64748B"}
+                fontSize={11}
+                tickLine={false}
+                axisLine={false}
+              />
+              <RechartsTooltip
+                {...TOOLTIP_STYLE}
+                formatter={(value: number) => [value.toLocaleString("pt-BR"), "Atendimentos"]}
+              />
+              <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={24}>
+                {stats.porCanal.map((_, index) => (
+                  <Cell key={`canal-${index}`} fill={COLORS[index % COLORS.length]} />
+                ))}
+                <LabelList dataKey="total" position="right" fill={isDark ? "rgba(255,255,255,0.60)" : "#64748B"} fontSize={11} formatter={(v: number) => v.toLocaleString("pt-BR")} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
 
-        {/* Por Unidade/Equipe — Dynamic height based on number of items */}
-        <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
-          <CardHeader>
-            <CardTitle className="text-white text-lg flex items-center gap-2">
-              <Building2 className="w-5 h-5 text-green-400" />
-              {isGerente ? "Atendimentos por Equipe" : "Atendimentos por Unidade"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={atendimentosPorUnidade} layout="vertical" margin={{ left: 10, right: 50 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#165A8A" />
-                <XAxis type="number" stroke="#6b7280" fontSize={11} />
-                <YAxis
-                  type="category"
-                  dataKey="nome"
-                  width={160}
-                  stroke="#9ca3af"
-                  fontSize={11}
-                  tick={{ fill: '#9ca3af' }}
-                />
-                <RechartsTooltip
-                  {...TOOLTIP_STYLE}
-                  formatter={(value: number) => [value, "Atendimentos"]}
-                />
-                <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={28}>
-                  {atendimentosPorUnidade.map((_, index) => (
-                    <Cell key={`casa-${index}`} fill={COLORS[(index + 4) % COLORS.length]} />
-                  ))}
-                  <LabelList dataKey="total" position="right" fill="#94a3b8" fontSize={11} formatter={(v: number) => v.toLocaleString("pt-BR")} offset={8} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        {/* Por Unidade/Equipe */}
+        <ChartCard
+          title={isGerente ? "Atendimentos por Equipe" : "Atendimentos por Unidade"}
+          subtitle="Distribuição por localização"
+          icon={<Building2 className="w-5 h-5" />}
+          color="green"
+          height={300}
+        >
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={atendimentosPorUnidade} layout="vertical" margin={{ left: 10, right: 50 }}>
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke={isDark ? "rgba(0, 159, 227, 0.10)" : "rgba(226, 232, 240, 0.8)"} />
+              <XAxis 
+                type="number" 
+                stroke={isDark ? "rgba(255,255,255,0.40)" : "#94A3B8"} 
+                fontSize={11}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                type="category"
+                dataKey="nome"
+                width={160}
+                stroke={isDark ? "rgba(255,255,255,0.50)" : "#64748B"}
+                fontSize={11}
+                tickLine={false}
+                axisLine={false}
+              />
+              <RechartsTooltip
+                {...TOOLTIP_STYLE}
+                formatter={(value: number) => [value.toLocaleString("pt-BR"), "Atendimentos"]}
+              />
+              <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={28}>
+                {atendimentosPorUnidade.map((_, index) => (
+                  <Cell key={`casa-${index}`} fill={COLORS[(index + 4) % COLORS.length]} />
+                ))}
+                <LabelList dataKey="total" position="right" fill={isDark ? "rgba(255,255,255,0.60)" : "#64748B"} fontSize={11} formatter={(v: number) => v.toLocaleString("pt-BR")} offset={8} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
       </div>
 
       {/* Row: Atendimentos por Entidade + Atendimentos por PF e PJ (PF/PJ only for Ariana) */}
-      <div className={`grid grid-cols-1 ${(isArianaUser() || user?.nivel_acesso === "master") ? 'lg:grid-cols-2' : ''} gap-4 items-start`}>
+      <div className={`grid grid-cols-1 ${(isArianaUser() || user?.nivel_acesso === "master") ? 'lg:grid-cols-2' : ''} gap-5 items-start`}>
         {/* Atendimentos por Entidade */}
-        <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
+        <Card className={cn(
+          "shadow-lg rounded-2xl overflow-hidden animate-fade-up-5 card-premium",
+          isDark ? "bg-[#0C2135]/90 border-[#1E3A5F]/60 backdrop-blur-xl" : "bg-white/90 border-slate-200/80 backdrop-blur-xl"
+        )}>
           <CardHeader>
-            <CardTitle className="text-white text-lg flex items-center gap-2">
-              <Building2 className="w-5 h-5 text-orange-400" />
+            <CardTitle className={cn("text-lg flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
+              <div className={cn("p-1.5 rounded-lg", isDark ? "bg-orange-500/10" : "bg-orange-50")}>
+                <Building2 className={cn("w-4 h-4", isDark ? "text-orange-400" : "text-orange-600")} />
+              </div>
               Atendimentos por Entidade
             </CardTitle>
           </CardHeader>
           <CardContent style={{ height: `${Math.max(150, atendimentosPorEntidade.length * 50 + 40)}px` }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={atendimentosPorEntidade} layout="vertical" margin={{ left: 10, right: 50 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#165A8A" />
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke={isDark ? "#165A8A" : "#e5e7eb"} />
                 <XAxis type="number" stroke="#6b7280" fontSize={11} />
                 <YAxis
                   type="category"
@@ -911,7 +888,7 @@ export default function OverviewPage() {
                   width={100}
                   stroke="#9ca3af"
                   fontSize={11}
-                  tick={{ fill: '#9ca3af' }}
+                  tick={{ fill: isDark ? '#9ca3af' : '#6b7280' }}
                 />
                 <RechartsTooltip
                   {...TOOLTIP_STYLE}
@@ -930,12 +907,17 @@ export default function OverviewPage() {
 
         {/* Atendimentos por PF e PJ — Ariana e Master */}
         {(isArianaUser() || user?.nivel_acesso === "master") && (
-        <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
+        <Card className={cn(
+          "shadow-lg rounded-2xl overflow-hidden card-premium",
+          isDark ? "bg-[#0C2135]/90 border-[#1E3A5F]/60 backdrop-blur-xl" : "bg-white/90 border-slate-200/80 backdrop-blur-xl"
+        )}>
           <CardHeader>
-            <CardTitle className="text-white text-lg flex items-center gap-2">
-              <Users className="w-5 h-5 text-emerald-400" />
+            <CardTitle className={cn("text-lg flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
+              <div className={cn("p-1.5 rounded-lg", isDark ? "bg-emerald-500/10" : "bg-emerald-50")}>
+                <Users className={cn("w-4 h-4", isDark ? "text-emerald-400" : "text-emerald-600")} />
+              </div>
               Atendimentos por PF e PJ
-              <span className="text-xs text-gray-400 font-normal ml-2">Clique para detalhes</span>
+              <span className={cn("text-[10px] font-medium uppercase tracking-wider ml-2", isDark ? "text-gray-500" : "text-gray-400")}>Clique para detalhes</span>
             </CardTitle>
           </CardHeader>
           <CardContent className="h-[200px]">
@@ -952,7 +934,7 @@ export default function OverviewPage() {
                 }}
                 style={{ cursor: 'pointer' }}
               >
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#165A8A" />
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke={isDark ? "#165A8A" : "#e5e7eb"} />
                 <XAxis type="number" stroke="#6b7280" fontSize={11} />
                 <YAxis
                   type="category"
@@ -982,12 +964,17 @@ export default function OverviewPage() {
       </div>
 
       {/* Qtd de Opções Selecionadas — Top 10 — Full width */}
-      <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
+      <Card className={cn(
+        "shadow-lg rounded-2xl overflow-hidden card-premium",
+        isDark ? "bg-[#0C2135]/90 border-[#1E3A5F]/60 backdrop-blur-xl" : "bg-white/90 border-slate-200/80 backdrop-blur-xl"
+      )}>
         <CardHeader>
-          <CardTitle className="text-white text-lg flex items-center gap-2">
-            <MessageSquare className="w-5 h-5 text-cyan-400" />
+          <CardTitle className={cn("text-lg flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
+            <div className={cn("p-1.5 rounded-lg", isDark ? "bg-cyan-500/10" : "bg-cyan-50")}>
+              <MessageSquare className={cn("w-4 h-4", isDark ? "text-cyan-400" : "text-cyan-600")} />
+            </div>
             Qtd de Opções Selecionadas
-            <span className="text-xs text-gray-400 font-normal ml-2">Top 10</span>
+            <span className={cn("text-[10px] font-medium uppercase tracking-wider ml-2 px-2 py-0.5 rounded-full", isDark ? "bg-cyan-500/10 text-cyan-400" : "bg-cyan-50 text-cyan-600")}>Top 10</span>
           </CardTitle>
         </CardHeader>
         <CardContent style={{ height: `${Math.max(200, opcoesSelecionadasCompletas.length * 42 + 40)}px` }}>
@@ -1004,7 +991,7 @@ export default function OverviewPage() {
               }}
               style={{ cursor: 'pointer' }}
             >
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#165A8A" />
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke={isDark ? "#165A8A" : "#e5e7eb"} />
               <XAxis type="number" stroke="#6b7280" fontSize={11} />
               <YAxis
                 type="category"
@@ -1012,7 +999,7 @@ export default function OverviewPage() {
                 width={260}
                 stroke="#9ca3af"
                 fontSize={11}
-                tick={{ fill: '#9ca3af' }}
+                tick={{ fill: isDark ? '#9ca3af' : '#6b7280' }}
               />
               <RechartsTooltip
                 {...TOOLTIP_STYLE}
@@ -1029,58 +1016,20 @@ export default function OverviewPage() {
         </CardContent>
       </Card>
 
-      {/* Qtd de Atendimentos por Patrocinados — Top 10 — Ariana e Master */}
-      {(isArianaUser() || user?.nivel_acesso === "master") && (
-      <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
-        <CardHeader>
-          <CardTitle className="text-white text-lg flex items-center gap-2">
-            <Users className="w-5 h-5 text-purple-400" />
-            Qtd de Atendimentos por Patrocinados
-            <span className="text-xs text-gray-400 font-normal ml-2">Top 10</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent style={{ height: `${Math.max(200, patrocinadosData.length * 42 + 40)}px` }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={patrocinadosData}
-              layout="vertical"
-              margin={{ left: 10, right: 60 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#165A8A" />
-              <XAxis type="number" stroke="#6b7280" fontSize={11} />
-              <YAxis
-                type="category"
-                dataKey="nome"
-                width={260}
-                stroke="#9ca3af"
-                fontSize={11}
-                tick={{ fill: '#9ca3af' }}
-              />
-              <RechartsTooltip
-                {...TOOLTIP_STYLE}
-                formatter={(value: number) => [value, "Atendimentos"]}
-              />
-              <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={28}>
-                {patrocinadosData.map((_, index) => (
-                  <Cell key={`patrocinado-${index}`} fill={COLORS[(index + 10) % COLORS.length]} />
-                ))}
-                <LabelList dataKey="total" position="right" fill="#94a3b8" fontSize={11} formatter={(v: number) => v.toLocaleString("pt-BR")} offset={8} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
-      )}
-
       {/* Top Assuntos — Tag Chips + Destaques */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
-        <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5">
+        <Card className={cn(
+          "shadow-lg rounded-2xl overflow-hidden card-premium",
+          isDark ? "bg-[#0C2135]/90 border-[#1E3A5F]/60 backdrop-blur-xl" : "bg-white/90 border-slate-200/80 backdrop-blur-xl"
+        )}>
           <CardHeader className="pb-1">
-            <CardTitle className="text-white text-lg flex items-center gap-2">
-              <Cloud className="w-5 h-5 text-purple-400" />
+            <CardTitle className={cn("text-lg flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
+              <div className={cn("p-1.5 rounded-lg", isDark ? "bg-purple-500/10" : "bg-purple-50")}>
+                <Cloud className={cn("w-4 h-4", isDark ? "text-purple-400" : "text-purple-600")} />
+              </div>
               Top Assuntos
             </CardTitle>
-            <p className="text-xs text-gray-400 mt-1">Resumo visual dos principais temas recorrentes no período.</p>
+            <p className={cn("text-xs mt-1", isDark ? "text-gray-500" : "text-gray-400")}>Resumo visual dos principais temas recorrentes no período.</p>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2.5 py-4">
@@ -1112,28 +1061,34 @@ export default function OverviewPage() {
         </Card>
 
         {/* Destaques sidebar */}
-        <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
-          <CardHeader className="pb-2 pt-4 px-4">
-            <CardTitle className="text-white text-sm font-bold">Destaques</CardTitle>
+        <Card className={cn(
+          "shadow-lg rounded-2xl overflow-hidden",
+          isDark ? "bg-[#0C2135]/90 border-[#1E3A5F]/60 backdrop-blur-xl" : "bg-white/90 border-slate-200/80 backdrop-blur-xl"
+        )}>
+          <CardHeader className="pb-2 pt-5 px-5">
+            <CardTitle className={cn("text-sm font-bold flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
+              <div className="w-1 h-4 rounded-full bg-gradient-to-b from-[#009FE3] to-[#0077CC]" />
+              Destaques
+            </CardTitle>
           </CardHeader>
-          <CardContent className="px-4 pb-4 space-y-2.5">
+          <CardContent className="px-5 pb-5 space-y-3">
             {(() => {
               const canalLider = stats.porCanal?.[0];
               const casaLider = atendimentosPorUnidade?.[0];
               return (
                 <>
                   {canalLider && (
-                    <div className="bg-[#081E30] rounded-lg p-3 border border-[#165A8A]/40">
+                    <div className={cn("rounded-lg p-3 border", isDark ? "bg-[#081E30] border-[#165A8A]/40" : "bg-slate-50 border-slate-200")}>
                       <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold">Canal Líder</span>
-                      <p className="text-white font-bold text-sm mt-0.5">{canalLider.nome}</p>
-                      <p className="text-gray-400 text-[10px]">{canalLider.total.toLocaleString("pt-BR")} atendimentos</p>
+                      <p className={cn("font-bold text-sm mt-0.5", isDark ? "text-white" : "text-gray-900")}>{canalLider.nome}</p>
+                      <p className={cn("text-[10px]", isDark ? "text-gray-400" : "text-gray-500")}>{canalLider.total.toLocaleString("pt-BR")} atendimentos</p>
                     </div>
                   )}
                   {casaLider && (
-                    <div className="bg-[#081E30] rounded-lg p-3 border border-[#165A8A]/40">
+                    <div className={cn("rounded-lg p-3 border", isDark ? "bg-[#081E30] border-[#165A8A]/40" : "bg-slate-50 border-slate-200")}>
                       <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold">{isGerente ? "Equipe Líder" : "Unidade Líder"}</span>
-                      <p className="text-white font-bold text-sm mt-0.5">{casaLider.nome}</p>
-                      <p className="text-gray-400 text-[10px]">{casaLider.total.toLocaleString("pt-BR")} atendimentos</p>
+                      <p className={cn("font-bold text-sm mt-0.5", isDark ? "text-white" : "text-gray-900")}>{casaLider.nome}</p>
+                      <p className={cn("text-[10px]", isDark ? "text-gray-400" : "text-gray-500")}>{casaLider.total.toLocaleString("pt-BR")} atendimentos</p>
                     </div>
                   )}
                 </>
@@ -1144,21 +1099,24 @@ export default function OverviewPage() {
       </div>
 
       {/* Recent Calls Table with Tabs + Pagination */}
-      <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg" data-pdf-exclude>
+      <Card className={cn(
+        "shadow-lg rounded-2xl overflow-hidden",
+        isDark ? "bg-[#0C2135]/90 border-[#1E3A5F]/60 backdrop-blur-xl" : "bg-white/90 border-slate-200/80 backdrop-blur-xl"
+      )} data-pdf-exclude>
         <CardHeader className="pb-2">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <CardTitle className="text-white text-lg flex items-center gap-2">
+            <CardTitle className={cn("text-lg flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
               <Filter className="w-5 h-5 text-amber-400" />
               Últimos Atendimentos Finalizados
             </CardTitle>
             <div className="flex items-center gap-3">
               {/* Page Size Selector */}
               <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-400">Exibir:</span>
+                <span className={cn("text-xs", isDark ? "text-gray-400" : "text-gray-500")}>Exibir:</span>
                 <select
                   value={pageSize}
                   onChange={(e) => setPageSize(Number(e.target.value))}
-                  className="bg-[#061726] text-gray-300 text-xs border border-[#165A8A] rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#0047B6]"
+                  className={cn("text-xs border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#0047B6]", isDark ? "bg-[#061726] text-gray-300 border-[#165A8A]" : "bg-white text-gray-700 border-slate-300")}
                 >
                   {PAGE_SIZES.map((size) => (
                     <option key={size} value={size}>{size}</option>
@@ -1174,10 +1132,14 @@ export default function OverviewPage() {
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-3 py-1.5 text-xs rounded-lg transition-all duration-200 font-medium whitespace-nowrap ${activeTab === tab
-                  ? "bg-[#0047B6] text-white shadow-sm"
-                  : "bg-[#061726] text-gray-400 hover:text-white hover:bg-white/10 border border-[#165A8A]"
-                  }`}
+                className={cn(
+                  "px-3 py-1.5 text-xs rounded-lg transition-all duration-200 font-medium whitespace-nowrap",
+                  activeTab === tab
+                    ? "bg-[#0047B6] text-white shadow-sm"
+                    : isDark
+                      ? "bg-[#061726] text-gray-400 hover:text-white hover:bg-white/10 border border-[#165A8A]"
+                      : "bg-slate-100 text-gray-500 hover:text-gray-900 hover:bg-slate-200 border border-slate-200"
+                )}
               >
                 {tab}
               </button>
@@ -1188,36 +1150,32 @@ export default function OverviewPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-[#165A8A]">
-                  <th className="text-left py-3 px-4 text-gray-400 font-medium">Protocolo</th>
-                  <th className="text-left py-3 px-4 text-gray-400 font-medium">Contato</th>
-                  <th className="text-left py-3 px-4 text-gray-400 font-medium">Canal</th>
-                  <th className="text-left py-3 px-4 text-gray-400 font-medium">Início</th>
-                  <th className="text-left py-3 px-4 text-gray-400 font-medium">Fim</th>
-                  <th className="text-left py-3 px-4 text-gray-400 font-medium">Resumo</th>
-                  <th className="text-left py-3 px-4 text-gray-400 font-medium">Equipe</th>
+                <tr className={cn("border-b", isDark ? "border-[#165A8A]" : "border-slate-200")}>
+                  {["Protocolo","Contato","Canal","Início","Fim","Resumo","Equipe"].map(h => (
+                    <th key={h} className={cn("text-left py-3 px-4 font-medium", isDark ? "text-gray-400" : "text-gray-500")}>{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {paginatedData.length > 0 ? (
                   paginatedData.map((item, idx) => (
-                    <tr key={item.id || idx} className="border-b border-[#165A8A]/50 hover:bg-white/5 transition-colors">
-                      <td className="py-3 px-4 text-gray-300 font-mono text-xs">{item.protocolo}</td>
-                      <td className="py-3 px-4 text-gray-300">{item.contato}</td>
+                    <tr key={item.id || idx} className={cn("border-b transition-colors", isDark ? "border-[#165A8A]/50 hover:bg-white/5" : "border-slate-100 hover:bg-slate-50")}>
+                      <td className={cn("py-3 px-4 font-mono text-xs", isDark ? "text-gray-300" : "text-gray-600")}>{item.protocolo}</td>
+                      <td className={cn("py-3 px-4", isDark ? "text-gray-300" : "text-gray-700")}>{item.contato}</td>
                       <td className="py-3 px-4">
-                        <span className="px-2 py-1 rounded-md bg-blue-500/10 text-blue-400 text-xs font-medium">
+                        <span className={cn("px-2 py-1 rounded-md text-xs font-medium", isDark ? "bg-blue-500/10 text-blue-400" : "bg-blue-50 text-blue-600")}>
                           {item.canal}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-gray-400 text-xs">
+                      <td className={cn("py-3 px-4 text-xs", isDark ? "text-gray-400" : "text-gray-500")}>
                         {formatDateTime(item.dataHoraInicio)}
                       </td>
-                      <td className="py-3 px-4 text-gray-400 text-xs">
+                      <td className={cn("py-3 px-4 text-xs", isDark ? "text-gray-400" : "text-gray-500")}>
                         {formatDateTime(item.dataHoraFim)}
                       </td>
-                      <td className="py-3 px-4 text-gray-300 max-w-[200px] truncate">{item.resumoConversa}</td>
+                      <td className={cn("py-3 px-4 max-w-[200px] truncate", isDark ? "text-gray-300" : "text-gray-700")}>{item.resumoConversa}</td>
                       <td className="py-3 px-4">
-                        <span className="px-2 py-1 rounded-md bg-green-500/10 text-green-400 text-xs font-medium">
+                        <span className={cn("px-2 py-1 rounded-md text-xs font-medium", isDark ? "bg-green-500/10 text-green-400" : "bg-green-50 text-green-600")}>
                           {item.casa}
                         </span>
                       </td>
@@ -1236,26 +1194,26 @@ export default function OverviewPage() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-4 pt-4 border-t border-[#165A8A]">
-              <span className="text-xs text-gray-400">
+            <div className={cn("flex items-center justify-between mt-4 pt-4 border-t", isDark ? "border-[#165A8A]" : "border-slate-200")}>
+              <span className={cn("text-xs", isDark ? "text-gray-400" : "text-gray-500")}>
                 Mostrando {((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, totalFiltered)} de {totalFiltered}
               </span>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
-                  className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg bg-[#061726] border border-[#165A8A] text-gray-300 hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  className={cn("flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg border transition-colors disabled:opacity-30 disabled:cursor-not-allowed", isDark ? "bg-[#061726] border-[#165A8A] text-gray-300 hover:bg-white/10" : "bg-white border-slate-200 text-gray-600 hover:bg-slate-50")}
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
                   Anterior
                 </button>
-                <span className="text-xs text-gray-400 px-2">
+                <span className={cn("text-xs px-2", isDark ? "text-gray-400" : "text-gray-500")}>
                   {currentPage} / {totalPages}
                 </span>
                 <button
                   onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages}
-                  className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg bg-[#061726] border border-[#165A8A] text-gray-300 hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  className={cn("flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg border transition-colors disabled:opacity-30 disabled:cursor-not-allowed", isDark ? "bg-[#061726] border-[#165A8A] text-gray-300 hover:bg-white/10" : "bg-white border-slate-200 text-gray-600 hover:bg-slate-50")}
                 >
                   Próximo
                   <ChevronRight className="w-3.5 h-3.5" />
@@ -1269,9 +1227,9 @@ export default function OverviewPage() {
 
       {/* Drilldown Modal for Opções Selecionadas */}
       <Dialog open={drilldownOpcao.open} onOpenChange={(open) => !open && closeDrilldownOpcao()}>
-        <DialogContent className="bg-[#0C2135] border-[#165A8A] text-white max-w-[95vw] w-[1200px] max-h-[85vh] overflow-hidden flex flex-col">
+        <DialogContent className={cn("max-w-[95vw] w-[1200px] max-h-[85vh] overflow-hidden flex flex-col", isDark ? "bg-[#0C2135] border-[#165A8A] text-white" : "bg-white border-slate-200 text-gray-900")}>
           <DialogHeader>
-            <DialogTitle className="text-white text-lg flex items-center gap-2">
+            <DialogTitle className={cn("text-lg flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
               <Filter className="w-5 h-5 text-blue-400" />
               {drilldownOpcao.title}
             </DialogTitle>
@@ -1374,9 +1332,9 @@ export default function OverviewPage() {
 
       {/* PF/PJ Drilldown Dialog */}
       <Dialog open={drilldownPfPj.open} onOpenChange={(open) => { if (!open) closeDrilldownPfPj(); }}>
-        <DialogContent className="max-w-5xl max-h-[85vh] bg-[#0C2135] border-[#165A8A] text-white flex flex-col">
+        <DialogContent className={cn("max-w-5xl max-h-[85vh] flex flex-col", isDark ? "bg-[#0C2135] border-[#165A8A] text-white" : "bg-white border-slate-200 text-gray-900")}>
           <DialogHeader>
-            <DialogTitle className="text-white text-lg flex items-center gap-2">
+            <DialogTitle className={cn("text-lg flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
               <Users className="w-5 h-5 text-emerald-400" />
               {drilldownPfPj.title}
             </DialogTitle>
@@ -1549,33 +1507,3 @@ function formatDateTime(dateStr: string | null): string {
   }
 }
 
-function StatCard({ title, value, icon, color, subtitle }: {
-  title: string;
-  value: string | number;
-  icon: React.ReactNode;
-  color: "red" | "blue" | "green" | "amber";
-  subtitle?: string;
-}) {
-  const colorMap = {
-    red: { bg: "bg-[#009FE3]/10", text: "text-sky-400", border: "border-[#009FE3]/20" },
-    blue: { bg: "bg-[#009FE3]/10", text: "text-sky-400", border: "border-[#009FE3]/20" },
-    green: { bg: "bg-[#00A650]/10", text: "text-emerald-400", border: "border-[#00A650]/20" },
-    amber: { bg: "bg-[#F37021]/10", text: "text-orange-400", border: "border-[#F37021]/20" },
-  };
-  const c = colorMap[color];
-
-  return (
-    <div className={`bg-[#0C2135] rounded-xl p-5 border ${c.border} shadow-lg`}>
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <span className="text-xs text-gray-400 font-medium uppercase tracking-wide">{title}</span>
-          {subtitle && <p className="text-[10px] text-gray-500 mt-0.5">{subtitle}</p>}
-        </div>
-        <div className={`p-2 rounded-lg ${c.bg}`}>
-          <span className={c.text}>{icon}</span>
-        </div>
-      </div>
-      <p className="text-3xl font-bold text-white">{value}</p>
-    </div>
-  );
-}

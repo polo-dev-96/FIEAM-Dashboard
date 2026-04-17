@@ -1018,5 +1018,132 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Dashboard Patrocinados/Campanhas ────────────────────────────
+  // Regras:
+  //   - Só traz registros onde patrocinados tem valor real (NOT NULL, != '', != 'false')
+  //     E variaveis tem valor real (NOT NULL, != '', != 'false')
+  //   - Classificação: variaveis começa com 'PATROCINADO' → Patrocinado,
+  //     começa com 'CAMPANHA' → Campanha, senão → Outros (usa valor de patrocinados)
+  app.get("/api/patrocinados-stats", async (req, res) => {
+    try {
+      const conn = await pool.getConnection();
+      try {
+        const { startDate, endDate, casa } = req.query;
+
+        let dateFilter = "";
+        const dateParams: string[] = [];
+        if (startDate && endDate) {
+          dateFilter = `AND DATE(\`data e hora de fim\`) >= ? AND DATE(\`data e hora de fim\`) <= ?`;
+          dateParams.push(String(startDate), String(endDate));
+        }
+
+        let casaFilter = "";
+        const casaParams: string[] = [];
+        if (casa) {
+          const casaArr = Array.isArray(casa) ? casa.map(String) : [String(casa)];
+          const filtered = casaArr.filter(c => c !== 'Todas');
+          if (filtered.length > 0) {
+            const hasFalta = filtered.includes('Falta de Interação');
+            const realCasas = filtered.filter(c => c !== 'Falta de Interação');
+            const conditions: string[] = [];
+            if (realCasas.length > 0) {
+              conditions.push(`TRIM(casa) IN (${realCasas.map(() => '?').join(',')})`);
+              casaParams.push(...realCasas);
+            }
+            if (hasFalta) {
+              conditions.push(`(TRIM(casa) = '' OR casa IS NULL)`);
+            }
+            casaFilter = `AND (${conditions.join(' OR ')})`;
+          }
+        }
+
+        const filterParams = [...dateParams, ...casaParams];
+
+        // Condição base: ambas colunas com valor real + ignorar dados <= 12/04/2026
+        const baseCondition = `
+          \`data e hora de fim\` IS NOT NULL
+          AND DATE(\`data e hora de fim\`) > '2026-04-12'
+          AND patrocinados IS NOT NULL AND TRIM(patrocinados) != '' AND TRIM(patrocinados) != 'false'
+          AND variaveis IS NOT NULL AND TRIM(variaveis) != '' AND TRIM(variaveis) != 'false'
+        `;
+
+        // Totais por categoria
+        const [totais] = await conn.query<RowDataPacket[]>(`
+          SELECT
+            COUNT(DISTINCT CASE WHEN UPPER(TRIM(variaveis)) LIKE 'PATROCINADO%' THEN protocolo END) AS totalPatrocinados,
+            COUNT(DISTINCT CASE WHEN UPPER(TRIM(variaveis)) LIKE 'CAMPANHA%' THEN protocolo END) AS totalCampanhas,
+            COUNT(DISTINCT CASE
+              WHEN UPPER(TRIM(variaveis)) NOT LIKE 'PATROCINADO%'
+               AND UPPER(TRIM(variaveis)) NOT LIKE 'CAMPANHA%'
+              THEN protocolo END) AS totalOutros
+          FROM \`${TABLE_NAME}\`
+          WHERE ${baseCondition}
+            ${dateFilter}
+            ${casaFilter}
+        `, filterParams);
+
+        // Ranking Patrocinados (agrupado por variaveis)
+        const [rankingPatrocinados] = await conn.query<RowDataPacket[]>(`
+          SELECT
+            TRIM(variaveis) AS nome,
+            COUNT(DISTINCT protocolo) AS total
+          FROM \`${TABLE_NAME}\`
+          WHERE ${baseCondition}
+            AND UPPER(TRIM(variaveis)) LIKE 'PATROCINADO%'
+            ${dateFilter}
+            ${casaFilter}
+          GROUP BY TRIM(variaveis)
+          ORDER BY total DESC
+        `, filterParams);
+
+        // Ranking Campanhas (agrupado por variaveis)
+        const [rankingCampanhas] = await conn.query<RowDataPacket[]>(`
+          SELECT
+            TRIM(variaveis) AS nome,
+            COUNT(DISTINCT protocolo) AS total
+          FROM \`${TABLE_NAME}\`
+          WHERE ${baseCondition}
+            AND UPPER(TRIM(variaveis)) LIKE 'CAMPANHA%'
+            ${dateFilter}
+            ${casaFilter}
+          GROUP BY TRIM(variaveis)
+          ORDER BY total DESC
+        `, filterParams);
+
+        // Ranking Outros (agrupado por patrocinados, já que variaveis não é PATROCINADO nem CAMPANHA)
+        const [rankingOutros] = await conn.query<RowDataPacket[]>(`
+          SELECT
+            TRIM(patrocinados) AS nome,
+            COUNT(DISTINCT protocolo) AS total
+          FROM \`${TABLE_NAME}\`
+          WHERE ${baseCondition}
+            AND UPPER(TRIM(variaveis)) NOT LIKE 'PATROCINADO%'
+            AND UPPER(TRIM(variaveis)) NOT LIKE 'CAMPANHA%'
+            ${dateFilter}
+            ${casaFilter}
+          GROUP BY TRIM(patrocinados)
+          ORDER BY total DESC
+        `, filterParams);
+
+        conn.release();
+
+        res.json({
+          totalPatrocinados: totais[0]?.totalPatrocinados || 0,
+          totalCampanhas: totais[0]?.totalCampanhas || 0,
+          totalOutros: totais[0]?.totalOutros || 0,
+          rankingPatrocinados: rankingPatrocinados || [],
+          rankingCampanhas: rankingCampanhas || [],
+          rankingOutros: rankingOutros || [],
+        });
+      } catch (queryErr) {
+        conn.release();
+        throw queryErr;
+      }
+    } catch (error) {
+      console.error("Erro ao buscar stats patrocinados:", error);
+      res.status(500).json({ message: "Erro ao buscar estatísticas de patrocinados" });
+    }
+  });
+
   return httpServer;
 }

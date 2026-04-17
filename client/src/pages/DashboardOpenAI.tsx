@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { format, startOfMonth, subMonths } from "date-fns";
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useTheme } from "@/lib/ThemeContext";
+import { cn } from "@/lib/utils";
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -60,6 +62,7 @@ function getDefaultDates() {
 
 export default function DashboardOpenAIPage() {
   const contentRef = useRef<HTMLDivElement>(null);
+  const { isDark } = useTheme();
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [countdown, setCountdown] = useState(60);
 
@@ -210,9 +213,11 @@ export default function DashboardOpenAIPage() {
   if (isLoading || loadingCambio) {
     return (
       <Layout title="Dashboard - OpenAI" subtitle="Monitoramento de custos OpenAI">
-        <div className="flex items-center justify-center h-64 gap-3 text-gray-400">
-          <RefreshCw className="w-5 h-5 animate-spin" />
-          <span>Carregando dados...</span>
+        <div className="flex items-center justify-center h-64">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-10 h-10 border-4 border-[#009FE3]/30 border-t-[#009FE3] rounded-full animate-spin" />
+            <p className={cn("text-sm", isDark ? "text-gray-400" : "text-gray-500")}>Carregando dados...</p>
+          </div>
         </div>
       </Layout>
     );
@@ -220,16 +225,26 @@ export default function DashboardOpenAIPage() {
 
   return (
     <Layout title="Dashboard - OpenAI" subtitle="Monitoramento de custos OpenAI">
-      {/* Filters */}
-      <div className="rounded-2xl border border-gray-200 dark:border-[#165A8A]/30 overflow-hidden shadow-sm bg-white dark:bg-[#0C2135]">
+      {/* Filters — Premium Glass */}
+      <div className={cn(
+        "rounded-2xl border overflow-hidden animate-fade-up",
+        isDark
+          ? "border-[#1E3A5F]/60 bg-[#0C2135]/90 backdrop-blur-xl shadow-lg shadow-black/20"
+          : "border-slate-200/80 bg-white/90 backdrop-blur-xl shadow-lg shadow-black/5"
+      )}>
         {/* Filter Header */}
-        <div className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-gray-50 to-white dark:from-[#0a1929] dark:to-[#0C2135] border-b border-gray-200 dark:border-[#165A8A]/30">
-          <Brain className="w-4 h-4 text-[#009FE3]" />
-          <span className="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-200">Filtros</span>
+        <div className={cn(
+          "flex items-center gap-2 px-5 py-3 border-b",
+          isDark ? "border-[#1E3A5F]/40 bg-[#081E30]/60" : "border-slate-100 bg-slate-50/80"
+        )}>
+          <div className={cn("p-1.5 rounded-lg", isDark ? "bg-purple-500/10" : "bg-purple-50")}>
+            <Brain className={cn("w-3.5 h-3.5", isDark ? "text-purple-400" : "text-purple-600")} />
+          </div>
+          <span className={cn("text-xs font-bold uppercase tracking-wider", isDark ? "text-gray-200" : "text-gray-700")}>Filtros</span>
           <div className="ml-auto flex items-center gap-2 text-[10px] text-gray-400">
-            <span>Atualizado {format(lastUpdated, "HH:mm:ss")}</span>
-            <span className="text-gray-300 dark:text-gray-600">•</span>
-            <span>{countdown}s</span>
+            <span className={cn("font-medium", isDark ? "text-gray-500" : "text-gray-400")}>Atualizado {format(lastUpdated, "HH:mm:ss")}</span>
+            <span className={cn(isDark ? "text-gray-600" : "text-gray-300")}>•</span>
+            <span className={cn("font-medium", isDark ? "text-gray-500" : "text-gray-400")}>{countdown}s</span>
           </div>
         </div>
 
@@ -238,7 +253,7 @@ export default function DashboardOpenAIPage() {
           <div className="flex flex-col lg:flex-row gap-5">
             {/* Group 1: Unidade (Project) */}
             <div className="flex flex-col gap-1.5 min-w-[200px]">
-              <label className="text-[10px] uppercase tracking-wider text-gray-600 dark:text-gray-500 font-bold flex items-center gap-1.5">
+              <label className="text-[10px] uppercase tracking-wider font-bold flex items-center gap-1.5">
                 <Building2 className="w-3 h-3" />
                 Unidade
               </label>
@@ -252,11 +267,11 @@ export default function DashboardOpenAIPage() {
             </div>
 
             {/* Divider */}
-            <div className="hidden lg:block w-px bg-gray-200 dark:bg-[#165A8A]/30" />
+            <div className={cn("hidden lg:block w-px", isDark ? "bg-[#165A8A]/30" : "bg-slate-200")} />
 
             {/* Group 2: Period */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] uppercase tracking-wider text-gray-600 dark:text-gray-500 font-bold flex items-center gap-1.5">
+              <label className="text-[10px] uppercase tracking-wider font-bold flex items-center gap-1.5">
                 <CalendarRange className="w-3 h-3" />
                 Período
               </label>
@@ -268,11 +283,11 @@ export default function DashboardOpenAIPage() {
             </div>
 
             {/* Divider */}
-            <div className="hidden lg:block w-px bg-gray-200 dark:bg-[#165A8A]/30" />
+            <div className={cn("hidden lg:block w-px", isDark ? "bg-[#165A8A]/30" : "bg-slate-200")} />
 
             {/* Group 3: Moeda */}
             <div className="flex flex-col gap-1.5 min-w-[140px]">
-              <label className="text-[10px] uppercase tracking-wider text-gray-600 dark:text-gray-500 font-bold flex items-center gap-1.5">
+              <label className="text-[10px] uppercase tracking-wider font-bold flex items-center gap-1.5">
                 <DollarSign className="w-3 h-3" />
                 Moeda
               </label>
@@ -290,18 +305,18 @@ export default function DashboardOpenAIPage() {
                 ]}
               />
               {moeda === "BRL" && taxaCambio && (
-                <span className="text-[9px] text-gray-400 dark:text-gray-500">
+                <span className={cn("text-[9px]", isDark ? "text-gray-500" : "text-gray-400")}>
                   Câmbio: 1 USD = {taxaCambio.toFixed(2)} BRL
                 </span>
               )}
             </div>
 
             {/* Divider */}
-            <div className="hidden lg:block w-px bg-gray-200 dark:bg-[#165A8A]/30" />
+            <div className={cn("hidden lg:block w-px", isDark ? "bg-[#165A8A]/30" : "bg-slate-200")} />
 
             {/* Group 4: Actions */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] uppercase tracking-wider text-gray-600 dark:text-gray-500 font-bold flex items-center gap-1.5">
+              <label className="text-[10px] uppercase tracking-wider font-bold flex items-center gap-1.5">
                 <Settings2 className="w-3 h-3" />
                 Ações
               </label>
@@ -309,7 +324,12 @@ export default function DashboardOpenAIPage() {
                 <button
                   onClick={handleExportXLSX}
                   disabled={exporting}
-                  className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold bg-white dark:bg-[#060e1a]/80 border border-gray-200 dark:border-[#1a3a5c]/80 rounded-xl text-gray-700 dark:text-gray-300 hover:border-[#009FE3]/40 hover:text-[#009FE3] dark:hover:text-white transition-all duration-300 disabled:opacity-50"
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2.5 text-xs font-bold border rounded-xl transition-all duration-300 disabled:opacity-50",
+                    isDark
+                      ? "bg-[#060e1a]/80 border-[#1a3a5c]/80 text-gray-300 hover:border-[#009FE3]/40 hover:text-white"
+                      : "bg-white border-gray-200 text-gray-700 hover:border-[#009FE3]/40 hover:text-[#009FE3]"
+                  )}
                   title="Exportar Excel"
                 >
                   {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
@@ -317,7 +337,12 @@ export default function DashboardOpenAIPage() {
                 </button>
                 <button
                   onClick={handleManualRefresh}
-                  className="flex items-center justify-center gap-2 px-3 py-2.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-[#060e1a]/80 border border-gray-200 dark:border-[#1a3a5c]/80 rounded-xl hover:border-[#009FE3]/40 hover:bg-white dark:hover:bg-[#0a1929] hover:text-[#009FE3] dark:hover:text-white transition-all duration-300"
+                  className={cn(
+                    "flex items-center justify-center gap-2 px-3 py-2.5 text-xs font-medium border rounded-xl transition-all duration-300",
+                    isDark
+                      ? "text-gray-300 bg-[#060e1a]/80 border-[#1a3a5c]/80 hover:border-[#009FE3]/40 hover:bg-[#0a1929] hover:text-white"
+                      : "text-gray-600 bg-gray-100 border-gray-200 hover:border-[#009FE3]/40 hover:bg-white hover:text-[#009FE3]"
+                  )}
                   title="Atualizar dados"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
@@ -328,8 +353,8 @@ export default function DashboardOpenAIPage() {
 
           {/* Active Filters Summary */}
           {selectedProjects.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-[#165A8A]/20 flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] text-gray-600 dark:text-gray-500 uppercase tracking-wider">Filtros ativos:</span>
+            <div className={cn("mt-4 pt-4 border-t flex items-center gap-2 flex-wrap", isDark ? "border-[#165A8A]/20" : "border-slate-200")}>
+              <span className={cn("text-[10px] uppercase tracking-wider", isDark ? "text-gray-500" : "text-gray-600")}>Filtros ativos:</span>
               {selectedProjects.map(proj => (
                 <span key={proj} className="px-2 py-1 bg-[#009FE3]/10 text-[#009FE3] text-[10px] font-medium rounded-md border border-[#009FE3]/20">
                   {proj}
@@ -347,8 +372,8 @@ export default function DashboardOpenAIPage() {
       </div>
 
       <div ref={contentRef} className="space-y-6">
-        {/* Stats Card */}
-        <div className="grid grid-cols-1 gap-4 max-w-md mx-auto">
+        {/* Stats Card — Premium */}
+        <div className="grid grid-cols-1 gap-5 max-w-md mx-auto">
           <StatCard
             title="Valor Total no Período"
             value={`${simbolo} ${fmtValue(totalValueConverted)}`}
@@ -358,10 +383,15 @@ export default function DashboardOpenAIPage() {
         </div>
 
         {/* Timeline Chart - Volume de Gastos por dia */}
-        <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
+        <Card className={cn(
+          "shadow-lg rounded-2xl overflow-hidden animate-fade-up-2 card-premium",
+          isDark ? "bg-[#0C2135]/90 border-[#1E3A5F]/60 backdrop-blur-xl" : "bg-white/90 border-slate-200/80 backdrop-blur-xl"
+        )}>
           <CardHeader>
-            <CardTitle className="text-white text-lg flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-blue-400" />
+            <CardTitle className={cn("text-lg flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
+              <div className={cn("p-1.5 rounded-lg", isDark ? "bg-blue-500/10" : "bg-blue-50")}>
+                <TrendingUp className={cn("w-4 h-4", isDark ? "text-blue-400" : "text-blue-600")} />
+              </div>
               Volume de Gastos por Dia
             </CardTitle>
           </CardHeader>
@@ -374,7 +404,7 @@ export default function DashboardOpenAIPage() {
                     <stop offset="95%" stopColor="#009FE3" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#165A8A" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? "#165A8A" : "#e5e7eb"} />
                 <XAxis
                   dataKey="data"
                   tickFormatter={(val) => {
@@ -410,9 +440,9 @@ export default function DashboardOpenAIPage() {
 
         {/* PDF-only: Daily Volume Table */}
         <div data-pdf-only style={{ display: "none" }}>
-          <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
+          <Card className={cn("shadow-lg", isDark ? "bg-[#0C2135] border-[#165A8A]" : "bg-white border-slate-200")}>
             <CardHeader className="pb-2">
-              <CardTitle className="text-white text-base flex items-center gap-2">
+              <CardTitle className={cn("text-base flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
                 <DollarSign className="w-4 h-4 text-blue-400" />
                 Volume Diário de Gastos
               </CardTitle>
@@ -458,10 +488,15 @@ export default function DashboardOpenAIPage() {
         </div>
 
         {/* Valores por Unidade (project_name) */}
-        <Card className="bg-[#0C2135] border-[#165A8A] shadow-lg">
+        <Card className={cn(
+          "shadow-lg rounded-2xl overflow-hidden animate-fade-up-3 card-premium",
+          isDark ? "bg-[#0C2135]/90 border-[#1E3A5F]/60 backdrop-blur-xl" : "bg-white/90 border-slate-200/80 backdrop-blur-xl"
+        )}>
           <CardHeader>
-            <CardTitle className="text-white text-lg flex items-center gap-2">
-              <Building2 className="w-5 h-5 text-blue-400" />
+            <CardTitle className={cn("text-lg flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
+              <div className={cn("p-1.5 rounded-lg", isDark ? "bg-emerald-500/10" : "bg-emerald-50")}>
+                <Building2 className={cn("w-4 h-4", isDark ? "text-emerald-400" : "text-emerald-600")} />
+              </div>
               Valores por Unidade
             </CardTitle>
           </CardHeader>
@@ -477,7 +512,7 @@ export default function DashboardOpenAIPage() {
                   layout="vertical"
                   margin={{ left: 10, right: 80 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#165A8A" />
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke={isDark ? "#165A8A" : "#e5e7eb"} />
                   <XAxis
                     type="number"
                     stroke="#6b7280"
@@ -490,7 +525,7 @@ export default function DashboardOpenAIPage() {
                     width={160}
                     stroke="#9ca3af"
                     fontSize={11}
-                    tick={{ fill: '#9ca3af' }}
+                    tick={{ fill: isDark ? '#9ca3af' : '#6b7280' }}
                   />
                   <RechartsTooltip
                     {...TOOLTIP_STYLE}
@@ -527,26 +562,54 @@ function StatCard({ title, value, icon, color, subtitle }: {
   color: "red" | "blue" | "green" | "amber";
   subtitle?: string;
 }) {
+  const { isDark } = useTheme();
   const colorMap = {
-    red: { bg: "bg-[#009FE3]/10", text: "text-sky-400", border: "border-[#009FE3]/20" },
-    blue: { bg: "bg-[#009FE3]/10", text: "text-sky-400", border: "border-[#009FE3]/20" },
-    green: { bg: "bg-[#00A650]/10", text: "text-emerald-400", border: "border-[#00A650]/20" },
-    amber: { bg: "bg-[#F37021]/10", text: "text-orange-400", border: "border-[#F37021]/20" },
+    red: {
+      gradient: "from-[#009FE3] to-[#0077CC]",
+      bg: "bg-[#009FE3]/10", text: "text-sky-400", border: "border-[#009FE3]/20",
+      bgLight: "bg-blue-50", textLight: "text-blue-600", borderLight: "border-blue-200/80",
+      shadow: "hover:shadow-[0_8px_32px_rgba(0,159,227,0.12)]",
+    },
+    blue: {
+      gradient: "from-[#009FE3] to-[#0077CC]",
+      bg: "bg-[#009FE3]/10", text: "text-sky-400", border: "border-[#009FE3]/20",
+      bgLight: "bg-blue-50", textLight: "text-blue-600", borderLight: "border-blue-200/80",
+      shadow: "hover:shadow-[0_8px_32px_rgba(0,159,227,0.12)]",
+    },
+    green: {
+      gradient: "from-[#00A650] to-[#008040]",
+      bg: "bg-[#00A650]/10", text: "text-emerald-400", border: "border-[#00A650]/20",
+      bgLight: "bg-emerald-50", textLight: "text-emerald-600", borderLight: "border-emerald-200/80",
+      shadow: "hover:shadow-[0_8px_32px_rgba(0,166,80,0.12)]",
+    },
+    amber: {
+      gradient: "from-[#F37021] to-[#E05A10]",
+      bg: "bg-[#F37021]/10", text: "text-orange-400", border: "border-[#F37021]/20",
+      bgLight: "bg-orange-50", textLight: "text-orange-600", borderLight: "border-orange-200/80",
+      shadow: "hover:shadow-[0_8px_32px_rgba(243,112,33,0.12)]",
+    },
   };
   const c = colorMap[color];
 
   return (
-    <div className={`bg-[#0C2135] rounded-xl p-5 border ${c.border} shadow-lg`}>
+    <div className={cn(
+      "relative rounded-2xl p-5 border shadow-lg card-premium overflow-hidden animate-fade-up",
+      isDark
+        ? `bg-[#0C2135]/90 ${c.border} backdrop-blur-xl ${c.shadow}`
+        : `bg-white/90 ${c.borderLight} backdrop-blur-xl ${c.shadow}`
+    )}>
+      {/* Gradient left accent */}
+      <div className={cn("absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl bg-gradient-to-b", c.gradient)} />
       <div className="flex items-center justify-between mb-3">
         <div>
-          <span className="text-xs text-gray-400 font-medium uppercase tracking-wide">{title}</span>
-          {subtitle && <p className="text-[10px] text-gray-500 mt-0.5">{subtitle}</p>}
+          <span className={cn("text-[11px] font-semibold uppercase tracking-wider", isDark ? "text-gray-400" : "text-gray-500")}>{title}</span>
+          {subtitle && <p className={cn("text-[10px] mt-0.5", isDark ? "text-gray-500" : "text-gray-400")}>{subtitle}</p>}
         </div>
-        <div className={`p-2 rounded-lg ${c.bg}`}>
-          <span className={c.text}>{icon}</span>
+        <div className={cn("p-2.5 rounded-xl", isDark ? c.bg : c.bgLight)}>
+          <span className={isDark ? c.text : c.textLight}>{icon}</span>
         </div>
       </div>
-      <p className="text-3xl font-bold text-white">{value}</p>
+      <p className={cn("text-3xl font-bold font-display number-display", isDark ? "text-white" : "text-gray-900")}>{value}</p>
     </div>
   );
 }

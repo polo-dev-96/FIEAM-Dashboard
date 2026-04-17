@@ -1,0 +1,452 @@
+import { Link, useLocation } from "wouter";
+import {
+  LayoutDashboard,
+  Search,
+  Phone,
+  CalendarRange,
+  Menu,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  LogOut,
+  Sun,
+  Moon,
+  Brain,
+  Users,
+  Activity
+} from "lucide-react";
+import { useState } from "react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { useSidebar } from "./SidebarContext";
+import { useAuth } from "@/lib/AuthContext";
+import { useTheme } from "@/lib/ThemeContext";
+
+const navItems = [
+  { href: "/", label: "Visão Geral", icon: LayoutDashboard, category: "principal" },
+  { href: "/protocolo", label: "Pesquisar Protocolo", icon: Search, category: "pesquisa" },
+  { href: "/telefone", label: "Pesquisar Telefone", icon: Phone, category: "pesquisa" },
+  { href: "/anual", label: "Dashboard SAC", icon: CalendarRange, category: "analytics" },
+  { href: "/openai", label: "Dashboard OpenAI", icon: Brain, category: "analytics" },
+  { href: "/patrocinados", label: "Dashboard Patrocinados", icon: Users, category: "analytics" },
+];
+
+export function Sidebar() {
+  const [location] = useLocation();
+  const [isOpen, setIsOpen] = useState(false);
+  const { collapsed, toggle } = useSidebar();
+  const { logout, canAccess } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
+
+  return (
+    <>
+      {/* Mobile Toggle */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="fixed top-4 left-4 z-50 md:hidden text-white"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        {isOpen ? <X /> : <Menu />}
+      </Button>
+
+      {/* ═══════════════════════════════════════════════════════════════
+         SIDEBAR PREMIUM - NAVEGAÇÃO INSTITUCIONAL
+         ═══════════════════════════════════════════════════════════════ */}
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-40 transition-all duration-500 ease-out md:translate-x-0",
+          collapsed ? "w-[72px]" : "w-[280px]"
+        )}
+        style={{
+          background: isDark 
+            ? 'linear-gradient(180deg, #0A1929 0%, #071626 100%)' 
+            : 'linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)',
+          borderRight: `1px solid ${isDark ? 'rgba(0, 159, 227, .12)' : 'rgba(226, 232, 240, 0.8)'}`,
+          boxShadow: isDark 
+            ? '4px 0 32px rgba(0, 0, 0, 0.4)' 
+            : '4px 0 32px rgba(0, 0, 0, 0.06)',
+        }}
+      >
+        <div className="flex flex-col h-full">
+          {/* ─── LOGO AREA ─── */}
+          <div 
+            className="px-5 py-6"
+            style={{ 
+              borderBottom: `1px solid ${isDark ? 'rgba(0, 159, 227, .10)' : 'rgba(226, 232, 240, 0.6)'}' 
+            }}
+          >
+            <div className="flex items-center gap-3">
+              <div 
+                className="w-11 h-11 flex-shrink-0 rounded-xl flex items-center justify-center"
+                style={{ 
+                  background: isDark ? 'rgba(0, 159, 227, .10)' : 'rgba(0, 159, 227, .08)',
+                  border: isDark ? '1px solid rgba(0, 159, 227, 0.2)' : '1px solid rgba(0, 159, 227, 0.16)',
+                }}
+              >
+                <img src="/Icone_Logo.png" alt="Logo" className="w-7 h-7 object-contain" />
+              </div>
+              {!collapsed && (
+                <div className="overflow-hidden">
+                  <h1 
+                    className="text-lg font-bold tracking-tight"
+                    style={{ 
+                      fontFamily: 'var(--font-display)',
+                      color: isDark ? 'rgba(255,255,255,0.9)' : '#0F172A'
+                    }}
+                  >
+                    FIEAM
+                  </h1>
+                  <p 
+                    className="text-[10px] uppercase tracking-[0.12em] font-semibold"
+                    style={{ color: isDark ? 'rgba(0, 159, 227, .60)' : '#64748B' }}
+                  >
+                    Sistema Indústria
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ─── NAVIGATION ─── */}
+          <nav className={cn("flex-1 overflow-y-auto py-4", collapsed ? "px-2" : "px-3")}>
+            {/* Categoria: Principal */}
+            {!collapsed && (
+              <div className="px-3 mb-2">
+                <span 
+                  className="text-[10px] font-semibold uppercase tracking-[0.14em]"
+                  style={{ color: isDark ? 'rgba(255,255,255,.35)' : '#94A3B8' }}
+                >
+                  Principal
+                </span>
+              </div>
+            )}
+            
+            {navItems
+              .filter((item) => canAccess(item.href) && item.category === "principal")
+              .map((item) => {
+                const isActive = location === item.href;
+                return (
+                  <NavItem 
+                    key={item.href}
+                    item={item}
+                    isActive={isActive}
+                    isDark={isDark}
+                    collapsed={collapsed}
+                    onClick={() => setIsOpen(false)}
+                  />
+                );
+              })}
+
+            {/* Categoria: Pesquisa */}
+            {!collapsed && (
+              <div className="px-3 mt-5 mb-2">
+                <span 
+                  className="text-[10px] font-semibold uppercase tracking-[0.14em]"
+                  style={{ color: isDark ? 'rgba(255,255,255,.35)' : '#94A3B8' }}
+                >
+                  Pesquisa
+                </span>
+              </div>
+            )}
+            
+            {collapsed && <div className="h-4" />}
+            
+            {navItems
+              .filter((item) => canAccess(item.href) && item.category === "pesquisa")
+              .map((item) => {
+                const isActive = location === item.href;
+                return (
+                  <NavItem 
+                    key={item.href}
+                    item={item}
+                    isActive={isActive}
+                    isDark={isDark}
+                    collapsed={collapsed}
+                    onClick={() => setIsOpen(false)}
+                  />
+                );
+              })}
+
+            {/* Categoria: Analytics */}
+            {!collapsed && (
+              <div className="px-3 mt-5 mb-2">
+                <span 
+                  className="text-[10px] font-semibold uppercase tracking-[0.14em]"
+                  style={{ color: isDark ? 'rgba(255,255,255,.35)' : '#94A3B8' }}
+                >
+                  Analytics
+                </span>
+              </div>
+            )}
+            
+            {collapsed && <div className="h-4" />}
+            
+            {navItems
+              .filter((item) => canAccess(item.href) && item.category === "analytics")
+              .map((item) => {
+                const isActive = location === item.href;
+                return (
+                  <NavItem 
+                    key={item.href}
+                    item={item}
+                    isActive={isActive}
+                    isDark={isDark}
+                    collapsed={collapsed}
+                    onClick={() => setIsOpen(false)}
+                  />
+                );
+              })}
+          </nav>
+
+          {/* ─── CONTROLS SECTION ─── */}
+          <div 
+            className={cn("p-3", collapsed ? "px-2" : "px-3")}
+            style={{ 
+              borderTop: `1px solid ${isDark ? 'rgba(0, 159, 227, .10)' : 'rgba(226, 232, 240, 0.6)'}` 
+            }}
+          >
+            {/* Theme Toggle */}
+            <button
+              onClick={toggleTheme}
+              className={cn(
+                "flex items-center gap-3 rounded-xl transition-all duration-300 w-full group",
+                collapsed ? "justify-center px-2 py-2" : "px-3 py-2.5"
+              )}
+              style={{
+                color: isDark ? 'rgba(255,255,255,.50)' : '#64748B',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = isDark ? 'rgba(255,255,255,.05)' : 'rgba(241, 245, 249, 0.8)';
+                e.currentTarget.style.color = isDark ? '#F5B700' : '#D97706';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = isDark ? 'rgba(255,255,255,.50)' : '#64748B';
+              }}
+              title={collapsed ? (isDark ? "Modo Claro" : "Modo Escuro") : undefined}
+            >
+              <div 
+                className="flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0 transition-colors"
+                style={{
+                  background: isDark ? 'rgba(245, 183, 0, 0.08)' : 'rgba(217, 119, 6, 0.08)',
+                }}
+              >
+                {isDark
+                  ? <Sun className="w-[18px] h-[18px]" />
+                  : <Moon className="w-[18px] h-[18px]" />}
+              </div>
+              {!collapsed && (
+                <span className="text-[13px] font-medium">
+                  {isDark ? "Modo Claro" : "Modo Escuro"}
+                </span>
+              )}
+            </button>
+
+            {/* Logout */}
+            <button
+              onClick={logout}
+              className={cn(
+                "flex items-center gap-3 mt-1 rounded-xl transition-all duration-300 w-full group",
+                collapsed ? "justify-center px-2 py-2" : "px-3 py-2.5"
+              )}
+              style={{
+                color: isDark ? 'rgba(255,255,255,.50)' : '#64748B',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = isDark ? 'rgba(232, 93, 117, .10)' : 'rgba(254, 226, 226, 0.8)';
+                e.currentTarget.style.color = isDark ? '#E85D75' : '#DC2626';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = isDark ? 'rgba(255,255,255,.50)' : '#64748B';
+              }}
+              title={collapsed ? "Sair" : undefined}
+            >
+              <div 
+                className="flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0 transition-colors"
+                style={{
+                  background: isDark ? 'rgba(232, 93, 117, 0.08)' : 'rgba(220, 38, 38, 0.06)',
+                }}
+              >
+                <LogOut className="w-[18px] h-[18px]" />
+              </div>
+              {!collapsed && <span className="text-[13px] font-medium">Sair</span>}
+            </button>
+
+            {/* Collapse Toggle (desktop only) */}
+            <div className="hidden md:flex justify-center mt-3">
+              <button
+                onClick={toggle}
+                className="flex items-center justify-center w-7 h-7 rounded-lg transition-all duration-200"
+                style={{
+                  background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(241, 245, 249, 0.8)',
+                  color: isDark ? 'rgba(255,255,255,.40)' : '#94A3B8',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(226, 232, 240, 0.8)';
+                  e.currentTarget.style.color = isDark ? 'rgba(255,255,255,.70)' : '#64748B';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(241, 245, 249, 0.8)';
+                  e.currentTarget.style.color = isDark ? 'rgba(255,255,255,.40)' : '#94A3B8';
+                }}
+                title={collapsed ? "Expandir" : "Recolher"}
+              >
+                {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {/* ─── LIVE STATUS FOOTER ─── */}
+          <div 
+            className={cn("p-3", collapsed ? "px-2 pb-4" : "px-3 pb-4")}
+            style={{ 
+              borderTop: `1px solid ${isDark ? 'rgba(0, 159, 227, .08)' : 'rgba(226, 232, 240, 0.4)'}` 
+            }}
+          >
+            <div 
+              className={cn(
+                "flex items-center gap-2.5 rounded-xl",
+                collapsed ? "justify-center px-2 py-2" : "px-3 py-2.5"
+              )}
+              style={{
+                background: isDark ? 'rgba(0, 196, 140, .06)' : 'rgba(0, 196, 140, .05)',
+                border: `1px solid ${isDark ? 'rgba(0, 196, 140, .12)' : 'rgba(0, 196, 140, .15)'}`,
+              }}
+            >
+              <div className="relative flex-shrink-0">
+                <div 
+                  className="w-2 h-2 rounded-full"
+                  style={{ background: '#00C48C' }}
+                />
+                <div 
+                  className="absolute inset-0 w-2 h-2 rounded-full animate-ping"
+                  style={{ background: '#00C48C', opacity: 0.5 }}
+                />
+              </div>
+              {!collapsed && (
+                <p 
+                  className="text-[11px] font-medium"
+                  style={{ color: isDark ? 'rgba(0, 196, 140, 0.85)' : '#059669' }}
+                >
+                  Dados em tempo real
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* Overlay for mobile */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 z-30 md:hidden"
+          style={{ 
+            background: 'rgba(0, 0, 0, 0.6)',
+            backdropFilter: 'blur(4px)'
+          }}
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   NAV ITEM COMPONENT - PREMIUM
+   ═══════════════════════════════════════════════════════════════ */
+function NavItem({ 
+  item, 
+  isActive, 
+  isDark, 
+  collapsed, 
+  onClick 
+}: { 
+  item: typeof navItems[0]; 
+  isActive: boolean; 
+  isDark: boolean; 
+  collapsed: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <Link href={item.href} className="block mb-0.5" onClick={onClick}>
+      <div
+        className={cn(
+          "relative flex items-center gap-3 rounded-xl transition-all duration-300 group",
+          collapsed ? "justify-center px-2 py-2.5" : "px-3 py-2.5"
+        )}
+        style={{
+          background: isActive
+            ? isDark 
+              ? 'linear-gradient(135deg, rgba(0, 159, 227, .15) 0%, rgba(0, 159, 227, .05) 100%)' 
+              : 'linear-gradient(135deg, rgba(0, 159, 227, .10) 0%, rgba(0, 159, 227, .02) 100%)'
+            : 'transparent',
+          border: isActive
+            ? `1px solid ${isDark ? 'rgba(0, 159, 227, .25)' : 'rgba(0, 159, 227, .20)'}' 
+            : '1px solid transparent',
+          color: isActive
+            ? isDark ? '#009FE3' : '#0077CC'
+            : isDark ? 'rgba(255,255,255,.55)' : '#64748B',
+        }}
+        onMouseEnter={(e) => {
+          if (!isActive) {
+            e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(241, 245, 249, 0.8)';
+            e.currentTarget.style.color = isDark ? 'rgba(255,255,255,.85)' : '#334155';
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!isActive) {
+            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.color = isDark ? 'rgba(255,255,255,.55)' : '#64748B';
+          }
+        }}
+        title={collapsed ? item.label : undefined}
+      >
+        {/* Active indicator */}
+        {isActive && (
+          <div 
+            className="absolute left-0 top-1/2 -translate-y-1/2 w-1 rounded-full"
+            style={{ 
+              height: collapsed ? '16px' : '20px',
+              background: '#009FE3',
+              boxShadow: '0 0 8px rgba(0, 159, 227, 0.5)',
+            }}
+          />
+        )}
+        
+        {/* Icon container */}
+        <div 
+          className="flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0 transition-colors"
+          style={{
+            background: isActive
+              ? isDark ? 'rgba(0, 159, 227, .12)' : 'rgba(0, 159, 227, .10)'
+              : isDark ? 'rgba(255,255,255,.03)' : 'rgba(241, 245, 249, 0.5)',
+          }}
+        >
+          <item.icon 
+            className="w-[18px] h-[18px]"
+            style={{
+              color: isActive
+                ? '#009FE3'
+                : isDark ? 'rgba(255,255,255,.50)' : '#94A3B8',
+            }}
+          />
+        </div>
+        
+        {/* Label */}
+        {!collapsed && (
+          <span 
+            className="text-[13px] font-medium"
+            style={{ 
+              fontWeight: isActive ? 600 : 500,
+              letterSpacing: isActive ? '0.01em' : '0',
+            }}
+          >
+            {item.label}
+          </span>
+        )}
+      </div>
+    </Link>
+  );
+}

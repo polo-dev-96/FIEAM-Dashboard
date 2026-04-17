@@ -75,7 +75,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     (route: string) => {
       if (!user) return false;
       const routes = ALLOWED_ROUTES[user.nivel_acesso] || [];
-      return routes.includes(route);
+      if (routes.includes(route)) return true;
+      // Acesso especial: /patrocinados também para Ariana
+      if (route === "/patrocinados" && user.email?.toLowerCase().includes("ariana")) return true;
+      return false;
     },
     [user]
   );
