@@ -1,172 +1,86 @@
-import { useTheme } from "@/lib/ThemeContext";
+import * as React from "react";
 import { cn } from "@/lib/utils";
-import { ReactNode } from "react";
+
+const ICON_ACCENT_MAP = {
+  blue:    { dark: "bg-[#009FE3]/10 text-[#009FE3]", light: "bg-blue-50 text-[#0077CC]" },
+  green:   { dark: "bg-emerald-500/10 text-emerald-400", light: "bg-emerald-50 text-emerald-600" },
+  amber:   { dark: "bg-amber-500/10 text-amber-400", light: "bg-amber-50 text-amber-600" },
+  red:     { dark: "bg-rose-500/10 text-rose-400", light: "bg-rose-50 text-rose-600" },
+  purple:  { dark: "bg-purple-500/10 text-purple-400", light: "bg-purple-50 text-purple-600" },
+  cyan:    { dark: "bg-cyan-500/10 text-cyan-400", light: "bg-cyan-50 text-cyan-600" },
+  orange:  { dark: "bg-orange-500/10 text-orange-400", light: "bg-orange-50 text-orange-600" },
+} as const;
+
+type IconAccent = keyof typeof ICON_ACCENT_MAP;
 
 interface ChartCardProps {
   title: string;
-  subtitle?: string;
-  icon?: ReactNode;
-  children: ReactNode;
-  height?: number | string;
+  icon?: React.ReactNode;
+  iconAccent?: IconAccent;
+  badge?: string;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+  height?: string | number;
   className?: string;
-  headerAction?: ReactNode;
-  color?: "blue" | "green" | "amber" | "red" | "purple" | "default";
+  isDark: boolean;
+  noPadding?: boolean;
 }
-
-const colorMap = {
-  blue: { iconBg: "rgba(0, 159, 227, 0.10)", iconColor: "#009FE3" },
-  green: { iconBg: "rgba(0, 196, 140, 0.10)", iconColor: "#00C48C" },
-  amber: { iconBg: "rgba(245, 183, 0, 0.10)", iconColor: "#F5B700" },
-  red: { iconBg: "rgba(232, 93, 117, 0.10)", iconColor: "#E85D75" },
-  purple: { iconBg: "rgba(139, 92, 246, 0.10)", iconColor: "#8B5CF6" },
-  default: { iconBg: "rgba(255,255,255,0.05)", iconColor: "rgba(255,255,255,0.60)" },
-};
 
 export function ChartCard({
   title,
-  subtitle,
   icon,
+  iconAccent = "blue",
+  badge,
+  actions,
   children,
-  height = 300,
+  height,
   className,
-  headerAction,
-  color = "blue",
+  isDark,
+  noPadding,
 }: ChartCardProps) {
-  const { isDark } = useTheme();
-  const c = colorMap[color];
+  const ia = ICON_ACCENT_MAP[iconAccent];
 
   return (
     <div
       className={cn(
-        "rounded-2xl overflow-hidden transition-all duration-300",
+        "group relative rounded-xl border transition-theme card-hover animate-fade-up overflow-hidden",
+        isDark
+          ? "bg-ds-secondary border-ds-default shadow-ds-card"
+          : "bg-ds-elevated border-ds-default shadow-ds-card",
         className
       )}
-      style={{
-        background: isDark
-          ? "linear-gradient(135deg, rgba(15, 40, 68, 0.95) 0%, rgba(12, 33, 53, 0.98) 100%)"
-          : "linear-gradient(135deg, #FFFFFF 0%, #FAFBFC 100%)",
-        border: `1px solid ${isDark ? "rgba(0, 159, 227, 0.15)" : "rgba(226, 232, 240, 0.8)"}`,
-        boxShadow: isDark
-          ? "0 4px 24px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255,255,255,0.03)"
-          : "0 4px 24px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255,255,255,0.8)",
-      }}
     >
+      {/* Top accent line (subtle, visible on hover) */}
+      <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[var(--ds-accent)]/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
       {/* Header */}
-      <div
-        className="px-6 py-5 flex items-center justify-between"
-        style={{
-          borderBottom: `1px solid ${isDark ? "rgba(0, 159, 227, 0.10)" : "rgba(226, 232, 240, 0.6)"}`,
-        }}
-      >
-        <div className="flex items-center gap-3">
-          {icon && (
-            <div
-              className="w-9 h-9 rounded-lg flex items-center justify-center"
-              style={{
-                background: c.iconBg,
-                border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.04)"}`,
-              }}
-            >
-              <div style={{ color: c.iconColor }}>{icon}</div>
-            </div>
-          )}
-          <div>
-            <h3
-              className="text-base font-semibold"
-              style={{
-                fontFamily: "var(--font-display)",
-                color: isDark ? "rgba(255,255,255,0.95)" : "#0F172A",
-              }}
-            >
-              {title}
-            </h3>
-            {subtitle && (
-              <p
-                className="text-xs mt-0.5"
-                style={{
-                  color: isDark ? "rgba(255,255,255,0.45)" : "#64748B",
-                }}
-              >
-                {subtitle}
-              </p>
-            )}
+      <div className={cn(
+        "flex items-center gap-2.5 px-5 pt-5 pb-3.5 border-b",
+        isDark ? "border-white/[0.04]" : "border-slate-100"
+      )}>
+        {icon && (
+          <div className={cn("p-1.5 rounded-lg transition-transform group-hover:scale-105", isDark ? ia.dark : ia.light)}>
+            {icon}
           </div>
-        </div>
-        {headerAction && <div>{headerAction}</div>}
+        )}
+        <h3 className="text-[13px] font-semibold text-ds-primary flex-1 tracking-tight">{title}</h3>
+        {badge && (
+          <span className={cn(
+            "text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full",
+            isDark ? "bg-[var(--ds-accent-muted)] text-[var(--ds-accent)]" : "bg-[var(--ds-accent-muted)] text-[var(--ds-accent)]"
+          )}>
+            {badge}
+          </span>
+        )}
+        {actions}
       </div>
 
       {/* Content */}
-      <div className="p-6" style={{ height: typeof height === "number" ? `${height}px` : height }}>
+      <div
+        className={cn(!noPadding && "px-4 pt-3 pb-4")}
+        style={height ? { height: typeof height === "number" ? `${height}px` : height } : undefined}
+      >
         {children}
       </div>
-    </div>
-  );
-}
-
-// Compact version for smaller charts
-interface MiniChartCardProps {
-  title: string;
-  value?: string | number;
-  children: ReactNode;
-  height?: number;
-  trend?: {
-    value: number;
-    positive?: boolean;
-  };
-}
-
-export function MiniChartCard({
-  title,
-  value,
-  children,
-  height = 120,
-  trend,
-}: MiniChartCardProps) {
-  const { isDark } = useTheme();
-
-  return (
-    <div
-      className="rounded-xl p-4"
-      style={{
-        background: isDark
-          ? "rgba(15, 40, 68, 0.6)"
-          : "rgba(255, 255, 255, 0.8)",
-        border: `1px solid ${isDark ? "rgba(0, 159, 227, 0.12)" : "rgba(226, 232, 240, 0.6)"}`,
-      }}
-    >
-      <div className="flex items-center justify-between mb-3">
-        <p
-          className="text-xs font-medium"
-          style={{
-            color: isDark ? "rgba(255,255,255,0.60)" : "#64748B",
-          }}
-        >
-          {title}
-        </p>
-        {trend && (
-          <span
-            className="text-xs font-medium"
-            style={{
-              color: trend.positive !== false ? "#00C48C" : "#E85D75",
-            }}
-          >
-            {trend.positive !== false ? "+" : "-"}
-            {trend.value}%
-          </span>
-        )}
-      </div>
-      {value && (
-        <p
-          className="text-2xl font-bold mb-3"
-          style={{
-            fontFamily: "var(--font-display)",
-            color: isDark ? "rgba(255,255,255,0.95)" : "#0F172A",
-          }}
-        >
-          {value}
-        </p>
-      )}
-      <div style={{ height }}>{children}</div>
     </div>
   );
 }

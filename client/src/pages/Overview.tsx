@@ -12,9 +12,10 @@ import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { SelectCustom } from "@/components/ui/select-custom";
 import { SelectMulti } from "@/components/ui/select-multi";
 import { ExportReportDialog } from "@/components/ui/export-report-dialog";
-import { KPICard, StatCard } from "@/components/ui/kpi-card";
+import { KpiCard } from "@/components/ui/kpi-card";
 import { ChartCard } from "@/components/ui/chart-card";
-import { FilterToolbar, FilterGroup } from "@/components/ui/filter-toolbar";
+import { FilterToolbar } from "@/components/ui/filter-toolbar";
+import { CHART_COLORS, getTooltipStyle, getGridStroke, getAxisColor, getAxisTickFill, barGradientDefs, getBarGradient, PremiumTooltip } from "@/lib/chart-utils";
 import {
   MessageSquare, CalendarDays, TrendingUp,
   RefreshCw, Users, Building2, ChevronLeft, ChevronRight, Filter, Cloud,
@@ -100,20 +101,7 @@ const PJ_OPCOES = new Set([
 
 const REFRESH_INTERVAL = 60000; // 60 seconds
 
-const COLORS = ['#009FE3', '#F37021', '#00A650', '#ED1C24', '#00BCD4', '#8b5cf6', '#0077CC', '#14b8a6', '#6366f1', '#a855f7', '#06b6d4', '#84cc16', '#d946ef', '#0ea5e9', '#f43f5e'];
-
-// White tooltip style shared across all charts
-const TOOLTIP_STYLE = {
-  contentStyle: {
-    backgroundColor: '#ffffff',
-    borderRadius: '12px',
-    border: '1px solid #e5e7eb',
-    color: '#0C2135',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-  },
-  labelStyle: { color: '#374151', fontWeight: 600 as const },
-  itemStyle: { color: '#0C2135' },
-};
+const COLORS = CHART_COLORS;
 
 const PAGE_SIZES = [10, 20, 30, 50, 100];
 
@@ -130,7 +118,6 @@ export default function OverviewPage() {
   const contentRef = useRef<HTMLDivElement>(null);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [countdown, setCountdown] = useState(60);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const { user } = useAuth();
   const { isDark } = useTheme();
   const isGerente = user?.nivel_acesso === "gerente" || user?.nivel_acesso === "master";
@@ -292,11 +279,10 @@ export default function OverviewPage() {
     setCurrentPage(1);
   }, [activeTab, pageSize]);
 
-  const handleManualRefresh = async () => {
-    setIsRefreshing(true);
-    await Promise.all([refetchStats(), refetchRecentes()]);
+  const handleManualRefresh = () => {
+    refetchStats();
+    refetchRecentes();
     setLastUpdated(new Date());
-    setIsRefreshing(false);
     setCountdown(60);
   };
 
@@ -455,9 +441,9 @@ export default function OverviewPage() {
     return (
       <Layout title="Visão Geral" subtitle="Dashboard de atendimentos em tempo real">
         <div className="flex items-center justify-center h-[60vh]">
-          <div className="flex flex-col items-center gap-4">
-            <div className="w-10 h-10 border-4 border-[#009FE3]/30 border-t-[#009FE3] rounded-full animate-spin" />
-            <p className={cn("text-sm", isDark ? "text-gray-400" : "text-gray-500")}>Carregando dados...</p>
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-8 h-8 border-[3px] border-[var(--ds-accent)]/20 border-t-[var(--ds-accent)] rounded-full animate-spin" />
+            <p className="text-sm text-ds-tertiary">Carregando dados...</p>
           </div>
         </div>
       </Layout>
@@ -468,7 +454,7 @@ export default function OverviewPage() {
     return (
       <Layout title="Visão Geral" subtitle="Dashboard de atendimentos em tempo real">
         <div className="flex items-center justify-center h-[60vh]">
-          <p className={cn("text-sm", isDark ? "text-gray-400" : "text-gray-500")}>Nenhum dado disponível. Verifique a conexão com o banco de dados.</p>
+          <p className="text-sm text-ds-tertiary">Nenhum dado disponível. Verifique a conexão com o banco de dados.</p>
         </div>
       </Layout>
     );
@@ -476,249 +462,228 @@ export default function OverviewPage() {
 
   return (
       <Layout title="Visão Geral" subtitle="Dashboard de atendimentos em tempo real">
-      {/* ═══════════════════════════════════════════════════════════════
-         FILTER TOOLBAR - EXECUTIVO
-         ═══════════════════════════════════════════════════════════════ */}
+      {/* Filter Toolbar */}
       <FilterToolbar
         title="Visão Geral em Tempo Real"
-        onRefresh={handleManualRefresh}
-        isRefreshing={isRefreshing}
-        headerAction={
-          <span 
-            className="text-[11px] font-medium"
-            style={{ color: isDark ? "rgba(255,255,255,0.45)" : "#94A3B8" }}
-          >
-            Última atualização: {format(lastUpdated, "HH:mm:ss", { locale: ptBR })} • Próxima em {countdown}s
-          </span>
+        showLiveIndicator
+        statusText={`Atualização: ${format(lastUpdated, "HH:mm:ss", { locale: ptBR })} · Próxima em ${countdown}s`}
+        isDark={isDark}
+        activeFilters={
+          (selectedEntidades.length > 0 || selectedEquipes.length > 0) ? (
+            <div className="flex items-center gap-2 flex-wrap pt-3 border-t border-ds-subtle">
+              <span className="text-[10px] uppercase tracking-wider text-ds-tertiary">Filtros ativos:</span>
+              {selectedEntidades.map(ent => (
+                <span key={ent} className="px-2 py-0.5 text-[10px] font-medium rounded-md bg-[var(--ds-accent-muted)] text-[var(--ds-accent)] border border-ds-subtle">
+                  {ent}
+                </span>
+              ))}
+              {selectedEquipes.map(eq => (
+                <span key={eq} className="px-2 py-0.5 text-[10px] font-medium rounded-md bg-[var(--ds-accent-muted)] text-[var(--ds-accent)] border border-ds-subtle">
+                  {eq}
+                </span>
+              ))}
+              <button
+                onClick={() => { setSelectedEntidades([]); setSelectedEquipes([]); setUnidade(""); }}
+                className="ml-auto text-[10px] text-ds-tertiary hover:text-[var(--ds-kpi-negative)] transition-colors"
+              >
+                Limpar filtros
+              </button>
+            </div>
+          ) : undefined
         }
       >
-        {/* Entidade */}
-        <FilterGroup label="Entidade">
-          <SelectMulti
-            values={selectedEntidades}
-            onValuesChange={(values) => {
-              setSelectedEntidades(values as Entidade[]);
-              setSelectedEquipes([]);
-            }}
-            placeholder="Todas as Entidades"
-            panelTitle="Selecionar Entidades"
-            options={[
-              { value: "SENAI", label: "SENAI" },
-              { value: "SESI", label: "SESI" },
-              { value: "IEL", label: "IEL" },
-              ...(isGerente ? [{ value: "Outros", label: "Outros" }] : []),
-            ]}
-          />
-        </FilterGroup>
+        <div className="flex flex-col lg:flex-row gap-5">
+          {/* Group 1: Entity & Team */}
+          <div className="flex flex-col sm:flex-row gap-4 flex-1">
+            <div className="flex flex-col gap-1.5 min-w-[180px]">
+              <label className="text-[10px] uppercase tracking-wider font-semibold text-ds-tertiary flex items-center gap-1.5">
+                <Building2 className="w-3 h-3" />
+                Entidade
+              </label>
+              <SelectMulti
+                values={selectedEntidades}
+                onValuesChange={(values) => {
+                  setSelectedEntidades(values as Entidade[]);
+                  setSelectedEquipes([]);
+                }}
+                placeholder="Todas as Entidades"
+                panelTitle="Selecionar Entidades"
+                options={[
+                  { value: "SENAI", label: "SENAI" },
+                  { value: "SESI", label: "SESI" },
+                  { value: "IEL", label: "IEL" },
+                  ...(isGerente ? [{ value: "Outros", label: "Outros" }] : []),
+                ]}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5 min-w-[180px]">
+              <label className="text-[10px] uppercase tracking-wider font-semibold text-ds-tertiary flex items-center gap-1.5">
+                <Users className="w-3 h-3" />
+                {isGerente ? "Equipe" : "Unidade"}
+              </label>
+              {isGerente ? (
+                <SelectMulti
+                  values={selectedEquipes}
+                  onValuesChange={setSelectedEquipes}
+                  placeholder="Todas as Equipes"
+                  disabled={selectedEntidades.length === 0}
+                  panelTitle="Selecionar Equipes"
+                  options={equipesOptions}
+                />
+              ) : (
+                <SelectCustom
+                  value={unidade || ""}
+                  onValueChange={(value) => setUnidade(value as UnidadeSESI | "")}
+                  placeholder="Todas as Unidades"
+                  disabled={selectedEntidades[0] !== "SESI"}
+                  panelTitle="Selecionar Unidade"
+                  options={[
+                    { value: "", label: "Todas as Unidades" },
+                    { value: "SESI ESCOLA", label: "SESI ESCOLA" },
+                    { value: "SESI CLUBE", label: "SESI CLUBE" },
+                    { value: "SESI SAÚDE", label: "SESI SAÚDE" }
+                  ]}
+                />
+              )}
+            </div>
+          </div>
 
-        {/* Equipe/Unidade */}
-        <FilterGroup label={isGerente ? "Equipe" : "Unidade"}>
-          {isGerente ? (
-            <SelectMulti
-              values={selectedEquipes}
-              onValuesChange={setSelectedEquipes}
-              placeholder="Todas as Equipes"
-              disabled={selectedEntidades.length === 0}
-              panelTitle="Selecionar Equipes"
-              options={equipesOptions}
+          <div className="hidden lg:block w-px bg-ds-subtle" />
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] uppercase tracking-wider font-semibold text-ds-tertiary flex items-center gap-1.5">
+              <CalendarRange className="w-3 h-3" />
+              Período
+            </label>
+            <DateRangePicker
+              startDate={dateRange.startDate}
+              endDate={dateRange.endDate}
+              onApply={(s, e) => setDateRange({ startDate: s, endDate: e })}
             />
-          ) : (
-            <SelectCustom
-              value={unidade || ""}
-              onValueChange={(value) => setUnidade(value as UnidadeSESI | "")}
-              placeholder="Todas as Unidades"
-              disabled={selectedEntidades[0] !== "SESI"}
-              panelTitle="Selecionar Unidade"
-              options={[
-                { value: "", label: "Todas as Unidades" },
-                { value: "SESI ESCOLA", label: "SESI ESCOLA" },
-                { value: "SESI CLUBE", label: "SESI CLUBE" },
-                { value: "SESI SAÚDE", label: "SESI SAÚDE" }
-              ]}
-            />
-          )}
-        </FilterGroup>
+          </div>
 
-        {/* Período */}
-        <FilterGroup label="Período">
-          <DateRangePicker
-            startDate={dateRange.startDate}
-            endDate={dateRange.endDate}
-            onApply={(s, e) => setDateRange({ startDate: s, endDate: e })}
-          />
-        </FilterGroup>
+          <div className="hidden lg:block w-px bg-ds-subtle" />
 
-        {/* Exportar */}
-        <div className="flex flex-col gap-1.5">
-          <label 
-            className="text-[11px] font-semibold uppercase tracking-wider"
-            style={{ color: isDark ? "rgba(255,255,255,0.45)" : "#64748B" }}
-          >
-            Relatório
-          </label>
-          <ExportReportDialog
-            selectedCasas={selectedCasas}
-            contentRef={contentRef}
-            pdfTitle="Visão Geral - Dashboard FIEAM"
-            startDate={dateRange.startDate}
-            endDate={dateRange.endDate}
-            pdfSubtitle={
-              selectedEntidades.length > 0
-                ? `Dashboard de atendimentos em tempo real · Entidades: ${selectedEntidades.join(", ")}${isGerente && selectedEquipes.length > 0 ? ` · Equipes: ${selectedEquipes.join(", ")}` : selectedEntidades[0] === "SESI" && unidade ? ` · Unidade: ${unidade}` : ""}`
-                : "Dashboard de atendimentos em tempo real · Todas as Entidades"
-            }
-          />
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] uppercase tracking-wider font-semibold text-ds-tertiary flex items-center gap-1.5">
+              <Settings2 className="w-3 h-3" />
+              Ações
+            </label>
+            <div className="flex items-center gap-2">
+              <ExportReportDialog
+                selectedCasas={selectedCasas}
+                contentRef={contentRef}
+                pdfTitle="Visão Geral - Dashboard FIEAM"
+                startDate={dateRange.startDate}
+                endDate={dateRange.endDate}
+                pdfSubtitle={
+                  selectedEntidades.length > 0
+                    ? `Dashboard de atendimentos em tempo real · Entidades: ${selectedEntidades.join(", ")}${isGerente && selectedEquipes.length > 0 ? ` · Equipes: ${selectedEquipes.join(", ")}` : selectedEntidades[0] === "SESI" && unidade ? ` · Unidade: ${unidade}` : ""}`
+                    : "Dashboard de atendimentos em tempo real · Todas as Entidades"
+                }
+              />
+              <button
+                onClick={handleManualRefresh}
+                className="flex items-center justify-center w-9 h-9 text-ds-tertiary border border-ds-default rounded-lg transition-all hover:border-ds-strong hover:text-ds-primary hover:shadow-ds-elevated"
+                title="Atualizar dados"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
         </div>
       </FilterToolbar>
 
-      {/* Active Filters Summary */}
-      {(selectedEntidades.length > 0 || selectedEquipes.length > 0) && (
-        <div 
-          className="mt-4 flex items-center gap-2 flex-wrap"
-          style={{
-            padding: "12px 16px",
-            borderRadius: "12px",
-            background: isDark ? "rgba(0, 159, 227, 0.05)" : "rgba(0, 159, 227, 0.03)",
-            border: `1px solid ${isDark ? "rgba(0, 159, 227, 0.12)" : "rgba(0, 159, 227, 0.08)"}`,
-          }}
-        >
-          <span 
-            className="text-[11px] font-semibold uppercase tracking-wider"
-            style={{ color: isDark ? "rgba(255,255,255,0.50)" : "#64748B" }}
-          >
-            Filtros ativos:
-          </span>
-          {selectedEntidades.map(ent => (
-            <span 
-              key={ent} 
-              className="px-2.5 py-1 text-[11px] font-medium rounded-md"
-              style={{
-                background: "rgba(0, 159, 227, 0.12)",
-                color: "#009FE3",
-                border: "1px solid rgba(0, 159, 227, 0.20)",
-              }}
-            >
-              {ent}
-            </span>
-          ))}
-          {selectedEquipes.map(eq => (
-            <span 
-              key={eq} 
-              className="px-2.5 py-1 text-[11px] font-medium rounded-md"
-              style={{
-                background: "rgba(0, 159, 227, 0.12)",
-                color: "#009FE3",
-                border: "1px solid rgba(0, 159, 227, 0.20)",
-              }}
-            >
-              {eq}
-            </span>
-          ))}
-          <button
-            onClick={() => {
-              setSelectedEntidades([]);
-              setSelectedEquipes([]);
-              setUnidade("");
-            }}
-            className="ml-auto text-[11px] font-medium transition-colors hover:underline"
-            style={{ color: isDark ? "#E85D75" : "#DC2626" }}
-          >
-            Limpar filtros
-          </button>
-        </div>
-      )}
-
       <div ref={contentRef} className="space-y-6">
-      {/* ═══════════════════════════════════════════════════════════════
-         KPI CARDS - EXECUTIVO
-         ═══════════════════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-        <KPICard
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <KpiCard
           title="Total no Período"
-          subtitle={dateRange?.startDate && dateRange?.endDate 
-            ? `${format(new Date(dateRange.startDate), "dd/MM")} - ${format(new Date(dateRange.endDate), "dd/MM/yyyy")}`
-            : "Últimos 12 meses"
-          }
           value={totalPeriodo.toLocaleString("pt-BR")}
-          icon={<CalendarDays className="w-5 h-5" />}
-          color="blue"
+          icon={<CalendarDays className="w-4 h-4" />}
+          accent="blue"
+          isDark={isDark}
         />
-        <KPICard
-          title="Média Mensal"
+        <KpiCard
+          title="Média por Mês"
           value={Math.round(mediaPorMes).toLocaleString("pt-BR")}
-          icon={<TrendingUp className="w-5 h-5" />}
-          color="green"
-          trend={{ value: 12, label: "vs. período anterior", positive: true }}
+          icon={<TrendingUp className="w-4 h-4" />}
+          accent="green"
+          isDark={isDark}
         />
-        <KPICard
-          title="Média Diária"
+        <KpiCard
+          title="Média por Dia"
           value={mediaPorDia.toFixed(1).replace(".", ",")}
-          icon={<MessageSquare className="w-5 h-5" />}
-          color="red"
+          icon={<MessageSquare className="w-4 h-4" />}
+          accent="amber"
+          isDark={isDark}
         />
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════
-         TIMELINE CHART - VOLUME DE ATENDIMENTOS
-         ═══════════════════════════════════════════════════════════════ */}
+      {/* Timeline Chart */}
       <ChartCard
         title="Volume de Atendimentos"
-        subtitle="Evolução temporal dos atendimentos"
-        icon={<TrendingUp className="w-5 h-5" />}
-        color="blue"
+        icon={<TrendingUp className="w-4 h-4" />}
+        iconAccent="blue"
+        isDark={isDark}
         height={320}
+        className="animate-fade-up-2"
       >
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={stats.timeline}>
+          <AreaChart data={stats.timeline} margin={{ top: 10, right: 14, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="colorVolume" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#009FE3" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#009FE3" stopOpacity={0} />
+                <stop offset="0%" stopColor="#009FE3" stopOpacity={isDark ? 0.42 : 0.28} />
+                <stop offset="60%" stopColor="#009FE3" stopOpacity={isDark ? 0.12 : 0.08} />
+                <stop offset="100%" stopColor="#009FE3" stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="strokeVolume" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor="#00B4FF" />
+                <stop offset="100%" stopColor="#0077CC" />
               </linearGradient>
             </defs>
-            <CartesianGrid 
-              strokeDasharray="3 3" 
-              vertical={false} 
-              stroke={isDark ? "rgba(0, 159, 227, 0.15)" : "rgba(226, 232, 240, 0.8)"} 
-            />
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={getGridStroke(isDark)} />
             <XAxis
               dataKey="data"
               tickFormatter={(val) => {
-                try {
-                  return format(new Date(val), "dd/MM");
-                } catch {
-                  return val;
-                }
+                try { return format(new Date(val), "dd/MM"); } catch { return val; }
               }}
-              stroke={isDark ? "rgba(255,255,255,0.40)" : "#94A3B8"}
+              stroke={getAxisColor(isDark)}
               fontSize={11}
-              tickLine={false}
-              axisLine={{ stroke: isDark ? "rgba(255,255,255,0.10)" : "#E2E8F0" }}
-            />
-            <YAxis 
-              stroke={isDark ? "rgba(255,255,255,0.40)" : "#94A3B8"} 
-              fontSize={11}
-              tickLine={false}
+              tick={{ fill: getAxisTickFill(isDark), fontWeight: 500 }}
               axisLine={false}
+              tickLine={false}
+              dy={6}
+            />
+            <YAxis
+              stroke={getAxisColor(isDark)}
+              fontSize={11}
+              tick={{ fill: getAxisTickFill(isDark), fontWeight: 500 }}
+              axisLine={false}
+              tickLine={false}
+              width={44}
             />
             <RechartsTooltip
-              {...TOOLTIP_STYLE}
-              labelFormatter={(label) => {
-                try {
-                  return format(new Date(label), "dd/MM/yyyy");
-                } catch {
-                  return label;
-                }
-              }}
-              formatter={(value: number) => [value.toLocaleString("pt-BR"), "Atendimentos"]}
+              cursor={{ stroke: isDark ? 'rgba(0,159,227,0.35)' : 'rgba(0,119,204,0.35)', strokeWidth: 1, strokeDasharray: '4 4' }}
+              content={(props: any) => (
+                <PremiumTooltip
+                  {...props}
+                  isDark={isDark}
+                  valueLabel="Atendimentos"
+                  dotColor="#009FE3"
+                  labelFormatter={(l: string) => { try { return format(new Date(l), "dd/MM/yyyy"); } catch { return l; } }}
+                />
+              )}
             />
             <Area
               type="monotone"
               dataKey="total"
-              stroke="#009FE3"
-              strokeWidth={2}
+              stroke="url(#strokeVolume)"
+              strokeWidth={2.5}
               fillOpacity={1}
               fill="url(#colorVolume)"
+              activeDot={{ r: 5, fill: '#009FE3', stroke: isDark ? '#0C2135' : '#ffffff', strokeWidth: 2 }}
+              animationDuration={1200}
             />
           </AreaChart>
         </ResponsiveContainer>
@@ -775,407 +740,277 @@ export default function OverviewPage() {
         </Card>
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════
-         CHARTS GRID - ANÁLISE DETALHADA
-         ═══════════════════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* Por Canal */}
-        <ChartCard
-          title="Atendimentos por Canal"
-          subtitle="Distribuição por meio de comunicação"
-          icon={<Users className="w-5 h-5" />}
-          color="blue"
-          height={300}
-        >
+      {/* Charts Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <ChartCard title="Atendimentos por Meio de Comunicação" icon={<Users className="w-4 h-4" />} iconAccent="blue" isDark={isDark} height={300} className="animate-fade-up-3">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={stats.porCanal} layout="vertical" margin={{ left: 10, right: 50 }}>
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke={isDark ? "rgba(0, 159, 227, 0.10)" : "rgba(226, 232, 240, 0.8)"} />
-              <XAxis 
-                type="number" 
-                stroke={isDark ? "rgba(255,255,255,0.40)" : "#94A3B8"} 
-                fontSize={11}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis
-                type="category"
-                dataKey="nome"
-                width={140}
-                stroke={isDark ? "rgba(255,255,255,0.50)" : "#64748B"}
-                fontSize={11}
-                tickLine={false}
-                axisLine={false}
-              />
-              <RechartsTooltip
-                {...TOOLTIP_STYLE}
-                formatter={(value: number) => [value.toLocaleString("pt-BR"), "Atendimentos"]}
-              />
-              <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={24}>
+            <BarChart data={stats.porCanal} layout="vertical" margin={{ left: 10, right: 60, top: 6, bottom: 6 }} barCategoryGap={6}>
+              <defs>{barGradientDefs("canal")}</defs>
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke={getGridStroke(isDark)} />
+              <XAxis type="number" stroke={getAxisColor(isDark)} fontSize={11} tick={{ fill: getAxisTickFill(isDark) }} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="nome" width={150} stroke={getAxisColor(isDark)} fontSize={11} tick={{ fill: getAxisTickFill(isDark), fontWeight: 500 }} axisLine={false} tickLine={false} />
+              <RechartsTooltip cursor={{ fill: isDark ? 'rgba(0,159,227,0.06)' : 'rgba(0,159,227,0.04)' }} content={<PremiumTooltip isDark={isDark} valueLabel="Atendimentos" />} />
+              <Bar dataKey="total" radius={[0, 7, 7, 0]} barSize={24} animationDuration={800}>
                 {stats.porCanal.map((_, index) => (
-                  <Cell key={`canal-${index}`} fill={COLORS[index % COLORS.length]} />
+                  <Cell key={`canal-${index}`} fill={getBarGradient("canal", index)} />
                 ))}
-                <LabelList dataKey="total" position="right" fill={isDark ? "rgba(255,255,255,0.60)" : "#64748B"} fontSize={11} formatter={(v: number) => v.toLocaleString("pt-BR")} />
+                <LabelList dataKey="total" position="right" fill={isDark ? "#E2E8F0" : "#334155"} fontSize={11} fontWeight={700} formatter={(v: number) => v.toLocaleString("pt-BR")} offset={8} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
 
-        {/* Por Unidade/Equipe */}
-        <ChartCard
-          title={isGerente ? "Atendimentos por Equipe" : "Atendimentos por Unidade"}
-          subtitle="Distribuição por localização"
-          icon={<Building2 className="w-5 h-5" />}
-          color="green"
-          height={300}
-        >
+        <ChartCard title={isGerente ? "Atendimentos por Equipe" : "Atendimentos por Unidade"} icon={<Building2 className="w-4 h-4" />} iconAccent="green" isDark={isDark} height={300} className="animate-fade-up-4">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={atendimentosPorUnidade} layout="vertical" margin={{ left: 10, right: 50 }}>
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke={isDark ? "rgba(0, 159, 227, 0.10)" : "rgba(226, 232, 240, 0.8)"} />
-              <XAxis 
-                type="number" 
-                stroke={isDark ? "rgba(255,255,255,0.40)" : "#94A3B8"} 
-                fontSize={11}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis
-                type="category"
-                dataKey="nome"
-                width={160}
-                stroke={isDark ? "rgba(255,255,255,0.50)" : "#64748B"}
-                fontSize={11}
-                tickLine={false}
-                axisLine={false}
-              />
-              <RechartsTooltip
-                {...TOOLTIP_STYLE}
-                formatter={(value: number) => [value.toLocaleString("pt-BR"), "Atendimentos"]}
-              />
-              <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={28}>
+            <BarChart data={atendimentosPorUnidade} layout="vertical" margin={{ left: 10, right: 60, top: 6, bottom: 6 }} barCategoryGap={6}>
+              <defs>{barGradientDefs("unidade")}</defs>
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke={getGridStroke(isDark)} />
+              <XAxis type="number" stroke={getAxisColor(isDark)} fontSize={11} tick={{ fill: getAxisTickFill(isDark) }} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="nome" width={170} stroke={getAxisColor(isDark)} fontSize={11} tick={{ fill: getAxisTickFill(isDark), fontWeight: 500 }} axisLine={false} tickLine={false} />
+              <RechartsTooltip cursor={{ fill: isDark ? 'rgba(0,159,227,0.06)' : 'rgba(0,159,227,0.04)' }} content={<PremiumTooltip isDark={isDark} valueLabel="Atendimentos" />} />
+              <Bar dataKey="total" radius={[0, 7, 7, 0]} barSize={24} animationDuration={800}>
                 {atendimentosPorUnidade.map((_, index) => (
-                  <Cell key={`casa-${index}`} fill={COLORS[(index + 4) % COLORS.length]} />
+                  <Cell key={`casa-${index}`} fill={getBarGradient("unidade", index + 4)} />
                 ))}
-                <LabelList dataKey="total" position="right" fill={isDark ? "rgba(255,255,255,0.60)" : "#64748B"} fontSize={11} formatter={(v: number) => v.toLocaleString("pt-BR")} offset={8} />
+                <LabelList dataKey="total" position="right" fill={isDark ? "#E2E8F0" : "#334155"} fontSize={11} fontWeight={700} formatter={(v: number) => v.toLocaleString("pt-BR")} offset={8} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
       </div>
 
-      {/* Row: Atendimentos por Entidade + Atendimentos por PF e PJ (PF/PJ only for Ariana) */}
-      <div className={`grid grid-cols-1 ${(isArianaUser() || user?.nivel_acesso === "master") ? 'lg:grid-cols-2' : ''} gap-5 items-start`}>
-        {/* Atendimentos por Entidade */}
-        <Card className={cn(
-          "shadow-lg rounded-2xl overflow-hidden animate-fade-up-5 card-premium",
-          isDark ? "bg-[#0C2135]/90 border-[#1E3A5F]/60 backdrop-blur-xl" : "bg-white/90 border-slate-200/80 backdrop-blur-xl"
-        )}>
-          <CardHeader>
-            <CardTitle className={cn("text-lg flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
-              <div className={cn("p-1.5 rounded-lg", isDark ? "bg-orange-500/10" : "bg-orange-50")}>
-                <Building2 className={cn("w-4 h-4", isDark ? "text-orange-400" : "text-orange-600")} />
-              </div>
-              Atendimentos por Entidade
-            </CardTitle>
-          </CardHeader>
-          <CardContent style={{ height: `${Math.max(150, atendimentosPorEntidade.length * 50 + 40)}px` }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={atendimentosPorEntidade} layout="vertical" margin={{ left: 10, right: 50 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke={isDark ? "#165A8A" : "#e5e7eb"} />
-                <XAxis type="number" stroke="#6b7280" fontSize={11} />
-                <YAxis
-                  type="category"
-                  dataKey="nome"
-                  width={100}
-                  stroke="#9ca3af"
-                  fontSize={11}
-                  tick={{ fill: isDark ? '#9ca3af' : '#6b7280' }}
-                />
-                <RechartsTooltip
-                  {...TOOLTIP_STYLE}
-                  formatter={(value: number) => [value, "Atendimentos"]}
-                />
-                <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={32}>
-                  {atendimentosPorEntidade.map((_, index) => (
-                    <Cell key={`entidade-${index}`} fill={COLORS[(index + 1) % COLORS.length]} />
-                  ))}
-                  <LabelList dataKey="total" position="right" fill="#94a3b8" fontSize={11} formatter={(v: number) => v.toLocaleString("pt-BR")} offset={8} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+      {/* Row: Atendimentos por Entidade + PF/PJ */}
+      <div className={`grid grid-cols-1 ${(isArianaUser() || user?.nivel_acesso === "master") ? 'lg:grid-cols-2' : ''} gap-4 items-start`}>
+        <ChartCard title="Atendimentos por Entidade" icon={<Building2 className="w-4 h-4" />} iconAccent="orange" isDark={isDark} height={Math.max(180, atendimentosPorEntidade.length * 56 + 50)} className="animate-fade-up-5">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={atendimentosPorEntidade} layout="vertical" margin={{ left: 10, right: 70, top: 6, bottom: 6 }} barCategoryGap={8}>
+              <defs>{barGradientDefs("entidade")}</defs>
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke={getGridStroke(isDark)} />
+              <XAxis type="number" stroke={getAxisColor(isDark)} fontSize={11} tick={{ fill: getAxisTickFill(isDark) }} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="nome" width={110} stroke={getAxisColor(isDark)} fontSize={12} tick={{ fill: getAxisTickFill(isDark), fontWeight: 600 }} axisLine={false} tickLine={false} />
+              <RechartsTooltip cursor={{ fill: isDark ? 'rgba(0,159,227,0.06)' : 'rgba(0,159,227,0.04)' }} content={<PremiumTooltip isDark={isDark} valueLabel="Atendimentos" />} />
+              <Bar dataKey="total" radius={[0, 8, 8, 0]} barSize={32} animationDuration={900}>
+                {atendimentosPorEntidade.map((_, index) => (
+                  <Cell key={`entidade-${index}`} fill={getBarGradient("entidade", index + 1)} />
+                ))}
+                <LabelList dataKey="total" position="right" fill={isDark ? "#E2E8F0" : "#334155"} fontSize={12} fontWeight={700} formatter={(v: number) => v.toLocaleString("pt-BR")} offset={10} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
 
-        {/* Atendimentos por PF e PJ — Ariana e Master */}
         {(isArianaUser() || user?.nivel_acesso === "master") && (
-        <Card className={cn(
-          "shadow-lg rounded-2xl overflow-hidden card-premium",
-          isDark ? "bg-[#0C2135]/90 border-[#1E3A5F]/60 backdrop-blur-xl" : "bg-white/90 border-slate-200/80 backdrop-blur-xl"
-        )}>
-          <CardHeader>
-            <CardTitle className={cn("text-lg flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
-              <div className={cn("p-1.5 rounded-lg", isDark ? "bg-emerald-500/10" : "bg-emerald-50")}>
-                <Users className={cn("w-4 h-4", isDark ? "text-emerald-400" : "text-emerald-600")} />
-              </div>
-              Atendimentos por PF e PJ
-              <span className={cn("text-[10px] font-medium uppercase tracking-wider ml-2", isDark ? "text-gray-500" : "text-gray-400")}>Clique para detalhes</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="h-[200px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={pfPjData}
-                layout="vertical"
-                margin={{ left: 10, right: 60 }}
-                onClick={(data: any) => {
-                  if (data?.activePayload?.[0]) {
-                    const tipo = data.activePayload[0].payload.nome as 'PF' | 'PJ';
-                    openDrilldownPfPj(tipo);
-                  }
-                }}
-                style={{ cursor: 'pointer' }}
-              >
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke={isDark ? "#165A8A" : "#e5e7eb"} />
-                <XAxis type="number" stroke="#6b7280" fontSize={11} />
-                <YAxis
-                  type="category"
-                  dataKey="nome"
-                  width={40}
-                  stroke="#9ca3af"
-                  fontSize={13}
-                  tick={{ fill: '#9ca3af', fontWeight: 700 }}
-                />
-                <RechartsTooltip
-                  {...TOOLTIP_STYLE}
-                  formatter={(value: number, _: any, entry: any) => {
-                    const label = entry?.payload?.nome === "PF" ? "Para Você (PF)" : "Para Empresa (PJ)";
-                    return [value.toLocaleString("pt-BR"), label];
-                  }}
-                />
-                <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={36}>
-                  <Cell key="pf" fill="#009FE3" className="cursor-pointer" />
-                  <Cell key="pj" fill="#F37021" className="cursor-pointer" />
-                  <LabelList dataKey="total" position="right" fill="#94a3b8" fontSize={12} fontWeight={700} formatter={(v: number) => v.toLocaleString("pt-BR")} offset={10} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-        )}
-      </div>
-
-      {/* Qtd de Opções Selecionadas — Top 10 — Full width */}
-      <Card className={cn(
-        "shadow-lg rounded-2xl overflow-hidden card-premium",
-        isDark ? "bg-[#0C2135]/90 border-[#1E3A5F]/60 backdrop-blur-xl" : "bg-white/90 border-slate-200/80 backdrop-blur-xl"
-      )}>
-        <CardHeader>
-          <CardTitle className={cn("text-lg flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
-            <div className={cn("p-1.5 rounded-lg", isDark ? "bg-cyan-500/10" : "bg-cyan-50")}>
-              <MessageSquare className={cn("w-4 h-4", isDark ? "text-cyan-400" : "text-cyan-600")} />
-            </div>
-            Qtd de Opções Selecionadas
-            <span className={cn("text-[10px] font-medium uppercase tracking-wider ml-2 px-2 py-0.5 rounded-full", isDark ? "bg-cyan-500/10 text-cyan-400" : "bg-cyan-50 text-cyan-600")}>Top 10</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent style={{ height: `${Math.max(200, opcoesSelecionadasCompletas.length * 42 + 40)}px` }}>
+        <ChartCard title="Atendimentos por PF e PJ" icon={<Users className="w-4 h-4" />} iconAccent="green" isDark={isDark} height={220} badge="Clique para detalhes">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
-              data={opcoesSelecionadasCompletas}
+              data={pfPjData}
               layout="vertical"
-              margin={{ left: 10, right: 60 }}
+              margin={{ left: 10, right: 80, top: 8, bottom: 8 }}
+              barCategoryGap={14}
               onClick={(data: any) => {
                 if (data?.activePayload?.[0]) {
-                  const nome = data.activePayload[0].payload.nome;
-                  openDrilldownOpcao(nome);
+                  const tipo = data.activePayload[0].payload.nome as 'PF' | 'PJ';
+                  openDrilldownPfPj(tipo);
                 }
               }}
               style={{ cursor: 'pointer' }}
             >
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke={isDark ? "#165A8A" : "#e5e7eb"} />
-              <XAxis type="number" stroke="#6b7280" fontSize={11} />
-              <YAxis
-                type="category"
-                dataKey="nome"
-                width={260}
-                stroke="#9ca3af"
-                fontSize={11}
-                tick={{ fill: isDark ? '#9ca3af' : '#6b7280' }}
-              />
+              <defs>
+                <linearGradient id="pfpj-pf" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#00B4FF"/><stop offset="100%" stopColor="#0077CC"/></linearGradient>
+                <linearGradient id="pfpj-pj" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#FF8A3D"/><stop offset="100%" stopColor="#D95E15"/></linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke={getGridStroke(isDark)} />
+              <XAxis type="number" stroke={getAxisColor(isDark)} fontSize={11} tick={{ fill: getAxisTickFill(isDark) }} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="nome" width={44} stroke={getAxisColor(isDark)} fontSize={13} tick={{ fill: getAxisTickFill(isDark), fontWeight: 700 }} axisLine={false} tickLine={false} />
               <RechartsTooltip
-                {...TOOLTIP_STYLE}
-                formatter={(value: number) => [value, "Atendimentos"]}
+                cursor={{ fill: isDark ? 'rgba(0,159,227,0.06)' : 'rgba(0,159,227,0.04)' }}
+                content={(props: any) => (
+                  <PremiumTooltip
+                    {...props}
+                    isDark={isDark}
+                    valueLabel={props?.payload?.[0]?.payload?.nome === "PF" ? "Para Você (PF)" : "Para Empresa (PJ)"}
+                  />
+                )}
               />
-              <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={28}>
-                {opcoesSelecionadasCompletas.map((_, index) => (
-                  <Cell key={`opcao-${index}`} fill={COLORS[(index + 7) % COLORS.length]} className="cursor-pointer" />
-                ))}
-                <LabelList dataKey="total" position="right" fill="#94a3b8" fontSize={11} formatter={(v: number) => v.toLocaleString("pt-BR")} offset={8} />
+              <Bar dataKey="total" radius={[0, 8, 8, 0]} barSize={40} animationDuration={900}>
+                <Cell key="pf" fill="url(#pfpj-pf)" className="cursor-pointer" />
+                <Cell key="pj" fill="url(#pfpj-pj)" className="cursor-pointer" />
+                <LabelList dataKey="total" position="right" fill={isDark ? "#E2E8F0" : "#334155"} fontSize={13} fontWeight={800} formatter={(v: number) => v.toLocaleString("pt-BR")} offset={12} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
-        </CardContent>
-      </Card>
+        </ChartCard>
+        )}
+      </div>
 
-      {/* Top Assuntos — Tag Chips + Destaques */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5">
-        <Card className={cn(
-          "shadow-lg rounded-2xl overflow-hidden card-premium",
-          isDark ? "bg-[#0C2135]/90 border-[#1E3A5F]/60 backdrop-blur-xl" : "bg-white/90 border-slate-200/80 backdrop-blur-xl"
-        )}>
-          <CardHeader className="pb-1">
-            <CardTitle className={cn("text-lg flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
-              <div className={cn("p-1.5 rounded-lg", isDark ? "bg-purple-500/10" : "bg-purple-50")}>
-                <Cloud className={cn("w-4 h-4", isDark ? "text-purple-400" : "text-purple-600")} />
-              </div>
-              Top Assuntos
-            </CardTitle>
-            <p className={cn("text-xs mt-1", isDark ? "text-gray-500" : "text-gray-400")}>Resumo visual dos principais temas recorrentes no período.</p>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2.5 py-4">
-              {topAssuntosAggregados.map((item, index) => {
-                const color = COLORS[index % COLORS.length];
-                return (
-                  <Tooltip key={item.nome}>
-                    <TooltipTrigger asChild>
-                      <span
-                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full border text-sm font-medium cursor-default transition-all hover:scale-105"
-                        style={{ borderColor: `${color}40`, backgroundColor: `${color}10`, color }}
-                      >
-                        {item.nome}
-                        <span className="text-xs opacity-75 font-bold">{item.total.toLocaleString("pt-BR")}</span>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent className="bg-white text-[#0C2135] border border-gray-200 shadow-lg rounded-xl px-4 py-3" sideOffset={8}>
-                      <p className="font-bold text-sm">{item.nome}</p>
-                      <p className="text-xs text-gray-600 mt-1">
-                        {item.total.toLocaleString("pt-BR")} atendimentos
-                        {stats.totais.total > 0 && ` · ${((item.total / stats.totais.total) * 100).toFixed(1)}%`}
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
+      {/* Qtd de Opções Selecionadas — Top 10 */}
+      <ChartCard title="Qtd de Opções Selecionadas" icon={<MessageSquare className="w-4 h-4" />} iconAccent="cyan" isDark={isDark} badge="Top 10" height={Math.max(240, opcoesSelecionadasCompletas.length * 48 + 50)}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart
+            data={opcoesSelecionadasCompletas}
+            layout="vertical"
+            margin={{ left: 10, right: 70, top: 6, bottom: 6 }}
+            barCategoryGap={8}
+            onClick={(data: any) => {
+              if (data?.activePayload?.[0]) {
+                const nome = data.activePayload[0].payload.nome;
+                openDrilldownOpcao(nome);
+              }
+            }}
+            style={{ cursor: 'pointer' }}
+          >
+            <defs>{barGradientDefs("opcao")}</defs>
+            <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke={getGridStroke(isDark)} />
+            <XAxis type="number" stroke={getAxisColor(isDark)} fontSize={11} tick={{ fill: getAxisTickFill(isDark) }} axisLine={false} tickLine={false} />
+            <YAxis type="category" dataKey="nome" width={270} stroke={getAxisColor(isDark)} fontSize={12} tick={{ fill: getAxisTickFill(isDark), fontWeight: 500 }} axisLine={false} tickLine={false} />
+            <RechartsTooltip cursor={{ fill: isDark ? 'rgba(0,159,227,0.06)' : 'rgba(0,159,227,0.04)' }} content={<PremiumTooltip isDark={isDark} valueLabel="Atendimentos" />} />
+            <Bar dataKey="total" radius={[0, 8, 8, 0]} barSize={28} animationDuration={900}>
+              {opcoesSelecionadasCompletas.map((_, index) => (
+                <Cell key={`opcao-${index}`} fill={getBarGradient("opcao", index + 7)} className="cursor-pointer" />
+              ))}
+              <LabelList dataKey="total" position="right" fill={isDark ? "#E2E8F0" : "#334155"} fontSize={12} fontWeight={700} formatter={(v: number) => v.toLocaleString("pt-BR")} offset={10} />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </ChartCard>
 
-        {/* Destaques sidebar */}
-        <Card className={cn(
-          "shadow-lg rounded-2xl overflow-hidden",
-          isDark ? "bg-[#0C2135]/90 border-[#1E3A5F]/60 backdrop-blur-xl" : "bg-white/90 border-slate-200/80 backdrop-blur-xl"
+      {/* Top Assuntos + Destaques */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
+        <ChartCard title="Top Assuntos" icon={<Cloud className="w-4 h-4" />} iconAccent="purple" isDark={isDark} noPadding>
+          <div className="flex flex-wrap gap-2 px-5 pb-5 pt-1">
+            {topAssuntosAggregados.map((item, index) => {
+              const color = COLORS[index % COLORS.length];
+              return (
+                <Tooltip key={item.nome}>
+                  <TooltipTrigger asChild>
+                    <span
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[13px] font-medium cursor-default transition-all hover:scale-[1.03]"
+                      style={{ borderColor: `${color}30`, backgroundColor: `${color}0A`, color }}
+                    >
+                      {item.nome}
+                      <span className="text-[11px] opacity-70 font-bold">{item.total.toLocaleString("pt-BR")}</span>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent className={cn("border shadow-lg rounded-lg px-3 py-2", isDark ? "bg-[#0F2A42] border-ds-default text-ds-primary" : "bg-white border-slate-200 text-gray-900")} sideOffset={8}>
+                    <p className="font-semibold text-sm">{item.nome}</p>
+                    <p className="text-xs text-ds-secondary mt-0.5">
+                      {item.total.toLocaleString("pt-BR")} atendimentos
+                      {stats.totais.total > 0 && ` · ${((item.total / stats.totais.total) * 100).toFixed(1)}%`}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })}
+          </div>
+        </ChartCard>
+
+        {/* Destaques */}
+        <div className={cn(
+          "rounded-xl border transition-theme card-hover",
+          isDark ? "bg-ds-secondary border-ds-default shadow-ds-card" : "bg-ds-elevated border-ds-default shadow-ds-card"
         )}>
-          <CardHeader className="pb-2 pt-5 px-5">
-            <CardTitle className={cn("text-sm font-bold flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
-              <div className="w-1 h-4 rounded-full bg-gradient-to-b from-[#009FE3] to-[#0077CC]" />
+          <div className="px-5 pt-5 pb-3">
+            <h3 className="text-sm font-semibold text-ds-primary flex items-center gap-2">
+              <div className="w-1 h-4 rounded-full bg-[var(--ds-accent)]" />
               Destaques
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-5 pb-5 space-y-3">
+            </h3>
+          </div>
+          <div className="px-5 pb-5 space-y-2.5">
             {(() => {
               const canalLider = stats.porCanal?.[0];
               const casaLider = atendimentosPorUnidade?.[0];
               return (
                 <>
                   {canalLider && (
-                    <div className={cn("rounded-lg p-3 border", isDark ? "bg-[#081E30] border-[#165A8A]/40" : "bg-slate-50 border-slate-200")}>
-                      <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold">Canal Líder</span>
-                      <p className={cn("font-bold text-sm mt-0.5", isDark ? "text-white" : "text-gray-900")}>{canalLider.nome}</p>
-                      <p className={cn("text-[10px]", isDark ? "text-gray-400" : "text-gray-500")}>{canalLider.total.toLocaleString("pt-BR")} atendimentos</p>
+                    <div className="rounded-lg p-3 border border-ds-subtle bg-ds-inset">
+                      <span className="text-[10px] uppercase tracking-wider font-semibold text-[var(--ds-accent)]">Canal Líder</span>
+                      <p className="font-semibold text-sm mt-0.5 text-ds-primary">{canalLider.nome}</p>
+                      <p className="text-[10px] text-ds-tertiary">{canalLider.total.toLocaleString("pt-BR")} atendimentos</p>
                     </div>
                   )}
                   {casaLider && (
-                    <div className={cn("rounded-lg p-3 border", isDark ? "bg-[#081E30] border-[#165A8A]/40" : "bg-slate-50 border-slate-200")}>
-                      <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold">{isGerente ? "Equipe Líder" : "Unidade Líder"}</span>
-                      <p className={cn("font-bold text-sm mt-0.5", isDark ? "text-white" : "text-gray-900")}>{casaLider.nome}</p>
-                      <p className={cn("text-[10px]", isDark ? "text-gray-400" : "text-gray-500")}>{casaLider.total.toLocaleString("pt-BR")} atendimentos</p>
+                    <div className="rounded-lg p-3 border border-ds-subtle bg-ds-inset">
+                      <span className="text-[10px] uppercase tracking-wider font-semibold text-[var(--ds-accent)]">{isGerente ? "Equipe Líder" : "Unidade Líder"}</span>
+                      <p className="font-semibold text-sm mt-0.5 text-ds-primary">{casaLider.nome}</p>
+                      <p className="text-[10px] text-ds-tertiary">{casaLider.total.toLocaleString("pt-BR")} atendimentos</p>
                     </div>
                   )}
                 </>
               );
             })()}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
 
-      {/* Recent Calls Table with Tabs + Pagination */}
-      <Card className={cn(
-        "shadow-lg rounded-2xl overflow-hidden",
-        isDark ? "bg-[#0C2135]/90 border-[#1E3A5F]/60 backdrop-blur-xl" : "bg-white/90 border-slate-200/80 backdrop-blur-xl"
+      {/* Recent Calls Table */}
+      <div className={cn(
+        "rounded-xl border transition-theme overflow-hidden",
+        isDark ? "bg-ds-secondary border-ds-default shadow-ds-card" : "bg-ds-elevated border-ds-default shadow-ds-card"
       )} data-pdf-exclude>
-        <CardHeader className="pb-2">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <CardTitle className={cn("text-lg flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
-              <Filter className="w-5 h-5 text-amber-400" />
+        <div className="px-5 pt-5 pb-3">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-ds-primary flex items-center gap-2">
+              <Filter className="w-4 h-4 text-[var(--ds-accent)]" />
               Últimos Atendimentos Finalizados
-            </CardTitle>
-            <div className="flex items-center gap-3">
-              {/* Page Size Selector */}
-              <div className="flex items-center gap-2">
-                <span className={cn("text-xs", isDark ? "text-gray-400" : "text-gray-500")}>Exibir:</span>
-                <select
-                  value={pageSize}
-                  onChange={(e) => setPageSize(Number(e.target.value))}
-                  className={cn("text-xs border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#0047B6]", isDark ? "bg-[#061726] text-gray-300 border-[#165A8A]" : "bg-white text-gray-700 border-slate-300")}
-                >
-                  {PAGE_SIZES.map((size) => (
-                    <option key={size} value={size}>{size}</option>
-                  ))}
-                </select>
-              </div>
+            </h3>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-ds-tertiary">Exibir:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+                className="text-xs border border-ds-default rounded-md px-2 py-1 bg-ds-inset text-ds-primary focus:outline-none focus:ring-1 focus:ring-[var(--ds-accent)]"
+              >
+                {PAGE_SIZES.map((size) => (
+                  <option key={size} value={size}>{size}</option>
+                ))}
+              </select>
             </div>
           </div>
 
           {/* Channel Tabs */}
-          <div className="flex items-center gap-1 mt-3 overflow-x-auto pb-1 scrollbar-thin">
+          <div className="flex items-center gap-1 mt-3 overflow-x-auto pb-1">
             {channelTabs.map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className={cn(
-                  "px-3 py-1.5 text-xs rounded-lg transition-all duration-200 font-medium whitespace-nowrap",
+                  "px-3 py-1.5 text-xs rounded-md transition-all duration-150 font-medium whitespace-nowrap",
                   activeTab === tab
-                    ? "bg-[#0047B6] text-white shadow-sm"
-                    : isDark
-                      ? "bg-[#061726] text-gray-400 hover:text-white hover:bg-white/10 border border-[#165A8A]"
-                      : "bg-slate-100 text-gray-500 hover:text-gray-900 hover:bg-slate-200 border border-slate-200"
+                    ? "bg-[var(--ds-accent)] text-white shadow-sm"
+                    : "text-ds-tertiary border border-ds-subtle hover:text-ds-primary hover:bg-[var(--ds-accent-muted)]"
                 )}
               >
                 {tab}
               </button>
             ))}
           </div>
-        </CardHeader>
-        <CardContent>
+        </div>
+        <div className="px-5 pb-5">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className={cn("border-b", isDark ? "border-[#165A8A]" : "border-slate-200")}>
+                <tr className="border-b border-ds-default">
                   {["Protocolo","Contato","Canal","Início","Fim","Resumo","Equipe"].map(h => (
-                    <th key={h} className={cn("text-left py-3 px-4 font-medium", isDark ? "text-gray-400" : "text-gray-500")}>{h}</th>
+                    <th key={h} className="text-left py-2.5 px-3 text-[11px] font-semibold uppercase tracking-wider text-ds-tertiary">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {paginatedData.length > 0 ? (
                   paginatedData.map((item, idx) => (
-                    <tr key={item.id || idx} className={cn("border-b transition-colors", isDark ? "border-[#165A8A]/50 hover:bg-white/5" : "border-slate-100 hover:bg-slate-50")}>
-                      <td className={cn("py-3 px-4 font-mono text-xs", isDark ? "text-gray-300" : "text-gray-600")}>{item.protocolo}</td>
-                      <td className={cn("py-3 px-4", isDark ? "text-gray-300" : "text-gray-700")}>{item.contato}</td>
-                      <td className="py-3 px-4">
-                        <span className={cn("px-2 py-1 rounded-md text-xs font-medium", isDark ? "bg-blue-500/10 text-blue-400" : "bg-blue-50 text-blue-600")}>
+                    <tr key={item.id || idx} className="border-b border-ds-subtle transition-colors hover:bg-[var(--ds-accent-muted)]">
+                      <td className="py-2.5 px-3 font-mono text-xs text-ds-secondary">{item.protocolo}</td>
+                      <td className="py-2.5 px-3 text-ds-primary text-[13px]">{item.contato}</td>
+                      <td className="py-2.5 px-3">
+                        <span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-[var(--ds-accent-muted)] text-[var(--ds-accent)]">
                           {item.canal}
                         </span>
                       </td>
-                      <td className={cn("py-3 px-4 text-xs", isDark ? "text-gray-400" : "text-gray-500")}>
-                        {formatDateTime(item.dataHoraInicio)}
-                      </td>
-                      <td className={cn("py-3 px-4 text-xs", isDark ? "text-gray-400" : "text-gray-500")}>
-                        {formatDateTime(item.dataHoraFim)}
-                      </td>
-                      <td className={cn("py-3 px-4 max-w-[200px] truncate", isDark ? "text-gray-300" : "text-gray-700")}>{item.resumoConversa}</td>
-                      <td className="py-3 px-4">
-                        <span className={cn("px-2 py-1 rounded-md text-xs font-medium", isDark ? "bg-green-500/10 text-green-400" : "bg-green-50 text-green-600")}>
+                      <td className="py-2.5 px-3 text-xs text-ds-tertiary">{formatDateTime(item.dataHoraInicio)}</td>
+                      <td className="py-2.5 px-3 text-xs text-ds-tertiary">{formatDateTime(item.dataHoraFim)}</td>
+                      <td className="py-2.5 px-3 max-w-[200px] truncate text-ds-secondary text-[13px]">{item.resumoConversa}</td>
+                      <td className="py-2.5 px-3">
+                        <span className={cn("px-2 py-0.5 rounded-md text-[11px] font-medium", isDark ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-50 text-emerald-600")}>
                           {item.casa}
                         </span>
                       </td>
@@ -1183,9 +1018,7 @@ export default function OverviewPage() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-gray-500">
-                      Nenhum atendimento encontrado
-                    </td>
+                    <td colSpan={7} className="py-8 text-center text-ds-tertiary">Nenhum atendimento encontrado</td>
                   </tr>
                 )}
               </tbody>
@@ -1194,137 +1027,92 @@ export default function OverviewPage() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className={cn("flex items-center justify-between mt-4 pt-4 border-t", isDark ? "border-[#165A8A]" : "border-slate-200")}>
-              <span className={cn("text-xs", isDark ? "text-gray-400" : "text-gray-500")}>
+            <div className="flex items-center justify-between mt-4 pt-3 border-t border-ds-subtle">
+              <span className="text-[11px] text-ds-tertiary">
                 Mostrando {((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, totalFiltered)} de {totalFiltered}
               </span>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
-                  className={cn("flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg border transition-colors disabled:opacity-30 disabled:cursor-not-allowed", isDark ? "bg-[#061726] border-[#165A8A] text-gray-300 hover:bg-white/10" : "bg-white border-slate-200 text-gray-600 hover:bg-slate-50")}
+                  className="flex items-center gap-1 px-2.5 py-1 text-[11px] rounded-md border border-ds-subtle text-ds-secondary transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[var(--ds-accent-muted)]"
                 >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                  Anterior
+                  <ChevronLeft className="w-3 h-3" /> Anterior
                 </button>
-                <span className={cn("text-xs px-2", isDark ? "text-gray-400" : "text-gray-500")}>
-                  {currentPage} / {totalPages}
-                </span>
+                <span className="text-[11px] px-2 text-ds-tertiary">{currentPage} / {totalPages}</span>
                 <button
                   onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages}
-                  className={cn("flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg border transition-colors disabled:opacity-30 disabled:cursor-not-allowed", isDark ? "bg-[#061726] border-[#165A8A] text-gray-300 hover:bg-white/10" : "bg-white border-slate-200 text-gray-600 hover:bg-slate-50")}
+                  className="flex items-center gap-1 px-2.5 py-1 text-[11px] rounded-md border border-ds-subtle text-ds-secondary transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[var(--ds-accent-muted)]"
                 >
-                  Próximo
-                  <ChevronRight className="w-3.5 h-3.5" />
+                  Próximo <ChevronRight className="w-3 h-3" />
                 </button>
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
       </div>
 
       {/* Drilldown Modal for Opções Selecionadas */}
       <Dialog open={drilldownOpcao.open} onOpenChange={(open) => !open && closeDrilldownOpcao()}>
-        <DialogContent className={cn("max-w-[95vw] w-[1200px] max-h-[85vh] overflow-hidden flex flex-col", isDark ? "bg-[#0C2135] border-[#165A8A] text-white" : "bg-white border-slate-200 text-gray-900")}>
+        <DialogContent className={cn("max-w-[95vw] w-[1200px] max-h-[85vh] overflow-hidden flex flex-col", isDark ? "bg-[#0C2135] border-ds-default" : "bg-white border-slate-200")}>
           <DialogHeader>
-            <DialogTitle className={cn("text-lg flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
-              <Filter className="w-5 h-5 text-blue-400" />
+            <DialogTitle className="text-base flex items-center gap-2 text-ds-primary">
+              <Filter className="w-4 h-4 text-[var(--ds-accent)]" />
               {drilldownOpcao.title}
             </DialogTitle>
-            <DialogDescription className="text-gray-400">
+            <DialogDescription className="text-ds-tertiary text-xs">
               Atendimentos filtrados • {dateRange.startDate} a {dateRange.endDate}
               {drilldownData && ` • ${drilldownData.length.toLocaleString('pt-BR')} registros`}
             </DialogDescription>
           </DialogHeader>
-
           <div className="flex-1 overflow-auto min-h-0">
             {drilldownLoading ? (
               <div className="flex items-center justify-center py-16">
-                <RefreshCw className="w-6 h-6 text-blue-500 animate-spin" />
-                <span className="text-gray-400 ml-3">Carregando...</span>
+                <RefreshCw className="w-5 h-5 text-[var(--ds-accent)] animate-spin" />
+                <span className="text-ds-tertiary ml-3 text-sm">Carregando...</span>
               </div>
             ) : drilldownData && drilldownData.length > 0 ? (
               <>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-[#165A8A]">
-                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Protocolo</th>
-                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Contato</th>
-                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Canal</th>
-                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Início</th>
-                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Fim</th>
-                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Resumo</th>
-                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Equipe</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {drilldownData
-                        .slice((drilldownPage - 1) * DRILLDOWN_PER_PAGE, drilldownPage * DRILLDOWN_PER_PAGE)
-                        .map((row, idx) => {
-                          const formatDate = (d: string) => {
-                            if (!d) return '—';
-                            try { return format(new Date(d), 'dd/MM/yyyy HH:mm'); }
-                            catch { return d; }
-                          };
-                          return (
-                            <tr key={`${row.protocolo}-${idx}`} className="border-b border-[#165A8A]/50 hover:bg-white/5 transition-colors">
-                              <td className="py-2.5 px-3 text-blue-300 font-mono text-xs">{row.protocolo}</td>
-                              <td className="py-2.5 px-3 text-gray-200">{row.contato || row.identificador || '—'}</td>
-                              <td className="py-2.5 px-3">
-                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300">
-                                  {row.canal}
-                                </span>
-                              </td>
-                              <td className="py-2.5 px-3 text-gray-300 text-xs">{formatDate(row.dataHoraInicio)}</td>
-                              <td className="py-2.5 px-3 text-gray-300 text-xs">{formatDate(row.dataHoraFim)}</td>
-                              <td className="py-2.5 px-3 text-gray-200 max-w-[200px] truncate">{row.resumoConversa || '—'}</td>
-                              <td className="py-2.5 px-3">
-                                <span className={`text-xs font-medium ${row.casa === 'Falta de Interação' ? 'text-red-400' : 'text-emerald-400'}`}>
-                                  {row.casa}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Pagination */}
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-ds-default">
+                      {["Protocolo","Contato","Canal","Início","Fim","Resumo","Equipe"].map(h => (
+                        <th key={h} className="text-left text-[11px] font-semibold uppercase tracking-wider py-2.5 px-3 text-ds-tertiary">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {drilldownData.slice((drilldownPage - 1) * DRILLDOWN_PER_PAGE, drilldownPage * DRILLDOWN_PER_PAGE).map((row, idx) => {
+                      const fmtD = (d: string) => { if (!d) return '—'; try { return format(new Date(d), 'dd/MM/yyyy HH:mm'); } catch { return d; } };
+                      return (
+                        <tr key={`${row.protocolo}-${idx}`} className="border-b border-ds-subtle transition-colors hover:bg-[var(--ds-accent-muted)]">
+                          <td className="py-2 px-3 font-mono text-xs text-[var(--ds-accent)]">{row.protocolo}</td>
+                          <td className="py-2 px-3 text-ds-primary text-[13px]">{row.contato || row.identificador || '—'}</td>
+                          <td className="py-2 px-3"><span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-[var(--ds-accent-muted)] text-[var(--ds-accent)]">{row.canal}</span></td>
+                          <td className="py-2 px-3 text-xs text-ds-tertiary">{fmtD(row.dataHoraInicio)}</td>
+                          <td className="py-2 px-3 text-xs text-ds-tertiary">{fmtD(row.dataHoraFim)}</td>
+                          <td className="py-2 px-3 text-ds-secondary max-w-[200px] truncate text-[13px]">{row.resumoConversa || '—'}</td>
+                          <td className="py-2 px-3"><span className={cn("text-xs font-medium", row.casa === 'Falta de Interação' ? 'text-[var(--ds-kpi-negative)]' : 'text-emerald-400')}>{row.casa}</span></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
                 {drilldownData.length > DRILLDOWN_PER_PAGE && (
-                  <div className="flex items-center justify-between pt-4 mt-2 border-t border-[#165A8A]">
-                    <span className="text-xs text-gray-400">
-                      Mostrando {((drilldownPage - 1) * DRILLDOWN_PER_PAGE) + 1}-{Math.min(drilldownPage * DRILLDOWN_PER_PAGE, drilldownData.length)} de {drilldownData.length.toLocaleString('pt-BR')}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setDrilldownPage(p => Math.max(1, p - 1))}
-                        disabled={drilldownPage === 1}
-                        className="px-3 py-1 text-xs text-gray-300 bg-white/5 rounded-lg hover:bg-white/10 disabled:opacity-30 transition-colors"
-                      >
-                        ‹ Anterior
-                      </button>
-                      <span className="text-xs text-gray-400">
-                        {drilldownPage} / {Math.ceil(drilldownData.length / DRILLDOWN_PER_PAGE)}
-                      </span>
-                      <button
-                        onClick={() => setDrilldownPage(p => Math.min(Math.ceil(drilldownData.length / DRILLDOWN_PER_PAGE), p + 1))}
-                        disabled={drilldownPage >= Math.ceil(drilldownData.length / DRILLDOWN_PER_PAGE)}
-                        className="px-3 py-1 text-xs text-gray-300 bg-white/5 rounded-lg hover:bg-white/10 disabled:opacity-30 transition-colors"
-                      >
-                        Próximo ›
-                      </button>
+                  <div className="flex items-center justify-between pt-3 mt-2 border-t border-ds-subtle px-1">
+                    <span className="text-[11px] text-ds-tertiary">Mostrando {((drilldownPage - 1) * DRILLDOWN_PER_PAGE) + 1}-{Math.min(drilldownPage * DRILLDOWN_PER_PAGE, drilldownData.length)} de {drilldownData.length.toLocaleString('pt-BR')}</span>
+                    <div className="flex items-center gap-1.5">
+                      <button onClick={() => setDrilldownPage(p => Math.max(1, p - 1))} disabled={drilldownPage === 1} className="px-2.5 py-1 text-[11px] text-ds-secondary rounded-md border border-ds-subtle hover:bg-[var(--ds-accent-muted)] disabled:opacity-30 transition-colors">‹ Anterior</button>
+                      <span className="text-[11px] text-ds-tertiary px-1">{drilldownPage} / {Math.ceil(drilldownData.length / DRILLDOWN_PER_PAGE)}</span>
+                      <button onClick={() => setDrilldownPage(p => Math.min(Math.ceil(drilldownData.length / DRILLDOWN_PER_PAGE), p + 1))} disabled={drilldownPage >= Math.ceil(drilldownData.length / DRILLDOWN_PER_PAGE)} className="px-2.5 py-1 text-[11px] text-ds-secondary rounded-md border border-ds-subtle hover:bg-[var(--ds-accent-muted)] disabled:opacity-30 transition-colors">Próximo ›</button>
                     </div>
                   </div>
                 )}
               </>
             ) : (
-              <div className="flex items-center justify-center py-16 text-gray-500">
-                Nenhum atendimento encontrado para esta opção.
-              </div>
+              <div className="flex items-center justify-center py-16 text-ds-tertiary text-sm">Nenhum atendimento encontrado para esta opção.</div>
             )}
           </div>
         </DialogContent>
@@ -1332,103 +1120,63 @@ export default function OverviewPage() {
 
       {/* PF/PJ Drilldown Dialog */}
       <Dialog open={drilldownPfPj.open} onOpenChange={(open) => { if (!open) closeDrilldownPfPj(); }}>
-        <DialogContent className={cn("max-w-5xl max-h-[85vh] flex flex-col", isDark ? "bg-[#0C2135] border-[#165A8A] text-white" : "bg-white border-slate-200 text-gray-900")}>
+        <DialogContent className={cn("max-w-5xl max-h-[85vh] flex flex-col", isDark ? "bg-[#0C2135] border-ds-default" : "bg-white border-slate-200")}>
           <DialogHeader>
-            <DialogTitle className={cn("text-lg flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
-              <Users className="w-5 h-5 text-emerald-400" />
+            <DialogTitle className="text-base flex items-center gap-2 text-ds-primary">
+              <Users className="w-4 h-4 text-emerald-400" />
               {drilldownPfPj.title}
             </DialogTitle>
-            <DialogDescription className="text-gray-400">
+            <DialogDescription className="text-ds-tertiary text-xs">
               Atendimentos filtrados • {dateRange.startDate} a {dateRange.endDate}
               {drilldownPfPjData && ` • ${drilldownPfPjData.length.toLocaleString('pt-BR')} registros`}
             </DialogDescription>
           </DialogHeader>
-
           <div className="flex-1 overflow-auto min-h-0">
             {drilldownPfPjLoading ? (
               <div className="flex items-center justify-center py-16">
-                <RefreshCw className="w-6 h-6 text-blue-500 animate-spin" />
-                <span className="text-gray-400 ml-3">Carregando...</span>
+                <RefreshCw className="w-5 h-5 text-[var(--ds-accent)] animate-spin" />
+                <span className="text-ds-tertiary ml-3 text-sm">Carregando...</span>
               </div>
             ) : drilldownPfPjData && drilldownPfPjData.length > 0 ? (
               <>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-[#165A8A]">
-                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Protocolo</th>
-                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Contato</th>
-                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Canal</th>
-                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Início</th>
-                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Fim</th>
-                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Opção</th>
-                        <th className="text-left text-gray-400 text-xs uppercase tracking-wider py-3 px-3">Equipe</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {drilldownPfPjData
-                        .slice((drilldownPfPjPage - 1) * DRILLDOWN_PER_PAGE, drilldownPfPjPage * DRILLDOWN_PER_PAGE)
-                        .map((row, idx) => {
-                          const formatDate = (d: string) => {
-                            if (!d) return '—';
-                            try { return format(new Date(d), 'dd/MM/yyyy HH:mm'); }
-                            catch { return d; }
-                          };
-                          return (
-                            <tr key={`${row.protocolo}-${idx}`} className="border-b border-[#165A8A]/50 hover:bg-white/5 transition-colors">
-                              <td className="py-2.5 px-3 text-blue-300 font-mono text-xs">{row.protocolo}</td>
-                              <td className="py-2.5 px-3 text-gray-200">{row.contato || row.identificador || '—'}</td>
-                              <td className="py-2.5 px-3">
-                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300">
-                                  {row.canal}
-                                </span>
-                              </td>
-                              <td className="py-2.5 px-3 text-gray-300 text-xs">{formatDate(row.dataHoraInicio)}</td>
-                              <td className="py-2.5 px-3 text-gray-300 text-xs">{formatDate(row.dataHoraFim)}</td>
-                              <td className="py-2.5 px-3 text-cyan-300 text-xs">{row.opcaoSelecionada || '—'}</td>
-                              <td className="py-2.5 px-3">
-                                <span className={`text-xs font-medium ${row.casa === 'Falta de Interação' ? 'text-red-400' : 'text-emerald-400'}`}>
-                                  {row.casa}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                    </tbody>
-                  </table>
-                </div>
-
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-ds-default">
+                      {["Protocolo","Contato","Canal","Início","Fim","Opção","Equipe"].map(h => (
+                        <th key={h} className="text-left text-[11px] font-semibold uppercase tracking-wider py-2.5 px-3 text-ds-tertiary">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {drilldownPfPjData.slice((drilldownPfPjPage - 1) * DRILLDOWN_PER_PAGE, drilldownPfPjPage * DRILLDOWN_PER_PAGE).map((row, idx) => {
+                      const fmtD = (d: string) => { if (!d) return '—'; try { return format(new Date(d), 'dd/MM/yyyy HH:mm'); } catch { return d; } };
+                      return (
+                        <tr key={`${row.protocolo}-${idx}`} className="border-b border-ds-subtle transition-colors hover:bg-[var(--ds-accent-muted)]">
+                          <td className="py-2 px-3 font-mono text-xs text-[var(--ds-accent)]">{row.protocolo}</td>
+                          <td className="py-2 px-3 text-ds-primary text-[13px]">{row.contato || row.identificador || '—'}</td>
+                          <td className="py-2 px-3"><span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-[var(--ds-accent-muted)] text-[var(--ds-accent)]">{row.canal}</span></td>
+                          <td className="py-2 px-3 text-xs text-ds-tertiary">{fmtD(row.dataHoraInicio)}</td>
+                          <td className="py-2 px-3 text-xs text-ds-tertiary">{fmtD(row.dataHoraFim)}</td>
+                          <td className="py-2 px-3 text-xs text-[var(--ds-accent)]">{row.opcaoSelecionada || '—'}</td>
+                          <td className="py-2 px-3"><span className={cn("text-xs font-medium", row.casa === 'Falta de Interação' ? 'text-[var(--ds-kpi-negative)]' : 'text-emerald-400')}>{row.casa}</span></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
                 {drilldownPfPjData.length > DRILLDOWN_PER_PAGE && (
-                  <div className="flex items-center justify-between pt-4 mt-2 border-t border-[#165A8A]">
-                    <span className="text-xs text-gray-400">
-                      Mostrando {((drilldownPfPjPage - 1) * DRILLDOWN_PER_PAGE) + 1}-{Math.min(drilldownPfPjPage * DRILLDOWN_PER_PAGE, drilldownPfPjData.length)} de {drilldownPfPjData.length.toLocaleString('pt-BR')}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setDrilldownPfPjPage(p => Math.max(1, p - 1))}
-                        disabled={drilldownPfPjPage === 1}
-                        className="px-3 py-1 text-xs text-gray-300 bg-white/5 rounded-lg hover:bg-white/10 disabled:opacity-30 transition-colors"
-                      >
-                        ‹ Anterior
-                      </button>
-                      <span className="text-xs text-gray-400">
-                        {drilldownPfPjPage} / {Math.ceil(drilldownPfPjData.length / DRILLDOWN_PER_PAGE)}
-                      </span>
-                      <button
-                        onClick={() => setDrilldownPfPjPage(p => Math.min(Math.ceil(drilldownPfPjData.length / DRILLDOWN_PER_PAGE), p + 1))}
-                        disabled={drilldownPfPjPage >= Math.ceil(drilldownPfPjData.length / DRILLDOWN_PER_PAGE)}
-                        className="px-3 py-1 text-xs text-gray-300 bg-white/5 rounded-lg hover:bg-white/10 disabled:opacity-30 transition-colors"
-                      >
-                        Próximo ›
-                      </button>
+                  <div className="flex items-center justify-between pt-3 mt-2 border-t border-ds-subtle px-1">
+                    <span className="text-[11px] text-ds-tertiary">Mostrando {((drilldownPfPjPage - 1) * DRILLDOWN_PER_PAGE) + 1}-{Math.min(drilldownPfPjPage * DRILLDOWN_PER_PAGE, drilldownPfPjData.length)} de {drilldownPfPjData.length.toLocaleString('pt-BR')}</span>
+                    <div className="flex items-center gap-1.5">
+                      <button onClick={() => setDrilldownPfPjPage(p => Math.max(1, p - 1))} disabled={drilldownPfPjPage === 1} className="px-2.5 py-1 text-[11px] text-ds-secondary rounded-md border border-ds-subtle hover:bg-[var(--ds-accent-muted)] disabled:opacity-30 transition-colors">‹ Anterior</button>
+                      <span className="text-[11px] text-ds-tertiary px-1">{drilldownPfPjPage} / {Math.ceil(drilldownPfPjData.length / DRILLDOWN_PER_PAGE)}</span>
+                      <button onClick={() => setDrilldownPfPjPage(p => Math.min(Math.ceil(drilldownPfPjData.length / DRILLDOWN_PER_PAGE), p + 1))} disabled={drilldownPfPjPage >= Math.ceil(drilldownPfPjData.length / DRILLDOWN_PER_PAGE)} className="px-2.5 py-1 text-[11px] text-ds-secondary rounded-md border border-ds-subtle hover:bg-[var(--ds-accent-muted)] disabled:opacity-30 transition-colors">Próximo ›</button>
                     </div>
                   </div>
                 )}
               </>
             ) : (
-              <div className="flex items-center justify-center py-16 text-gray-500">
-                Nenhum atendimento encontrado.
-              </div>
+              <div className="flex items-center justify-center py-16 text-ds-tertiary text-sm">Nenhum atendimento encontrado.</div>
             )}
           </div>
         </DialogContent>

@@ -12,6 +12,9 @@ import { MonthPicker } from "@/components/ui/month-picker";
 import { SelectCustom } from "@/components/ui/select-custom";
 import { SelectMulti } from "@/components/ui/select-multi";
 import { ExportReportDialog } from "@/components/ui/export-report-dialog";
+import { ChartCard } from "@/components/ui/chart-card";
+import { FilterToolbar } from "@/components/ui/filter-toolbar";
+import { CHART_COLORS, getTooltipStyle, getGridStroke, getAxisColor, getAxisTickFill, barGradientDefs, getBarGradient, PremiumTooltip } from "@/lib/chart-utils";
 import {
     RefreshCw, TrendingUp, Headphones, FileText, Clock, Filter,
     Building2, Users, CalendarDays, Settings2
@@ -58,22 +61,7 @@ const MONTH_NAMES = [
     "Jul", "Ago", "Set", "Out", "Nov", "Dez"
 ];
 
-const LINE_COLORS = [
-    "#009FE3", "#F37021", "#00A650", "#ED1C24", "#00BCD4",
-    "#8b5cf6", "#0077CC", "#14b8a6", "#6366f1", "#a855f7"
-];
-
-const TOOLTIP_STYLE = {
-    contentStyle: {
-        backgroundColor: '#ffffff',
-        borderRadius: '12px',
-        border: '1px solid #e5e7eb',
-        color: '#0C2135',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-    },
-    labelStyle: { color: '#374151', fontWeight: 600 as const },
-    itemStyle: { color: '#0C2135' },
-};
+const LINE_COLORS = CHART_COLORS;
 
 const ASSUNTO_COLORS = [
     '#009FE3', '#0088CC', '#0077B5', '#00669E', '#005587',
@@ -83,35 +71,81 @@ const ASSUNTO_COLORS = [
 
 // ─── Custom Tooltip for Evolução Chart ─────────────────────────────
 
-function EvolucaoTooltip({ active, payload, label }: any) {
+function EvolucaoTooltip({ active, payload, label, isDark }: any) {
     if (!active || !payload || payload.length === 0) return null;
+    // Default to dark if not provided (pre-existing call sites used inherited theme)
+    const dark = typeof isDark === 'boolean' ? isDark : (typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') !== 'light');
 
-    // Sort entries from largest to smallest
-    const sorted = [...payload].sort((a: any, b: any) => (b.value || 0) - (a.value || 0));
+    const sorted = [...payload].filter((e: any) => (e.value || 0) > 0).sort((a: any, b: any) => (b.value || 0) - (a.value || 0));
     const total = sorted.reduce((sum: number, entry: any) => sum + (entry.value || 0), 0);
 
     return (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-xl p-4 min-w-[220px]">
-            <p className="text-sm font-bold text-gray-800 mb-3 pb-2 border-b border-gray-100">{label}</p>
-            <div className="space-y-2">
+        <div
+            style={{
+                background: dark ? 'rgba(15, 42, 66, 0.96)' : 'rgba(255,255,255,0.98)',
+                border: `1px solid ${dark ? 'rgba(0,159,227,0.22)' : 'rgba(15,23,41,0.08)'}`,
+                borderRadius: 12,
+                padding: '12px 14px',
+                boxShadow: dark
+                    ? '0 12px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,159,227,0.06)'
+                    : '0 12px 32px rgba(15,23,41,0.08), 0 0 0 1px rgba(15,23,41,0.04)',
+                backdropFilter: 'blur(12px)',
+                minWidth: 240,
+            }}
+        >
+            <div
+                style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    letterSpacing: '0.02em',
+                    color: dark ? 'rgba(255,255,255,0.5)' : '#94A3B8',
+                    textTransform: 'uppercase',
+                    marginBottom: 8,
+                    paddingBottom: 8,
+                    borderBottom: `1px solid ${dark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,41,0.05)'}`,
+                }}
+            >
+                {label}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {sorted.map((entry: any, idx: number) => (
-                    <div key={idx} className="flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-2 min-w-0">
-                            <div
-                                className="w-3 h-3 rounded-full flex-shrink-0"
-                                style={{ backgroundColor: entry.stroke || entry.color }}
+                    <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                            <span
+                                style={{
+                                    display: 'inline-block',
+                                    width: 8,
+                                    height: 8,
+                                    borderRadius: 3,
+                                    background: entry.stroke || entry.color,
+                                    boxShadow: `0 0 0 2px ${dark ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.8)'}`,
+                                    flexShrink: 0,
+                                }}
                             />
-                            <span className="text-xs text-gray-600 truncate">{entry.dataKey}</span>
+                            <span style={{ fontSize: 12, color: dark ? 'rgba(255,255,255,0.7)' : '#475569', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {entry.dataKey}
+                            </span>
                         </div>
-                        <span className="text-sm font-bold text-gray-900 tabular-nums">
+                        <span style={{ fontSize: 13, fontWeight: 700, color: dark ? '#F0F4F8' : '#0F1729', fontVariantNumeric: 'tabular-nums' }}>
                             {(entry.value || 0).toLocaleString("pt-BR")}
                         </span>
                     </div>
                 ))}
             </div>
-            <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-100">
-                <span className="text-xs font-semibold text-gray-500 uppercase">Total</span>
-                <span className="text-sm font-bold text-[#009FE3] tabular-nums">
+            <div
+                style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginTop: 10,
+                    paddingTop: 8,
+                    borderTop: `1px solid ${dark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,41,0.05)'}`,
+                }}
+            >
+                <span style={{ fontSize: 11, fontWeight: 600, color: dark ? 'rgba(255,255,255,0.5)' : '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+                    Total
+                </span>
+                <span style={{ fontSize: 14, fontWeight: 800, color: '#009FE3', fontVariantNumeric: 'tabular-nums' }}>
                     {total.toLocaleString("pt-BR")}
                 </span>
             </div>
@@ -486,64 +520,70 @@ export default function DashboardAnualPage() {
 
             <div ref={contentRef} className="space-y-4">
             {/* 1. Evolução dos Atendimentos — Line Chart */}
-            <Card className={cn(
-                "shadow-lg rounded-2xl overflow-hidden animate-fade-up-1 card-premium",
-                isDark ? "bg-[#0C2135]/90 border-[#1E3A5F]/60 backdrop-blur-xl" : "bg-white/90 border-slate-200/80 backdrop-blur-xl"
-            )}>
-                <CardHeader>
-                    <CardTitle className={cn("text-lg flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
-                        <div className={cn("p-1.5 rounded-lg", isDark ? "bg-blue-500/10" : "bg-blue-50")}>
-                            <TrendingUp className={cn("w-4 h-4", isDark ? "text-blue-400" : "text-blue-600")} />
-                        </div>
-                        Evolução dos Atendimentos
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="h-[450px]">
-                    {chartData.length > 0 ? (
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={chartData} margin={{ top: 20, right: 30, bottom: 10, left: 10 }}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? "#165A8A" : "#e5e7eb"} />
-                                <XAxis
-                                    dataKey="mes"
-                                    stroke="#6b7280"
-                                    fontSize={12}
-                                    tick={{ fill: isDark ? '#9ca3af' : '#6b7280' }}
+            <ChartCard
+                title="Evolução dos Atendimentos"
+                icon={<TrendingUp className="w-4 h-4" />}
+                iconAccent="blue"
+                isDark={isDark}
+                height={460}
+                className="animate-fade-up-1"
+            >
+                {chartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={chartData} margin={{ top: 24, right: 24, bottom: 12, left: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={getGridStroke(isDark)} />
+                            <XAxis
+                                dataKey="mes"
+                                stroke={getAxisColor(isDark)}
+                                fontSize={12}
+                                tick={{ fill: getAxisTickFill(isDark), fontWeight: 600 }}
+                                axisLine={false}
+                                tickLine={false}
+                                dy={8}
+                            />
+                            <YAxis
+                                stroke={getAxisColor(isDark)}
+                                fontSize={11}
+                                tick={{ fill: getAxisTickFill(isDark), fontWeight: 500 }}
+                                axisLine={false}
+                                tickLine={false}
+                                width={50}
+                            />
+                            <RechartsTooltip
+                                cursor={{ stroke: isDark ? 'rgba(0,159,227,0.3)' : 'rgba(0,119,204,0.3)', strokeWidth: 1, strokeDasharray: '4 4' }}
+                                content={<EvolucaoTooltip isDark={isDark} />}
+                            />
+                            <Legend
+                                iconType="circle"
+                                iconSize={8}
+                                wrapperStyle={{ paddingTop: '14px', fontSize: '11px' }}
+                                formatter={(value: string) => (
+                                    <span style={{ color: isDark ? 'rgba(255,255,255,0.75)' : '#475569', fontWeight: 500, marginRight: 8 }}>
+                                        {value}
+                                    </span>
+                                )}
+                            />
+                            {canais.map((canal, idx) => (
+                                <Line
+                                    key={canal}
+                                    type="monotone"
+                                    dataKey={canal}
+                                    stroke={LINE_COLORS[idx % LINE_COLORS.length]}
+                                    strokeWidth={2.5}
+                                    dot={{ r: 4, fill: LINE_COLORS[idx % LINE_COLORS.length], stroke: isDark ? '#0C2135' : '#ffffff', strokeWidth: 2 }}
+                                    activeDot={{ r: 6, strokeWidth: 2, stroke: isDark ? '#0C2135' : '#ffffff' }}
+                                    connectNulls
+                                    animationDuration={1100 + idx * 80}
                                 />
-                                <YAxis stroke="#6b7280" fontSize={11} />
-                                <RechartsTooltip content={<EvolucaoTooltip />} />
-                                <Legend
-                                    wrapperStyle={{ color: '#9ca3af', fontSize: '12px', paddingTop: '10px' }}
-                                />
-                                {canais.map((canal, idx) => (
-                                    <Line
-                                        key={canal}
-                                        type="monotone"
-                                        dataKey={canal}
-                                        stroke={LINE_COLORS[idx % LINE_COLORS.length]}
-                                        strokeWidth={2.5}
-                                        dot={{ r: 4, fill: LINE_COLORS[idx % LINE_COLORS.length], strokeWidth: 0 }}
-                                        activeDot={{ r: 6, strokeWidth: 2, stroke: '#fff' }}
-                                        connectNulls
-                                    >
-                                        <LabelList
-                                            dataKey={canal}
-                                            position="top"
-                                            fill={LINE_COLORS[idx % LINE_COLORS.length]}
-                                            fontSize={9}
-                                            offset={8}
-                                            formatter={(v: number) => v > 0 ? v.toLocaleString("pt-BR") : ""}
-                                        />
-                                    </Line>
-                                ))}
-                            </LineChart>
-                        </ResponsiveContainer>
-                    ) : (
-                        <div className="flex items-center justify-center h-full text-gray-500">
-                            Nenhum dado disponível para {selectedYear}
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
+                            ))}
+                        </LineChart>
+                    </ResponsiveContainer>
+                ) : (
+                    <div className="flex items-center justify-center h-full text-ds-tertiary text-sm">
+                        Nenhum dado disponível para {selectedYear}
+                    </div>
+                )}
+            </ChartCard>
 
             {/* PDF-only: Evolução — Tabela Resumo Mensal por Canal */}
             <div data-pdf-only style={{ display: "none" }}>
@@ -603,19 +643,14 @@ export default function DashboardAnualPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
                 {/* 2. Atendimentos por Origem */}
-                <Card className={cn(
-                    "shadow-lg rounded-2xl overflow-hidden animate-fade-up-2 card-premium",
-                    isDark ? "bg-[#0C2135]/90 border-[#1E3A5F]/60 backdrop-blur-xl" : "bg-white/90 border-slate-200/80 backdrop-blur-xl"
-                )}>
-                    <CardHeader>
-                        <CardTitle className={cn("text-lg flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
-                            <div className={cn("p-1.5 rounded-lg", isDark ? "bg-orange-500/10" : "bg-orange-50")}>
-                                <Headphones className={cn("w-4 h-4", isDark ? "text-orange-400" : "text-orange-600")} />
-                            </div>
-                            Atendimentos por Origem
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
+                <ChartCard
+                    title="Atendimentos por Origem"
+                    icon={<Headphones className="w-4 h-4" />}
+                    iconAccent="orange"
+                    isDark={isDark}
+                    className="animate-fade-up-2"
+                >
+                    <div>
                         {origemData.length > 0 ? (
                             <div className="space-y-5">
                                 {origemData.map((item, idx) => {
@@ -674,28 +709,24 @@ export default function DashboardAnualPage() {
                                 })}
                             </div>
                         ) : (
-                            <div className="flex items-center justify-center h-[200px] text-gray-500">
+                            <div className="flex items-center justify-center h-[200px] text-ds-tertiary text-sm">
                                 Nenhum dado disponível
                             </div>
                         )}
-                    </CardContent>
-                </Card>
+                    </div>
+                </ChartCard>
 
                 {/* 4. Atendimentos Dentro e Fora do Prazo */}
-                <Card className={cn(
-                    "shadow-lg rounded-2xl overflow-hidden animate-fade-up-3 card-premium",
-                    isDark ? "bg-[#0C2135]/90 border-[#1E3A5F]/60 backdrop-blur-xl" : "bg-white/90 border-slate-200/80 backdrop-blur-xl"
-                )}>
-                    <CardHeader>
-                        <CardTitle className={cn("text-lg flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
-                            <div className={cn("p-1.5 rounded-lg", isDark ? "bg-yellow-500/10" : "bg-yellow-50")}>
-                                <Clock className={cn("w-4 h-4", isDark ? "text-yellow-400" : "text-yellow-600")} />
-                            </div>
-                            Atendimentos Dentro e Fora do Prazo
-                        </CardTitle>
-                        <p className={cn("text-xs mt-1", isDark ? "text-gray-500" : "text-gray-400")}>Prazo: até 24 horas entre início e fim</p>
-                    </CardHeader>
-                    <CardContent>
+                <ChartCard
+                    title="Atendimentos Dentro e Fora do Prazo"
+                    icon={<Clock className="w-4 h-4" />}
+                    iconAccent="amber"
+                    isDark={isDark}
+                    badge="Até 24h"
+                    className="animate-fade-up-3"
+                >
+                    <div>
+                        <p className="text-xs mb-4 text-ds-tertiary">Prazo: até 24 horas entre início e fim</p>
                         {prazoData.total > 0 ? (
                             <div className="space-y-6 pt-4">
                                 {/* Dentro do Prazo */}
@@ -834,74 +865,79 @@ export default function DashboardAnualPage() {
                                 </div >
                             </div >
                         ) : (
-                            <div className="flex items-center justify-center h-[200px] text-gray-500">
+                            <div className="flex items-center justify-center h-[200px] text-ds-tertiary text-sm">
                                 Nenhum dado disponível
                             </div>
                         )
                         }
-                    </CardContent >
-                </Card >
-            </div >
+                    </div>
+                </ChartCard>
+            </div>
 
             {/* 3. Atendimentos por Assunto — Bar Chart + Insights */}
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5">
-                <Card className={cn(
-                    "shadow-lg rounded-2xl overflow-hidden animate-fade-up-4 card-premium",
-                    isDark ? "bg-[#0C2135]/90 border-[#1E3A5F]/60 backdrop-blur-xl" : "bg-white/90 border-slate-200/80 backdrop-blur-xl"
-                )}>
-                    <CardHeader>
-                        <CardTitle className={cn("text-lg flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
-                            <div className={cn("p-1.5 rounded-lg", isDark ? "bg-sky-500/10" : "bg-sky-50")}>
-                                <FileText className={cn("w-4 h-4", isDark ? "text-sky-400" : "text-sky-600")} />
-                            </div>
-                            Ranking de Assuntos
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="h-[600px]">
-                        {rankingAssuntos.length ? (
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart
-                                    data={rankingAssuntos}
-                                    layout="vertical"
-                                    margin={{ left: 10, right: 60 }}
-                                    onClick={(data: any) => {
-                                        if (data?.activePayload?.[0]) {
-                                            const item = data.activePayload[0].payload;
-                                            const originals = item.originalNames || [item.nome];
-                                            openDrilldown(`Assunto: ${item.nome}`, 'assunto', originals.join('|||'));
-                                        }
-                                    }}
-                                    style={{ cursor: 'pointer' }}
-                                >
-                                    <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke={isDark ? "#165A8A" : "#e5e7eb"} />
-                                    <XAxis type="number" stroke="#6b7280" fontSize={11} />
-                                    <YAxis
-                                        type="category"
-                                        dataKey="nome"
-                                        width={140}
-                                        stroke="#9ca3af"
-                                        fontSize={11}
-                                        tick={{ fill: isDark ? '#9ca3af' : '#6b7280' }}
-                                    />
-                                    <RechartsTooltip
-                                        {...TOOLTIP_STYLE}
-                                        formatter={(value: number) => [value.toLocaleString("pt-BR"), "Atendimentos"]}
-                                    />
-                                    <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={22}>
-                                        {rankingAssuntos.map((_, index) => (
-                                            <Cell key={`assunto-${index}`} fill={ASSUNTO_COLORS[index % ASSUNTO_COLORS.length]} className="cursor-pointer" />
-                                        ))}
-                                        <LabelList dataKey="total" position="right" fill="#94a3b8" fontSize={11} formatter={(v: number) => v.toLocaleString("pt-BR")} />
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
-                        ) : (
-                            <div className="flex items-center justify-center h-full text-gray-500">
-                                Nenhum dado disponível
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
+                <ChartCard
+                    title="Ranking de Assuntos"
+                    icon={<FileText className="w-4 h-4" />}
+                    iconAccent="cyan"
+                    isDark={isDark}
+                    height={620}
+                    className="animate-fade-up-4"
+                >
+                    {rankingAssuntos.length ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart
+                                data={rankingAssuntos}
+                                layout="vertical"
+                                margin={{ left: 10, right: 70, top: 6, bottom: 6 }}
+                                barCategoryGap={6}
+                                onClick={(data: any) => {
+                                    if (data?.activePayload?.[0]) {
+                                        const item = data.activePayload[0].payload;
+                                        const originals = item.originalNames || [item.nome];
+                                        openDrilldown(`Assunto: ${item.nome}`, 'assunto', originals.join('|||'));
+                                    }
+                                }}
+                                style={{ cursor: 'pointer' }}
+                            >
+                                <defs>{barGradientDefs("assunto", ASSUNTO_COLORS)}</defs>
+                                <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke={getGridStroke(isDark)} />
+                                <XAxis
+                                    type="number"
+                                    stroke={getAxisColor(isDark)}
+                                    fontSize={11}
+                                    tick={{ fill: getAxisTickFill(isDark) }}
+                                    axisLine={false}
+                                    tickLine={false}
+                                />
+                                <YAxis
+                                    type="category"
+                                    dataKey="nome"
+                                    width={150}
+                                    stroke={getAxisColor(isDark)}
+                                    fontSize={12}
+                                    tick={{ fill: getAxisTickFill(isDark), fontWeight: 500 }}
+                                    axisLine={false}
+                                    tickLine={false}
+                                />
+                                <RechartsTooltip
+                                    cursor={{ fill: isDark ? 'rgba(0,159,227,0.06)' : 'rgba(0,159,227,0.04)' }}
+                                    content={<PremiumTooltip isDark={isDark} valueLabel="Atendimentos" />}
+                                />
+                                <Bar dataKey="total" radius={[0, 7, 7, 0]} barSize={24} animationDuration={900}>
+                                    {rankingAssuntos.map((_, index) => (
+                                        <Cell key={`assunto-${index}`} fill={getBarGradient("assunto", index, ASSUNTO_COLORS.length)} className="cursor-pointer" />
+                                    ))}
+                                    <LabelList dataKey="total" position="right" fill={isDark ? "#E2E8F0" : "#334155"} fontSize={12} fontWeight={700} formatter={(v: number) => v.toLocaleString("pt-BR")} offset={10} />
+                                </Bar>
+                            </BarChart>
+                        </ResponsiveContainer>
+                    ) : (
+                        <div className="flex items-center justify-center h-full text-ds-tertiary text-sm">
+                            Nenhum dado disponível
+                        </div>
+                    )}
+                </ChartCard>
 
                 {/* Insights Panel */}
                 {rankingAssuntos.length ? (() => {

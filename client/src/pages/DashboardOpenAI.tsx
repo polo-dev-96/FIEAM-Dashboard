@@ -19,6 +19,10 @@ import { format, startOfMonth, subMonths } from "date-fns";
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useTheme } from "@/lib/ThemeContext";
 import { cn } from "@/lib/utils";
+import { ChartCard } from "@/components/ui/chart-card";
+import { FilterToolbar } from "@/components/ui/filter-toolbar";
+import { KpiCard } from "@/components/ui/kpi-card";
+import { CHART_COLORS, getTooltipStyle, getGridStroke, getAxisColor, getAxisTickFill, barGradientDefs, getBarGradient, PremiumTooltip } from "@/lib/chart-utils";
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -32,23 +36,7 @@ interface OpenAIStatsData {
 
 const REFRESH_INTERVAL = 60_000;
 
-const COLORS = [
-  "#009FE3", "#F37021", "#00A650", "#ED1C24", "#00BCD4",
-  "#8b5cf6", "#0077CC", "#14b8a6", "#6366f1", "#a855f7",
-  "#f59e0b", "#ef4444", "#22c55e", "#3b82f6", "#ec4899"
-];
-
-const TOOLTIP_STYLE = {
-  contentStyle: {
-    backgroundColor: '#ffffff',
-    borderRadius: '12px',
-    border: '1px solid #e5e7eb',
-    color: '#0C2135',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-  },
-  labelStyle: { color: '#374151', fontWeight: 600 as const },
-  itemStyle: { color: '#0C2135' },
-};
+const COLORS = CHART_COLORS;
 
 function getDefaultDates() {
   const now = new Date();
@@ -383,60 +371,73 @@ export default function DashboardOpenAIPage() {
         </div>
 
         {/* Timeline Chart - Volume de Gastos por dia */}
-        <Card className={cn(
-          "shadow-lg rounded-2xl overflow-hidden animate-fade-up-2 card-premium",
-          isDark ? "bg-[#0C2135]/90 border-[#1E3A5F]/60 backdrop-blur-xl" : "bg-white/90 border-slate-200/80 backdrop-blur-xl"
-        )}>
-          <CardHeader>
-            <CardTitle className={cn("text-lg flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
-              <div className={cn("p-1.5 rounded-lg", isDark ? "bg-blue-500/10" : "bg-blue-50")}>
-                <TrendingUp className={cn("w-4 h-4", isDark ? "text-blue-400" : "text-blue-600")} />
-              </div>
-              Volume de Gastos por Dia
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={timelineConverted}>
-                <defs>
-                  <linearGradient id="colorGastos" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#009FE3" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#009FE3" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? "#165A8A" : "#e5e7eb"} />
-                <XAxis
-                  dataKey="data"
-                  tickFormatter={(val) => {
-                    try { return format(new Date(val + "T12:00:00"), "dd/MM"); } catch { return val; }
-                  }}
-                  stroke="#6b7280"
-                  fontSize={11}
-                />
-                <YAxis
-                  stroke="#6b7280"
-                  fontSize={11}
-                  tickFormatter={(val) => `${simbolo}${val.toFixed(2)}`}
-                />
-                <RechartsTooltip
-                  {...TOOLTIP_STYLE}
-                  labelFormatter={(label) => {
-                    try { return format(new Date(label + "T12:00:00"), "dd/MM/yyyy"); } catch { return label; }
-                  }}
-                  formatter={(value: number) => [`${simbolo} ${fmtValueShort(value)}`, "Gasto"]}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="total"
-                  stroke="#009FE3"
-                  strokeWidth={2}
-                  fillOpacity={1}
-                  fill="url(#colorGastos)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        <ChartCard
+          title="Volume de Gastos por Dia"
+          icon={<TrendingUp className="w-4 h-4" />}
+          iconAccent="blue"
+          isDark={isDark}
+          height={320}
+          className="animate-fade-up-2"
+        >
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={timelineConverted} margin={{ top: 10, right: 14, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="colorGastos" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#009FE3" stopOpacity={isDark ? 0.42 : 0.28} />
+                  <stop offset="60%" stopColor="#009FE3" stopOpacity={isDark ? 0.12 : 0.08} />
+                  <stop offset="100%" stopColor="#009FE3" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="strokeGastos" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="#00B4FF" />
+                  <stop offset="100%" stopColor="#0077CC" />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={getGridStroke(isDark)} />
+              <XAxis
+                dataKey="data"
+                tickFormatter={(val) => { try { return format(new Date(val + "T12:00:00"), "dd/MM"); } catch { return val; } }}
+                stroke={getAxisColor(isDark)}
+                fontSize={11}
+                tick={{ fill: getAxisTickFill(isDark), fontWeight: 500 }}
+                axisLine={false}
+                tickLine={false}
+                dy={6}
+              />
+              <YAxis
+                stroke={getAxisColor(isDark)}
+                fontSize={11}
+                tick={{ fill: getAxisTickFill(isDark), fontWeight: 500 }}
+                tickFormatter={(val) => `${simbolo}${val.toFixed(2)}`}
+                axisLine={false}
+                tickLine={false}
+                width={60}
+              />
+              <RechartsTooltip
+                cursor={{ stroke: isDark ? 'rgba(0,159,227,0.35)' : 'rgba(0,119,204,0.35)', strokeWidth: 1, strokeDasharray: '4 4' }}
+                content={(props: any) => (
+                  <PremiumTooltip
+                    {...props}
+                    isDark={isDark}
+                    valueLabel="Gasto"
+                    dotColor="#009FE3"
+                    labelFormatter={(l: string) => { try { return format(new Date(l + "T12:00:00"), "dd/MM/yyyy"); } catch { return l; } }}
+                    valueFormatter={(v: number) => `${simbolo} ${fmtValueShort(v)}`}
+                  />
+                )}
+              />
+              <Area
+                type="monotone"
+                dataKey="total"
+                stroke="url(#strokeGastos)"
+                strokeWidth={2.5}
+                fillOpacity={1}
+                fill="url(#colorGastos)"
+                activeDot={{ r: 5, fill: '#009FE3', stroke: isDark ? '#0C2135' : '#ffffff', strokeWidth: 2 }}
+                animationDuration={1200}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </ChartCard>
 
         {/* PDF-only: Daily Volume Table */}
         <div data-pdf-only style={{ display: "none" }}>
@@ -488,66 +489,69 @@ export default function DashboardOpenAIPage() {
         </div>
 
         {/* Valores por Unidade (project_name) */}
-        <Card className={cn(
-          "shadow-lg rounded-2xl overflow-hidden animate-fade-up-3 card-premium",
-          isDark ? "bg-[#0C2135]/90 border-[#1E3A5F]/60 backdrop-blur-xl" : "bg-white/90 border-slate-200/80 backdrop-blur-xl"
-        )}>
-          <CardHeader>
-            <CardTitle className={cn("text-lg flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
-              <div className={cn("p-1.5 rounded-lg", isDark ? "bg-emerald-500/10" : "bg-emerald-50")}>
-                <Building2 className={cn("w-4 h-4", isDark ? "text-emerald-400" : "text-emerald-600")} />
-              </div>
-              Valores por Unidade
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="h-[350px]">
-            {porProjetoConverted.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-gray-500 text-sm">
-                Nenhum dado disponível
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={porProjetoConverted}
-                  layout="vertical"
-                  margin={{ left: 10, right: 80 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke={isDark ? "#165A8A" : "#e5e7eb"} />
-                  <XAxis
-                    type="number"
-                    stroke="#6b7280"
-                    fontSize={11}
-                    tickFormatter={(val) => `${simbolo}${val.toFixed(2)}`}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="nome"
-                    width={160}
-                    stroke="#9ca3af"
-                    fontSize={11}
-                    tick={{ fill: isDark ? '#9ca3af' : '#6b7280' }}
-                  />
-                  <RechartsTooltip
-                    {...TOOLTIP_STYLE}
-                    formatter={(value: number) => [`${simbolo} ${fmtValueShort(value)}`, "Gasto"]}
-                  />
-                  <Bar dataKey="total" radius={[0, 6, 6, 0]} barSize={24}>
-                    {porProjetoConverted.map((_, index) => (
-                      <Cell key={`proj-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                    <LabelList
-                      dataKey="total"
-                      position="right"
-                      fill="#94a3b8"
-                      fontSize={11}
-                      formatter={(v: number) => `${simbolo} ${fmtValueShort(v)}`}
+        <ChartCard
+          title="Valores por Unidade"
+          icon={<Building2 className="w-4 h-4" />}
+          iconAccent="green"
+          isDark={isDark}
+          height={Math.max(320, porProjetoConverted.length * 52 + 60)}
+          className="animate-fade-up-3"
+        >
+          {porProjetoConverted.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-ds-tertiary text-sm">Nenhum dado disponível</div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={porProjetoConverted} layout="vertical" margin={{ left: 10, right: 90, top: 6, bottom: 6 }} barCategoryGap={8}>
+                <defs>{barGradientDefs("proj")}</defs>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke={getGridStroke(isDark)} />
+                <XAxis
+                  type="number"
+                  stroke={getAxisColor(isDark)}
+                  fontSize={11}
+                  tick={{ fill: getAxisTickFill(isDark) }}
+                  tickFormatter={(val) => `${simbolo}${val.toFixed(2)}`}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="nome"
+                  width={170}
+                  stroke={getAxisColor(isDark)}
+                  fontSize={12}
+                  tick={{ fill: getAxisTickFill(isDark), fontWeight: 500 }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <RechartsTooltip
+                  cursor={{ fill: isDark ? 'rgba(0,159,227,0.06)' : 'rgba(0,159,227,0.04)' }}
+                  content={(props: any) => (
+                    <PremiumTooltip
+                      {...props}
+                      isDark={isDark}
+                      valueLabel="Gasto"
+                      valueFormatter={(v: number) => `${simbolo} ${fmtValueShort(v)}`}
                     />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
+                  )}
+                />
+                <Bar dataKey="total" radius={[0, 8, 8, 0]} barSize={28} animationDuration={900}>
+                  {porProjetoConverted.map((_, index) => (
+                    <Cell key={`proj-${index}`} fill={getBarGradient("proj", index)} />
+                  ))}
+                  <LabelList
+                    dataKey="total"
+                    position="right"
+                    fill={isDark ? "#E2E8F0" : "#334155"}
+                    fontSize={12}
+                    fontWeight={700}
+                    formatter={(v: number) => `${simbolo} ${fmtValueShort(v)}`}
+                    offset={10}
+                  />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
       </div>
     </Layout>
   );

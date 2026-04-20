@@ -68,34 +68,29 @@ export default function SearchProtocolPage() {
 
   return (
     <Layout title="Pesquisar Protocolo" subtitle="Busque atendimentos pelo número de protocolo">
-      {/* Search Bar — Premium Glass */}
+      {/* Search Bar */}
       <div className="max-w-2xl mx-auto animate-fade-up">
         <div className={cn(
-          "flex gap-3 p-2 rounded-2xl border transition-all duration-300",
+          "flex gap-2 p-1.5 rounded-xl border transition-all duration-200 shadow-ds-card",
           isDark
-            ? "bg-[#0C2135]/90 border-[#1E3A5F]/60 backdrop-blur-xl shadow-lg shadow-black/20 focus-within:border-[#009FE3]/40 focus-within:shadow-[0_0_24px_rgba(0,159,227,0.1)]"
-            : "bg-white/90 border-slate-200/80 backdrop-blur-xl shadow-lg shadow-black/5 focus-within:border-[#009FE3]/40 focus-within:shadow-[0_0_24px_rgba(0,159,227,0.08)]"
+            ? "bg-ds-secondary border-ds-default focus-within:border-ds-strong"
+            : "bg-ds-elevated border-ds-default focus-within:border-ds-strong"
         )}>
           <div className="relative flex-1">
-            <Search className={cn("absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors", isDark ? "text-gray-500" : "text-gray-400")} />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-ds-tertiary" />
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Digite o número do protocolo..."
-              className={cn(
-                "w-full pl-12 pr-4 py-3.5 rounded-xl border-0 bg-transparent focus:outline-none transition-all text-lg font-medium",
-                isDark
-                  ? "text-white placeholder-gray-500"
-                  : "text-gray-900 placeholder-gray-400"
-              )}
+              className="w-full pl-10 pr-4 py-3 rounded-lg border-0 bg-transparent focus:outline-none text-base font-medium text-ds-primary placeholder:text-ds-tertiary"
             />
           </div>
           <button
             onClick={handleSearch}
             disabled={isLoading || !query.trim()}
-            className="px-7 py-3.5 bg-gradient-to-r from-[#009FE3] to-[#0077CC] hover:from-[#0088CC] hover:to-[#006BB5] text-white rounded-xl font-semibold transition-all duration-300 flex items-center gap-2 shadow-md shadow-[#009FE3]/20 hover:shadow-lg hover:shadow-[#009FE3]/30 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+            className="px-5 py-3 bg-[var(--ds-accent)] hover:bg-[var(--ds-accent-hover)] text-white rounded-lg font-semibold transition-all duration-150 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {isLoading ? (
               <>
@@ -116,47 +111,45 @@ export default function SearchProtocolPage() {
       {error && (
         <div className="max-w-2xl mx-auto animate-fade-up">
           <div className={cn(
-            "flex items-center gap-3 rounded-2xl p-4 border",
-            isDark ? "bg-red-500/5 border-red-500/20" : "bg-red-50 border-red-200"
+            "flex items-center gap-3 rounded-xl p-4 border",
+            isDark ? "bg-rose-500/5 border-rose-500/15" : "bg-rose-50 border-rose-200"
           )}>
-            <div className={cn("p-2 rounded-lg", isDark ? "bg-red-500/10" : "bg-red-100")}>
-              <AlertCircle className={cn("w-4 h-4", isDark ? "text-red-400" : "text-red-600")} />
+            <div className={cn("p-1.5 rounded-lg", isDark ? "bg-rose-500/10" : "bg-rose-100")}>
+              <AlertCircle className="w-4 h-4 text-[var(--ds-kpi-negative)]" />
             </div>
-            <p className={cn("text-sm font-medium", isDark ? "text-red-400" : "text-red-600")}>{error}</p>
+            <p className="text-sm font-medium text-[var(--ds-kpi-negative)]">{error}</p>
           </div>
         </div>
       )}
 
       {/* Results */}
       {results && results.length > 0 && (
-        <div className="space-y-5">
-          <div className={cn("flex items-center gap-3 animate-fade-up", isDark ? "text-gray-400" : "text-gray-500")}>
-            <div className={cn("px-2.5 py-1 rounded-lg text-xs font-bold", isDark ? "bg-[#009FE3]/10 text-[#009FE3]" : "bg-blue-50 text-blue-600")}>
+        <div className="space-y-4">
+          <div className="flex items-center gap-2.5 animate-fade-up text-ds-secondary">
+            <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-[var(--ds-accent-muted)] text-[var(--ds-accent)]">
               {results.length}
-            </div>
+            </span>
             <span className="text-sm font-medium">
-              resultado(s) para <span className={cn("font-mono font-bold", isDark ? "text-white" : "text-gray-900")}>{query}</span>
+              resultado(s) para <span className="font-mono font-bold text-ds-primary">{query}</span>
             </span>
           </div>
 
           {results.map((item, idx) => (
-            <Card key={item.id || idx} className={cn(
-              "shadow-lg rounded-2xl overflow-hidden card-premium animate-fade-up",
-              isDark ? "bg-[#0C2135]/90 border-[#1E3A5F]/60 backdrop-blur-xl" : "bg-white/90 border-slate-200/80 backdrop-blur-xl"
-            )} style={{ animationDelay: `${idx * 0.1}s` }}>
-              <CardHeader className="pb-3">
-                <CardTitle className={cn("flex items-center gap-3 text-lg", isDark ? "text-white" : "text-gray-900")}>
-                  <div className={cn("p-2 rounded-xl", isDark ? "bg-blue-500/10" : "bg-blue-50")}>
-                    <FileText className={cn("w-5 h-5", isDark ? "text-blue-400" : "text-blue-600")} />
-                  </div>
-                  <div>
-                    <span className={cn("text-[10px] uppercase tracking-widest font-bold block", isDark ? "text-gray-500" : "text-gray-400")}>Protocolo</span>
-                    <span className={cn("font-mono font-bold", isDark ? "text-[#009FE3]" : "text-blue-600")}>{item.protocolo}</span>
-                  </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div key={item.id || idx} className={cn(
+              "rounded-xl border transition-theme card-hover animate-fade-up overflow-hidden",
+              isDark ? "bg-ds-secondary border-ds-default shadow-ds-card" : "bg-ds-elevated border-ds-default shadow-ds-card"
+            )} style={{ animationDelay: `${idx * 0.08}s` }}>
+              <div className="px-5 pt-5 pb-3 flex items-center gap-3">
+                <div className={cn("p-1.5 rounded-lg", isDark ? "bg-[var(--ds-accent-muted)]" : "bg-blue-50")}>
+                  <FileText className="w-4 h-4 text-[var(--ds-accent)]" />
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase tracking-widest font-semibold block text-ds-tertiary">Protocolo</span>
+                  <span className="font-mono font-bold text-[var(--ds-accent)]">{item.protocolo}</span>
+                </div>
+              </div>
+              <div className="px-5 pb-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
                   <InfoField isDark={isDark} icon={<User className="w-3.5 h-3.5" />} label="Contato" value={item.contato} color="blue" />
                   <InfoField isDark={isDark} icon={<Phone className="w-3.5 h-3.5" />} label="Identificador" value={item.identificador} color="green" />
                   <InfoField isDark={isDark} icon={<Radio className="w-3.5 h-3.5" />} label="Canal" value={item.canal} color="purple" />
@@ -166,38 +159,33 @@ export default function SearchProtocolPage() {
                   <InfoField isDark={isDark} icon={<Building2 className="w-3.5 h-3.5" />} label="Casa" value={item.casa} color="pink" />
                 </div>
 
-                {/* Resumo da Conversa — Premium glass with colored left border */}
-                <div className={cn(
-                  "relative mt-4 p-4 rounded-xl border overflow-hidden",
-                  isDark ? "bg-[#081E30]/80 border-[#1E3A5F]/40" : "bg-slate-50/80 border-slate-200/80"
-                )}>
-                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-[#009FE3] to-[#0077CC] rounded-l-xl" />
-                  <div className="flex items-center gap-2 mb-2 ml-2">
-                    <MessageSquare className={cn("w-3.5 h-3.5", isDark ? "text-[#009FE3]" : "text-blue-500")} />
-                    <span className={cn("text-[10px] font-bold uppercase tracking-widest", isDark ? "text-gray-500" : "text-gray-400")}>Resumo da Conversa</span>
+                {/* Resumo */}
+                <div className="relative mt-3 p-3.5 rounded-lg border border-l-[3px] border-l-[var(--ds-accent)] border-ds-subtle bg-ds-inset overflow-hidden">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <MessageSquare className="w-3.5 h-3.5 text-[var(--ds-accent)]" />
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-ds-tertiary">Resumo da Conversa</span>
                   </div>
-                  <p className={cn("text-sm leading-relaxed ml-2", isDark ? "text-gray-300" : "text-gray-700")}>
+                  <p className="text-sm leading-relaxed text-ds-secondary">
                     {item.resumoConversa || "Sem resumo disponível"}
                   </p>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           ))}
         </div>
       )}
 
-      {/* Empty State (initial) — Premium */}
+      {/* Empty State */}
       {!results && !error && !isLoading && (
         <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-up">
           <div className={cn(
-            "relative p-8 rounded-3xl border mb-6",
-            isDark ? "bg-[#0C2135]/60 border-[#1E3A5F]/40" : "bg-white/60 border-slate-200/60"
+            "p-6 rounded-2xl border mb-5",
+            isDark ? "bg-ds-secondary border-ds-default" : "bg-ds-elevated border-ds-default"
           )}>
-            <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-[#009FE3]/5 to-transparent" />
-            <Search className={cn("w-14 h-14 relative z-10", isDark ? "text-gray-600" : "text-gray-300")} />
+            <Search className="w-10 h-10 text-ds-tertiary" />
           </div>
-          <h3 className={cn("text-xl font-bold mb-2", isDark ? "text-gray-300" : "text-gray-700")}>Pesquisar Protocolo</h3>
-          <p className={cn("max-w-md text-sm", isDark ? "text-gray-500" : "text-gray-400")}>
+          <h3 className="text-lg font-bold mb-1.5 text-ds-primary">Pesquisar Protocolo</h3>
+          <p className="max-w-md text-sm text-ds-tertiary">
             Digite o número do protocolo no campo acima para buscar os detalhes do atendimento.
           </p>
         </div>
@@ -222,16 +210,13 @@ function InfoField({ icon, label, value, isDark, color }: {
   const c = iconBgMap[color];
 
   return (
-    <div className={cn(
-      "flex items-start gap-3 p-3 rounded-xl border transition-colors",
-      isDark ? "bg-[#081E30]/50 border-[#1E3A5F]/30 hover:border-[#1E3A5F]/60" : "bg-slate-50/80 border-slate-100 hover:border-slate-200"
-    )}>
-      <div className={cn("p-1.5 rounded-lg mt-0.5", isDark ? c.dark : c.light)}>
+    <div className="flex items-start gap-2.5 p-2.5 rounded-lg border border-ds-subtle bg-ds-inset transition-colors hover:border-ds-default">
+      <div className={cn("p-1.5 rounded-md mt-0.5", isDark ? c.dark : c.light)}>
         <span className={isDark ? c.iconDark : c.iconLight}>{icon}</span>
       </div>
       <div className="min-w-0">
-        <p className={cn("text-[10px] font-bold uppercase tracking-widest", isDark ? "text-gray-500" : "text-gray-400")}>{label}</p>
-        <p className={cn("text-sm mt-0.5 break-all font-medium", isDark ? "text-gray-200" : "text-gray-800")}>{value || "-"}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-ds-tertiary">{label}</p>
+        <p className="text-sm mt-0.5 break-all font-medium text-ds-primary">{value || "-"}</p>
       </div>
     </div>
   );
