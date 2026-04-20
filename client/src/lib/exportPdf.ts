@@ -242,6 +242,33 @@ const LIGHT_TEXT_MAP: [string, string][] = [
   ["rgb(156, 163, 175)", "#64748b"],  // gray-400
 ];
 
+// Parse an "rgb(r, g, b)" / "rgba(r, g, b, a)" / "#rrggbb" string into [r,g,b] (0-255) or null
+function parseColor(input: string): [number, number, number] | null {
+  if (!input) return null;
+  const s = input.trim();
+  // hex
+  const hex = s.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (hex) {
+    let h = hex[1];
+    if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+    const n = parseInt(h, 16);
+    return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+  }
+  const rgb = s.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)/i);
+  if (rgb) {
+    return [parseInt(rgb[1], 10), parseInt(rgb[2], 10), parseInt(rgb[3], 10)];
+  }
+  return null;
+}
+
+// Perceived luminance (0-255). >= 170 is "too light for white bg".
+function luminance(rgb: [number, number, number]): number {
+  return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+}
+
+// Replacement dark color for any light text on white background during PDF capture.
+const PDF_TEXT_DARK = "#0f172a";
+
 function forceLightInlineStyles(root: HTMLElement): () => void {
   const saved: Array<{ el: HTMLElement; bg: string; color: string; borderColor: string }> = [];
 
@@ -269,10 +296,6 @@ function forceLightInlineStyles(root: HTMLElement): () => void {
       if (cs.backgroundColor === dark) {
         el.style.backgroundColor = light;
         touched = true;
-        // Fix text readability on now-light background
-        for (const [lt, dt] of LIGHT_TEXT_MAP) {
-          if (cs.color === lt) { el.style.color = dt; break; }
-        }
         break;
       }
     }
@@ -285,14 +308,50 @@ function forceLightInlineStyles(root: HTMLElement): () => void {
       }
     }
 
+    // Force-darken any HTML text that is too light to be readable on a white background.
+    // This covers axis labels, table cells with text-white/text-gray-300, etc.
+    const parsed = parseColor(cs.color);
+    if (parsed && luminance(parsed) >= 170) {
+      el.style.color = PDF_TEXT_DARK;
+      touched = true;
+    }
+
     if (touched) saved.push({ el, ...orig });
   }
+
+  // ── SVG <text> / <tspan> — Recharts bakes fill into these at render-time
+  // based on the isDark prop, so axis ticks and LabelList values have a light
+  // fill even after we force theme=light. Override their `fill` attribute if
+  // the current fill is too light for a white card background.
+  const svgSaved: Array<{ el: SVGElement; hadAttr: boolean; prev: string | null }> = [];
+  const svgTextEls = root.querySelectorAll("text, tspan") as NodeListOf<SVGElement>;
+  svgTextEls.forEach((el) => {
+    const attr = el.getAttribute("fill");
+    const cs = getComputedStyle(el as unknown as Element);
+    const effective = attr && attr !== "none" ? attr : cs.fill || (cs as any).color;
+    const parsed = parseColor(effective);
+    if (!parsed) return;
+    // Leave bright brand colors alone (e.g. accents with enough saturation) — only
+    // target near-greys / near-whites (where max-min channel spread is small).
+    const [r, g, b] = parsed;
+    const maxC = Math.max(r, g, b);
+    const minC = Math.min(r, g, b);
+    const chroma = maxC - minC;
+    const isLightGreyish = luminance(parsed) >= 170 && chroma <= 40;
+    if (!isLightGreyish) return;
+    svgSaved.push({ el, hadAttr: el.hasAttribute("fill"), prev: attr });
+    el.setAttribute("fill", PDF_TEXT_DARK);
+  });
 
   return () => {
     for (const { el, bg, color, borderColor } of saved) {
       el.style.backgroundColor = bg;
       el.style.color = color;
       el.style.borderColor = borderColor;
+    }
+    for (const { el, hadAttr, prev } of svgSaved) {
+      if (hadAttr && prev !== null) el.setAttribute("fill", prev);
+      else el.removeAttribute("fill");
     }
     for (const { el, cls } of stripped) {
       el.classList.add(cls);
