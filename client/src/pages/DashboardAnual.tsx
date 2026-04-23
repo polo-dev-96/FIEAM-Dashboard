@@ -328,7 +328,7 @@ export default function DashboardAnualPage() {
 
     const rankingAssuntos = useMemo(() => {
         if (!stats?.porAssunto?.length) return [];
-        return agruparAssuntos(stats.porAssunto as any);
+        return agruparAssuntos(stats.porAssunto as any).slice(0, 20);
     }, [stats?.porAssunto]);
 
     if (isLoading) {
@@ -881,7 +881,7 @@ export default function DashboardAnualPage() {
                     icon={<FileText className="w-4 h-4" />}
                     iconAccent="cyan"
                     isDark={isDark}
-                    height={620}
+                    height={740}
                     className="animate-fade-up-4"
                 >
                     {rankingAssuntos.length ? (

@@ -434,7 +434,7 @@ export default function OverviewPage() {
   }, [stats?.porOpcaoSelecionada]);
 
   const topAssuntosAggregados: AssuntoAggregado[] = useMemo(() => {
-    return agruparAssuntos((stats?.porResumo || []) as AssuntoAggregado[]);
+    return agruparAssuntos((stats?.porResumo || []) as AssuntoAggregado[]).slice(0, 20);
   }, [stats?.porResumo]);
 
   if (isLoading) {
@@ -875,32 +875,42 @@ export default function OverviewPage() {
       </ChartCard>
 
       {/* Top Assuntos + Destaques */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
-        <ChartCard title="Top Assuntos" icon={<Cloud className="w-4 h-4" />} iconAccent="purple" isDark={isDark} noPadding>
-          <div className="flex flex-wrap gap-2 px-5 pb-5 pt-1">
-            {topAssuntosAggregados.map((item, index) => {
-              const color = COLORS[index % COLORS.length];
-              return (
-                <Tooltip key={item.nome}>
-                  <TooltipTrigger asChild>
-                    <span
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[13px] font-medium cursor-default transition-all hover:scale-[1.03]"
-                      style={{ borderColor: `${color}30`, backgroundColor: `${color}0A`, color }}
-                    >
-                      {item.nome}
-                      <span className="text-[11px] opacity-70 font-bold">{item.total.toLocaleString("pt-BR")}</span>
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent className={cn("border shadow-lg rounded-lg px-3 py-2", isDark ? "bg-[#0F2A42] border-ds-default text-ds-primary" : "bg-white border-slate-200 text-gray-900")} sideOffset={8}>
-                    <p className="font-semibold text-sm">{item.nome}</p>
-                    <p className="text-xs text-ds-secondary mt-0.5">
-                      {item.total.toLocaleString("pt-BR")} atendimentos
-                      {stats.totais.total > 0 && ` · ${((item.total / stats.totais.total) * 100).toFixed(1)}%`}
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              );
-            })}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-20">
+        <ChartCard
+          title="Top 20 Assuntos"
+          icon={<Cloud className="w-6 h-6" />}
+          iconAccent="purple"
+          isDark={isDark}
+          noPadding
+        >
+          <div className="flex flex-wrap gap-x-20 gap-y-1.5 px-5 pb-2 pt-2">
+            {(() => {
+              const max = Math.max(...topAssuntosAggregados.map(d => d.total), 1);
+              const min = Math.min(...topAssuntosAggregados.map(d => d.total), max);
+              const step = (max - min) || 1;
+              return topAssuntosAggregados.map((item, index) => {
+                const color = COLORS[index % COLORS.length];
+                const tier = item.total >= min + step * 2 ? 1 : item.total >= min + step ? 2 : 3;
+                const cls = tier === 1 ? "text-sm px-3.5 py-1.5" : tier === 2 ? "text-[13px] px-3 py-1" : "text-xs px-2.5 py-0.5";
+                return (
+                  <Tooltip key={item.nome}>
+                    <TooltipTrigger asChild>
+                      <span className={cn("inline-flex items-center gap-1.5 rounded-full border font-medium cursor-default transition-all hover:scale-[1.04]", cls)} style={{ borderColor: `${color}35`, backgroundColor: `${color}08`, color }}>
+                        {item.nome}
+                        <span className="opacity-70 font-bold">{item.total.toLocaleString("pt-BR")}</span>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent className={cn("border shadow-lg rounded-lg px-3 py-2", isDark ? "bg-[#0F2A42] border-ds-default text-ds-primary" : "bg-white border-slate-200 text-gray-900")} sideOffset={8}>
+                      <p className="font-semibold text-sm">{item.nome}</p>
+                      <p className="text-xs text-ds-secondary mt-0.5">
+                        <span className="font-bold text-ds-primary">{item.total.toLocaleString("pt-BR")}</span> atendimentos
+                        {stats.totais.total > 0 && <span className="ml-1">· {((item.total / stats.totais.total) * 100).toFixed(1)}%</span>}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              });
+            })()}
           </div>
         </ChartCard>
 

@@ -25,6 +25,23 @@ const EXCLUIDOS_OUTROS = new Set<string>([
   "main",
   "Manaus",
   "Falta de Interação",
+  "PF- SAC",
+  "ALESSANDRA COSTA",
+  "Teste IA",
+  // Apenas os PJ 
+  "ADM - PJ",
+  "COMERCIAL - PJ",
+  "PJ- B+P",
+  "PJ- IEL",
+  "Email comercial PJ",
+  "PJ- ESCOLA SESI",
+  "alexandra leste",
+  "Gama",
+  "PJ- SIPAT E EVENTOS",
+  "PJ- VACINA DA GRIPE",
+  "PJ-IEL",
+  "SESI CLUBE",
+  "SESI ODONTOLOGIA"
 ]);
 
 // Mapeamento de renomeação de equipes em Outros
@@ -455,6 +472,124 @@ export interface AssuntoAggregado {
   originalNames?: string[];
 }
 
+interface AssuntoRule {
+  keywords: string[];
+  categoria: string;
+}
+
+// Ordem importa: regras mais especificas PRIMEIRO.
+// Ex: "Orcamento Exame" tem que bater em Orcamento antes de Exame.
+const ASSUNTO_RULES: AssuntoRule[] = [
+  // 1. ORCAMENTO (muito especifico - pega tudo que tem "orcamento")
+  { keywords: ["orcamento","cotacao","valor curso","valor exame","valor academia","preco curso","preco exame"], categoria: "Orcamento" },
+
+  // 2. AGENDAMENTO CONSULTA (medico/saude/clinico/retorno/especialista)
+  { keywords: ["agendamento consulta","marcar consulta","consulta medica","consulta medico","agendar consulta","agendamento medico","agendar medico","remarcar consulta","agendar clinico","agendamento clinico","agendamento retorno","retorno consulta","retorno medico","agendar retorno","consulta especialista","especialista medico","agendar especialista","agendamento oftalmologista","agendamento odontologico"], categoria: "Agendamento Consulta" },
+
+  // 3. RESERVA/LOCACAO (antes de espera para pegar "reserva confirmada")
+  { keywords: ["reserva","locacao","aluguel","quadra","espaco clube","campo sintetico","arena","salao"], categoria: "Reserva/Locacao" },
+
+  // 4. LISTA DE ESPERA (unifica lista e fila)
+  { keywords: ["lista espera","fila espera","aguardando vaga","em espera"], categoria: "Lista de Espera" },
+
+  // 5. MATRICULA / INSCRICAO
+  { keywords: ["matricula","matricular","inscricao","inscrever","cadastro curso","vaga curso","turma"], categoria: "Matricula" },
+
+  // 6. CERTIFICADO / DIPLOMA
+  { keywords: ["certificado","certificacao","diploma","declaracao curso","comprovante curso","historico escolar"], categoria: "Certificado" },
+
+  // 7. CARTEIRINHA (unifica emissao/renovacao/sesi)
+  { keywords: ["carteirinha","carteira sesi","emissao carteira","renovacao carteira"], categoria: "Carteirinha" },
+
+  // 8. PROGRAMACAO CURSO (cursos especificos)
+  { keywords: ["programacao curso","grade curricular","horario aula","curso","aula","treinamento","workshop","capacitacao","eja","supletivo","jovem aprendiz","pacote aluno","informatica basica","informatica avancada","bolsa gratuidade","bolsa"], categoria: "Programacao Curso" },
+
+  // 9. EXAME (inclui "exam" typo e "laudo")
+  { keywords: ["exame","exam","laudo","resultado exame"], categoria: "Exame" },
+
+  // 10. ODONTOLOGICO
+  { keywords: ["odontologico","odonto","dentista","ortodontia"], categoria: "Odontologico" },
+
+  // 11. VACINA / SAUDE
+  { keywords: ["vacina","gripe","imunizacao","vacinacao"], categoria: "Vacina" },
+
+  // 12. RESSONANCIA / IMAGEM (funde com Exame)
+  { keywords: ["ressonancia","raio-x","raio x","tomografia","ultrassom","ultrasom","imagem medica"], categoria: "Exame" },
+
+  // 13. PROCESSO SELETIVO / ESTAGIO
+  { keywords: ["processo seletivo","vaga estagio","estagio","selecao","processo selecao"], categoria: "Processo Seletivo" },
+
+  // 14. CANCELAMENTO
+  { keywords: ["cancelamento","cancelar","desmarcar","desistencia","desistir","trancamento"], categoria: "Cancelamento" },
+
+  // 15. REAGENDAMENTO
+  { keywords: ["reagendamento","remarcar","adiar","transferencia consulta"], categoria: "Reagendamento" },
+
+  // 16. PAGAMENTO / BOLETO / NOTA FISCAL
+  { keywords: ["pagamento","boleto","cobranca","fatura","mensalidade","nota fiscal","taxa","reembolso"], categoria: "Pagamento" },
+
+  // 17. SEM INTERACAO (unifica falta, sem interacao, resposta negativa)
+  { keywords: ["sem interacao","falta interacao","falta de interacao","sem resposta","resposta negativa","nao respondeu","desistiu"], categoria: "Sem Interacao" },
+
+  // 18. DOCUMENTO / COMPROVANTE / FICHA
+  { keywords: ["documento","comprovante","atestado","ficha enviada","ficha"], categoria: "Documento" },
+
+  // 19. INFORMACAO (generico - captura "informacao senai", "informacao iel", etc.)
+  { keywords: ["informacao","orientacao","esclarecimento","info"], categoria: "Informacao" },
+
+  // 20. DUVIDA (fallback generico)
+  { keywords: ["duvida","pergunta","questionamento","ajuda","nao sei"], categoria: "Duvida Geral" },
+];
+
+// Termos que sao entidades e NAO devem aparecer como assuntos.
+// Quando o assunto original for APENAS um destes termos (ou variante), cai em "Informacao".
+const ENTIDADES_COMO_ASSUNTO = new Set([
+  "senai","sesi","iel","sesi saude","sesi clube","sesi escola","sesi odontologia","fieam",
+]);
+
+const STOP_WORDS = new Set(["de","da","do","das","dos","para","pra","por","sobre","em","a","o","as","os","e","ou","mas","se","que","com","sem","no","na","nos","nas","um","uma","uns","umas","ao","aos","ele","ela","eles","elas","eu","voce","vc","meu","minha","seu","sua","esse","essa","isso","este","esta","isto","qual","quais","quem","cujo","cujos","onde","quando","como","porque","assim","tambem","ja","ainda","so","soh","soamente","muito","mais","menos","tanto","tal","toda","todo","todas","todos","outro","outra","outros","outras","mesmo","mesma","mesmos","mesmas"]);
+
+const GENERIC_WORDS = new Set(["solicitacao","pedido","usuario","cliente","atendimento","interacao","conversa","chat","ligacao","telefone","email","contato","pessoa","assunto","tema","topico","help","support","atendente","bot","virtual","online","web","site","app","geral"]);
+
+function normalizeForMatching(raw: string): string {
+  return (raw || "").toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/ç/g, "c")
+    .replace(/ñ/g, "n")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function categorizarPorRegras(raw: string): string | null {
+  const normalized = normalizeForMatching(raw);
+  if (!normalized) return null;
+
+  // Redireciona entidades soltas (ex: "SENAI", "SESI SAUDE") para "Informacao"
+  if (ENTIDADES_COMO_ASSUNTO.has(normalized)) {
+    return "Informacao";
+  }
+
+  for (const rule of ASSUNTO_RULES) {
+    for (const kw of rule.keywords) {
+      if (normalized.includes(kw)) return rule.categoria;
+    }
+  }
+  return null;
+}
+
+function resumirEmTresPalavras(raw: string): string {
+  const normalized = normalizeAssuntoKey(raw);
+  const words = normalized.split(" ").filter(w => w.length > 2 && !STOP_WORDS.has(w) && !GENERIC_WORDS.has(w));
+  const limited = words.slice(0, 3);
+  if (limited.length === 0) {
+    const fallback = raw.split(" ").filter(w => w.length > 2).slice(0, 3);
+    return fallback.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ") || raw;
+  }
+  return limited.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+}
+
 export function normalizeAssuntoKey(raw: string): string {
   const base = (raw || "").toLowerCase()
     .normalize("NFD")
@@ -496,8 +631,16 @@ export function agruparAssuntos(data: AssuntoAggregado[]): AssuntoAggregado[] {
   const originals = new Map<string, string[]>();
 
   for (const item of data || []) {
-    const key = normalizeAssuntoKey(item.nome);
+    const raw = item.nome;
+    if (!raw) continue;
+
+    // 1. Tentar categorizar por regras de palavras-chave
+    const categoria = categorizarPorRegras(raw);
+
+    // 2. Se nao houver match, resumir em no maximo 3 palavras
+    const key = categoria || resumirEmTresPalavras(raw);
     if (!key) continue;
+
     const existente = mapa.get(key);
     if (existente !== undefined) {
       mapa.set(key, existente + item.total);
@@ -505,14 +648,13 @@ export function agruparAssuntos(data: AssuntoAggregado[]): AssuntoAggregado[] {
       mapa.set(key, item.total);
     }
     const orig = originals.get(key) || [];
-    orig.push(item.nome);
+    orig.push(raw);
     originals.set(key, orig);
   }
 
-  // Convert back to array with properly capitalized display names
   return Array.from(mapa.entries())
     .map(([key, total]) => ({
-      nome: key.charAt(0).toUpperCase() + key.slice(1),
+      nome: key,
       total,
       originalNames: originals.get(key) || [],
     }))

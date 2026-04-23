@@ -183,7 +183,6 @@ export async function registerRoutes(
             ${casaFilter}
           GROUP BY \`resumo da conversa\`
           ORDER BY total DESC
-          LIMIT 10
         `, filterParams);
 
         // Atendimentos por opcaoselecionada
@@ -617,7 +616,6 @@ export async function registerRoutes(
             ${casaFilter}
           GROUP BY \`resumo da conversa\`
           ORDER BY total DESC
-          LIMIT 15
         `, [...dateParams, ...casaParams]);
 
         // 4. Dentro e Fora do Prazo (24h SLA)
