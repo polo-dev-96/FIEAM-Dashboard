@@ -221,7 +221,7 @@ export default function DashboardAnualPage() {
             // Para Ariana, "Todas as Entidades" deve filtrar apenas casas mapeadas
             if (isArianaUser()) {
                 const allCasas = new Set<string>();
-                (["SENAI", "SESI", "IEL", "Outros"] as Entidade[]).forEach(ent => {
+                (["SENAI", "SESI", "IEL"] as Entidade[]).forEach(ent => {
                     const casas = getCasasForFiltroGerente(casasList, ent, null);
                     casas.forEach(c => allCasas.add(c));
                 });
@@ -390,7 +390,6 @@ export default function DashboardAnualPage() {
                                         { value: "SENAI", label: "SENAI" },
                                         { value: "SESI", label: "SESI" },
                                         { value: "IEL", label: "IEL" },
-                                        ...(isGerente ? [{ value: "Outros", label: "Outros" }] : []),
                                     ]}
                                 />
                             </div>
