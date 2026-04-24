@@ -6,9 +6,9 @@ import * as React from "react";
 
 // ── Shared chart color palette ──────────────────────────────────────
 export const CHART_COLORS = [
-  '#009FE3', '#F37021', '#00A650', '#ED1C24', '#00BCD4',
-  '#8b5cf6', '#0077CC', '#14b8a6', '#6366f1', '#a855f7',
-  '#06b6d4', '#84cc16', '#d946ef', '#0ea5e9', '#f43f5e',
+  '#00AEEF', '#0077CC', '#14B8A6', '#10B981', '#F59E0B',
+  '#8B5CF6', '#F97316', '#06B6D4', '#64748B', '#22C55E',
+  '#3B82F6', '#A855F7', '#EAB308', '#0EA5E9', '#EF4444',
 ];
 
 // Lighter top / darker bottom for gradient shading
@@ -83,13 +83,13 @@ export function PremiumTooltip({
       style={{
         background: isDark ? 'rgba(15, 42, 66, 0.96)' : 'rgba(255,255,255,0.98)',
         border: `1px solid ${isDark ? 'rgba(0,159,227,0.22)' : 'rgba(15,23,41,0.08)'}`,
-        borderRadius: 12,
+        borderRadius: 18,
         padding: '10px 14px',
         boxShadow: isDark
           ? '0 12px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,159,227,0.06)'
           : '0 12px 32px rgba(15,23,41,0.08), 0 0 0 1px rgba(15,23,41,0.04)',
         backdropFilter: 'blur(12px)',
-        minWidth: 160,
+        minWidth: 176,
       }}
     >
       {formattedLabel !== undefined && formattedLabel !== '' && (
@@ -165,7 +165,7 @@ export function getTooltipStyle(isDark: boolean) {
   return {
     contentStyle: {
       backgroundColor: isDark ? 'rgba(15, 42, 66, 0.96)' : 'rgba(255,255,255,0.98)',
-      borderRadius: '12px',
+      borderRadius: '18px',
       border: `1px solid ${isDark ? 'rgba(0,159,227,0.22)' : 'rgba(15,23,41,0.08)'}`,
       color: isDark ? '#F0F4F8' : '#0F1729',
       boxShadow: isDark
@@ -194,15 +194,15 @@ export function getTooltipStyle(isDark: boolean) {
 
 // ── Theme-aware grid / axis ─────────────────────────────────────────
 export function getGridStroke(isDark: boolean): string {
-  return isDark ? 'rgba(148,163,184,0.10)' : '#EEF1F5';
+  return isDark ? 'rgba(148,163,184,0.09)' : '#E8EEF5';
 }
 
 export function getAxisColor(isDark: boolean): string {
-  return isDark ? '#64748B' : '#94A3B8';
+  return isDark ? '#60758A' : '#94A3B8';
 }
 
 export function getAxisTickFill(isDark: boolean): string {
-  return isDark ? '#8899A8' : '#64748B';
+  return isDark ? '#9AAABC' : '#64748B';
 }
 
 export function getAxisTickStyle(isDark: boolean) {

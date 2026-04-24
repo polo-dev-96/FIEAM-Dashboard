@@ -74,7 +74,7 @@ export function MonthPicker({ selectedMonths, selectedYear, onChangeMonths, onCh
     return (
         <Popover open={open} onOpenChange={(v) => { if (!v) { handleCancel(); } else { setOpen(true); } }}>
             <PopoverTrigger asChild>
-                <button className="group flex items-center gap-2.5 px-4 py-2.5 text-xs bg-[#060e1a]/80 border border-[#1a3a5c]/80 rounded-xl text-gray-300 hover:border-[#009FE3]/40 hover:bg-[#0a1929] hover:text-white transition-all duration-300 min-w-[160px] backdrop-blur-sm shadow-sm hover:shadow-md hover:shadow-[#009FE3]/5">
+                <button className="group flex items-center gap-2.5 px-4 py-2.5 text-xs bg-ds-elevated border border-ds-default rounded-2xl text-ds-primary hover:border-ds-strong hover:bg-[var(--ds-accent-muted)] transition-all duration-300 min-w-[160px] backdrop-blur-sm shadow-sm hover:shadow-md hover:shadow-[#009FE3]/5">
                     <Calendar className="w-4 h-4 text-[#009FE3] shrink-0 group-hover:scale-110 transition-transform" />
                     <span className="text-left flex-1 truncate font-medium">{displayText}</span>
                     {selectedMonths.length > 0 && (
@@ -85,18 +85,18 @@ export function MonthPicker({ selectedMonths, selectedYear, onChangeMonths, onCh
                 </button>
             </PopoverTrigger>
             <PopoverContent
-                className="w-[280px] p-0 bg-[#0b1a2e] border border-[#1a3a5c]/80 shadow-2xl shadow-black/40 rounded-2xl overflow-hidden backdrop-blur-xl"
+                className="w-[280px] p-0 bg-ds-elevated border border-ds-default shadow-2xl shadow-black/40 rounded-2xl overflow-hidden backdrop-blur-xl"
                 align="start"
                 sideOffset={8}
             >
                 <div className="flex flex-col">
                     {/* Header — Year selector */}
-                    <div className="px-4 pt-4 pb-3 border-b border-[#1a3a5c]/40 bg-[#0d1f33]/50">
+                    <div className="px-4 pt-4 pb-3 border-b border-ds-subtle bg-ds-inset">
                         <p className="text-[10px] uppercase tracking-[0.15em] text-gray-500 font-bold flex items-center gap-1.5 mb-3">
                             <Calendar className="w-3 h-3" />
                             Filtro Mensal
                         </p>
-                        <div className="flex items-center justify-between bg-[#081422] border border-[#1a3a5c]/60 rounded-lg px-2 py-1.5">
+                        <div className="flex items-center justify-between bg-ds-inset border border-ds-subtle rounded-lg px-2 py-1.5">
                             <button
                                 onClick={() => setStagedYear(y => y - 1)}
                                 className="p-1 text-gray-400 hover:text-white transition-colors rounded hover:bg-white/5"
@@ -134,7 +134,7 @@ export function MonthPicker({ selectedMonths, selectedYear, onChangeMonths, onCh
                         </button>
 
                         {/* Divider */}
-                        <div className="border-t border-[#1a3a5c]/30 my-1.5" />
+                        <div className="border-t border-ds-subtle my-1.5" />
 
                         {/* Month grid — 3 columns */}
                         <div className="grid grid-cols-3 gap-1">
@@ -164,7 +164,7 @@ export function MonthPicker({ selectedMonths, selectedYear, onChangeMonths, onCh
                     </div>
 
                     {/* Footer — Confirm / Clear */}
-                    <div className="px-3 py-2.5 border-t border-[#1a3a5c]/40 bg-[#081422]/50 flex items-center gap-2">
+                    <div className="px-3 py-2.5 border-t border-ds-subtle bg-ds-inset flex items-center gap-2">
                         {!isAnual && (
                             <button
                                 onClick={handleSelectAnual}

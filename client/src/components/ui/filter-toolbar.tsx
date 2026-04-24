@@ -1,4 +1,5 @@
 import * as React from "react";
+import { SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface FilterToolbarProps {
@@ -17,50 +18,33 @@ export function FilterToolbar({
   showLiveIndicator = false,
   children,
   activeFilters,
-  isDark,
   className,
 }: FilterToolbarProps) {
   return (
     <div
-      className={cn(
-        "rounded-xl border transition-theme animate-fade-up overflow-hidden",
-        isDark
-          ? "bg-ds-secondary border-ds-default shadow-ds-card"
-          : "bg-ds-elevated border-ds-default shadow-ds-card",
-        className
-      )}
+      data-fieam-surface="true"
+      className={cn("overflow-hidden rounded-2xl border bg-ds-secondary shadow-ds-card transition-theme animate-fade-up", className)}
     >
-      {/* Toolbar Header */}
-      <div className={cn(
-        "px-5 py-3 border-b flex items-center gap-3",
-        isDark ? "border-ds-subtle bg-ds-inset" : "border-ds-subtle bg-ds-inset"
-      )}>
+      <div className="flex items-center gap-3 border-b border-ds-subtle bg-ds-inset px-5 py-3.5">
+        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--ds-accent-muted)] text-[var(--ds-accent)]">
+          <SlidersHorizontal className="h-4 w-4" />
+        </div>
         {showLiveIndicator && (
           <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
           </span>
         )}
-        <span className="text-[13px] font-semibold text-ds-primary">{title}</span>
+        <span className="text-[14px] font-extrabold tracking-[-0.02em] text-ds-primary">{title}</span>
         <div className="flex-1" />
         {statusText && (
-          <span className="text-[11px] font-medium text-ds-tertiary">{statusText}</span>
+          <span className="hidden text-[11px] font-bold text-ds-tertiary sm:inline-flex">{statusText}</span>
         )}
       </div>
 
-      {/* Filter Controls */}
-      <div className="p-5">
-        {children}
-      </div>
+      <div className="p-5">{children}</div>
 
-      {/* Active Filters Summary */}
-      {activeFilters && (
-        <div className={cn(
-          "px-5 pb-4 -mt-1"
-        )}>
-          {activeFilters}
-        </div>
-      )}
+      {activeFilters && <div className="px-5 pb-5">{activeFilters}</div>}
     </div>
   );
 }

@@ -2,13 +2,13 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 const ICON_ACCENT_MAP = {
-  blue:    { dark: "bg-[#009FE3]/10 text-[#009FE3]", light: "bg-blue-50 text-[#0077CC]" },
-  green:   { dark: "bg-emerald-500/10 text-emerald-400", light: "bg-emerald-50 text-emerald-600" },
-  amber:   { dark: "bg-amber-500/10 text-amber-400", light: "bg-amber-50 text-amber-600" },
-  red:     { dark: "bg-rose-500/10 text-rose-400", light: "bg-rose-50 text-rose-600" },
-  purple:  { dark: "bg-purple-500/10 text-purple-400", light: "bg-purple-50 text-purple-600" },
-  cyan:    { dark: "bg-cyan-500/10 text-cyan-400", light: "bg-cyan-50 text-cyan-600" },
-  orange:  { dark: "bg-orange-500/10 text-orange-400", light: "bg-orange-50 text-orange-600" },
+  blue: { bg: "bg-[var(--ds-accent-muted)]", text: "text-[var(--ds-accent)]" },
+  green: { bg: "bg-emerald-500/10", text: "text-emerald-400" },
+  amber: { bg: "bg-amber-500/10", text: "text-amber-400" },
+  red: { bg: "bg-rose-500/10", text: "text-rose-400" },
+  purple: { bg: "bg-purple-500/10", text: "text-purple-400" },
+  cyan: { bg: "bg-cyan-500/10", text: "text-cyan-400" },
+  orange: { bg: "bg-orange-500/10", text: "text-orange-400" },
 } as const;
 
 type IconAccent = keyof typeof ICON_ACCENT_MAP;
@@ -24,6 +24,7 @@ interface ChartCardProps {
   className?: string;
   isDark: boolean;
   noPadding?: boolean;
+  subtitle?: string;
 }
 
 export function ChartCard({
@@ -35,48 +36,42 @@ export function ChartCard({
   children,
   height,
   className,
-  isDark,
   noPadding,
+  subtitle,
 }: ChartCardProps) {
   const ia = ICON_ACCENT_MAP[iconAccent];
 
   return (
     <div
+      data-fieam-surface="true"
       className={cn(
-        "group relative rounded-xl border transition-theme card-hover animate-fade-up overflow-hidden",
-        isDark
-          ? "bg-ds-secondary border-ds-default shadow-ds-card"
-          : "bg-ds-elevated border-ds-default shadow-ds-card",
+        "group relative overflow-hidden rounded-2xl border bg-ds-secondary shadow-ds-card transition-theme card-hover animate-fade-up",
         className
       )}
     >
-      {/* Top accent line (subtle, visible on hover) */}
-      <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[var(--ds-accent)]/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-      {/* Header */}
-      <div className={cn(
-        "flex items-center gap-2.5 px-5 pt-5 pb-3.5 border-b",
-        isDark ? "border-white/[0.04]" : "border-slate-100"
-      )}>
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[var(--ds-accent)]/60 to-transparent opacity-70" />
+      <div className="pointer-events-none absolute -right-24 -top-24 h-56 w-56 rounded-full bg-[var(--ds-accent)]/[0.055] blur-3xl transition-opacity group-hover:opacity-80" />
+
+      <div className="relative flex items-center gap-3 border-b border-ds-subtle px-5 py-4">
         {icon && (
-          <div className={cn("p-1.5 rounded-lg transition-transform group-hover:scale-105", isDark ? ia.dark : ia.light)}>
+          <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl transition-transform group-hover:scale-105", ia.bg, ia.text)}>
             {icon}
           </div>
         )}
-        <h3 className="text-[13px] font-semibold text-ds-primary flex-1 tracking-tight">{title}</h3>
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-[14px] font-extrabold tracking-[-0.02em] text-ds-primary">{title}</h3>
+          {subtitle && <p className="mt-0.5 truncate text-[11px] font-medium text-ds-tertiary">{subtitle}</p>}
+        </div>
         {badge && (
-          <span className={cn(
-            "text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full",
-            isDark ? "bg-[var(--ds-accent-muted)] text-[var(--ds-accent)]" : "bg-[var(--ds-accent-muted)] text-[var(--ds-accent)]"
-          )}>
+          <span className="shrink-0 rounded-full border border-[var(--ds-accent)]/20 bg-[var(--ds-accent-muted)] px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--ds-accent)]">
             {badge}
           </span>
         )}
         {actions}
       </div>
 
-      {/* Content */}
       <div
-        className={cn(!noPadding && "px-4 pt-3 pb-4")}
+        className={cn("relative", !noPadding && "px-4 pb-4 pt-3")}
         style={height ? { height: typeof height === "number" ? `${height}px` : height } : undefined}
       >
         {children}

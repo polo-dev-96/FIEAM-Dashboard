@@ -1,18 +1,19 @@
 import { Link, useLocation } from "wouter";
 import {
-  LayoutDashboard,
-  Search,
-  Phone,
+  Brain,
   CalendarRange,
-  Menu,
-  X,
   ChevronLeft,
   ChevronRight,
+  LayoutDashboard,
   LogOut,
-  Sun,
+  Menu,
   Moon,
-  Brain,
-  Users
+  Phone,
+  Search,
+  Sun,
+  Users,
+  X,
+  type LucideIcon,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -21,181 +22,271 @@ import { useSidebar } from "./SidebarContext";
 import { useAuth } from "@/lib/AuthContext";
 import { useTheme } from "@/lib/ThemeContext";
 
-const navItems = [
-  { href: "/", label: "Visão Geral", icon: LayoutDashboard },
-  { href: "/protocolo", label: "Pesquisar Protocolo", icon: Search },
-  { href: "/telefone", label: "Pesquisar Telefone", icon: Phone },
-  { href: "/anual", label: "Dashboard - SAC", icon: CalendarRange },
-  { href: "/openai", label: "Dashboard - OpenAI", icon: Brain },
-  { href: "/patrocinados", label: "Dashboard - Patrocinados", icon: Users },
+type NavSection = "dashboards" | "consultas" | "inteligencia";
+
+type NavItem = {
+  href: string;
+  label: string;
+  description: string;
+  icon: LucideIcon;
+  section: NavSection;
+};
+
+const navItems: NavItem[] = [
+  { href: "/", label: "Visão Geral", description: "Resumo executivo em tempo real", icon: LayoutDashboard, section: "dashboards" },
+  { href: "/anual", label: "Dashboard SAC", description: "Indicadores consolidados do SAC", icon: CalendarRange, section: "dashboards" },
+  { href: "/patrocinados", label: "Patrocinados", description: "Canais e origens patrocinadas", icon: Users, section: "dashboards" },
+  { href: "/protocolo", label: "Pesquisar Protocolo", description: "Consulta rápida por protocolo", icon: Search, section: "consultas" },
+  { href: "/telefone", label: "Pesquisar Telefone", description: "Histórico de relacionamento", icon: Phone, section: "consultas" },
+  { href: "/openai", label: "Dashboard OpenAI", description: "Custos, projetos e consumo de IA", icon: Brain, section: "inteligencia" },
 ];
+
+const sectionLabels: Record<NavSection, string> = {
+  dashboards: "Dashboards",
+  consultas: "Consultas",
+  inteligencia: "Inteligência",
+};
+
+function initialsFromEmail(email?: string) {
+  if (!email) return "FI";
+  const name = email.split("@")[0]?.replace(/[._-]+/g, " ").trim();
+  if (!name) return "FI";
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "FI";
+}
 
 export function Sidebar() {
   const [location] = useLocation();
   const [isOpen, setIsOpen] = useState(false);
   const { collapsed, toggle } = useSidebar();
-  const { logout, canAccess } = useAuth();
+  const { logout, canAccess, user } = useAuth();
   const { isDark, toggleTheme } = useTheme();
+
+  const allowedItems = navItems.filter((item) => canAccess(item.href));
+  const sections = (Object.keys(sectionLabels) as NavSection[])
+    .map((section) => ({
+      section,
+      label: sectionLabels[section],
+      items: allowedItems.filter((item) => item.section === section),
+    }))
+    .filter((group) => group.items.length > 0);
 
   return (
     <>
-      {/* Mobile Toggle */}
       <Button
         variant="ghost"
         size="icon"
-        className="fixed top-4 left-4 z-50 md:hidden text-white"
-        onClick={() => setIsOpen(!isOpen)}
+        className={cn(
+          "fixed left-4 top-4 z-50 rounded-2xl border shadow-lg backdrop-blur-xl md:hidden",
+          isDark
+            ? "border-white/10 bg-[#071A2E]/90 text-white"
+            : "border-white/80 bg-white/90 text-slate-900"
+        )}
+        onClick={() => setIsOpen((value) => !value)}
+        aria-label={isOpen ? "Fechar menu" : "Abrir menu"}
       >
-        {isOpen ? <X /> : <Menu />}
+        {isOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
       </Button>
 
-      {/* Sidebar Container */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 transition-all duration-300 ease-in-out md:translate-x-0 border-r",
+          "fixed inset-y-0 left-0 z-40 border-r transition-all duration-300 ease-out md:translate-x-0",
           isDark
-            ? "bg-[#0A1929] border-ds-default"
-            : "bg-white border-ds-default shadow-sm",
+            ? "border-white/10 bg-[#061421]/[0.96] text-ds-primary shadow-[18px_0_60px_rgba(0,0,0,.28)]"
+            : "border-slate-200/80 bg-white/[0.96] text-ds-primary shadow-[18px_0_60px_rgba(15,23,42,.08)]",
           collapsed ? "w-20" : "w-64",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        <div className="flex flex-col h-full">
-          {/* Logo Area */}
-          <div className="px-5 py-4 border-b border-ds-subtle">
-            <div className="flex items-center gap-3">
-              <div className={cn(
-                "w-9 h-9 flex-shrink-0 rounded-lg p-1.5",
-                isDark ? "bg-[#009FE3]/10" : "bg-blue-50"
-              )}>
-                <img src="/Icone_Logo.png" alt="Logo" className="w-full h-full object-contain" />
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -left-24 top-[-120px] h-72 w-72 rounded-full bg-[var(--ds-accent)]/[0.15] blur-3xl" />
+          <div className="absolute bottom-10 right-[-120px] h-72 w-72 rounded-full bg-emerald-400/10 blur-3xl" />
+        </div>
+
+        <div className="relative flex h-full flex-col">
+          <div className={cn("border-b border-ds-subtle", collapsed ? "px-3 py-4" : "px-4 py-4")}>
+            <div className={cn("flex items-center", collapsed ? "justify-center" : "gap-3")}>
+              <div
+                className={cn(
+                  "relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border p-2 shadow-sm",
+                  isDark ? "border-white/10 bg-white/[0.06]" : "border-sky-100 bg-sky-50"
+                )}
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-[var(--ds-accent)]/[0.18] to-transparent" />
+                <img src="/Icone_Logo.png" alt="FIEAM" className="relative h-full w-full object-contain" />
               </div>
+
               {!collapsed && (
-                <div className="overflow-hidden">
-                  <h1 className="text-base font-bold whitespace-nowrap tracking-tight text-ds-primary">
-                    FIEAM
-                  </h1>
-                  <p className="text-[9px] uppercase tracking-[0.2em] font-semibold text-ds-tertiary">Sistema Indústria</p>
+                <div className="min-w-0">
+                  <h1 className="truncate text-base font-extrabold tracking-[-0.03em] text-ds-primary">FIEAM</h1>
+                  <p className="truncate text-[9px] font-bold uppercase tracking-[0.22em] text-ds-tertiary">
+                    Sistema Indústria
+                  </p>
                 </div>
               )}
             </div>
+
+            {!collapsed && (
+              <div
+                className={cn(
+                  "mt-4 rounded-2xl border px-3 py-2.5",
+                  isDark ? "border-white/10 bg-white/[0.045]" : "border-slate-200 bg-slate-50"
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-2 w-2 shrink-0">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                  </span>
+                  <p className="text-[11px] font-bold text-ds-primary">Operação online</p>
+                </div>
+                <p className="mt-1 text-[10px] leading-4 text-ds-tertiary">
+                  Monitoramento institucional em tempo real.
+                </p>
+              </div>
+            )}
           </div>
 
-          {/* Section Label */}
-          {!collapsed && (
-            <div className="px-5 pt-5 pb-1.5">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-ds-tertiary">Navegação</p>
-            </div>
-          )}
-
-          {/* Navigation */}
-          <nav className={cn("flex-1 px-3 space-y-0.5 overflow-y-auto", collapsed && "px-2 pt-4")}>
-            {navItems.filter((item) => canAccess(item.href)).map((item) => {
-              const isActive = location === item.href;
-              return (
-                <Link key={item.href} href={item.href} className="block" onClick={() => setIsOpen(false)}>
-                  <div
-                    className={cn(
-                      "relative flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150 group",
-                      collapsed && "justify-center px-2",
-                      isActive
-                        ? isDark
-                          ? "bg-[var(--ds-accent-muted)] text-[var(--ds-accent)]"
-                          : "bg-[var(--ds-accent-muted)] text-[var(--ds-accent)]"
-                        : "text-ds-secondary hover:bg-[var(--ds-accent-muted)] hover:text-ds-primary"
-                    )}
-                    title={collapsed ? item.label : undefined}
-                  >
-                    {/* Active indicator bar */}
-                    {isActive && (
-                      <div className={cn(
-                        "absolute left-0 top-1/2 -translate-y-1/2 w-[2px] rounded-full bg-[var(--ds-accent)]",
-                        collapsed ? "h-4" : "h-5"
-                      )} />
-                    )}
-                    <item.icon className={cn(
-                      "w-4 h-4 flex-shrink-0",
-                      isActive
-                        ? "text-[var(--ds-accent)]"
-                        : "text-ds-tertiary group-hover:text-ds-secondary"
-                    )} strokeWidth={1.75} />
-                    {!collapsed && <span className={cn("text-[13px]", isActive ? "font-semibold" : "font-medium")}>{item.label}</span>}
+          <nav className={cn("flex-1 overflow-y-auto", collapsed ? "px-2 py-4" : "px-3 py-4")}>
+            {sections.map((group) => (
+              <div key={group.section} className="mb-5 last:mb-0">
+                {!collapsed && (
+                  <div className="mb-2 px-2">
+                    <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-ds-tertiary">
+                      {group.label}
+                    </p>
                   </div>
-                </Link>
-              );
-            })}
+                )}
+
+                <div className="space-y-1">
+                  {group.items.map((item) => {
+                    const isActive = location === item.href;
+                    const ItemIcon = item.icon;
+
+                    return (
+                      <Link key={item.href} href={item.href} className="block" onClick={() => setIsOpen(false)}>
+                        <div
+                          className={cn(
+                            "group relative flex items-center rounded-2xl transition-all duration-200",
+                            collapsed ? "justify-center px-2 py-2.5" : "gap-3 px-3 py-2.5",
+                            isActive
+                              ? "bg-[var(--ds-accent)] text-white shadow-[0_12px_30px_rgba(0,159,227,.22)]"
+                              : "text-ds-secondary hover:bg-[var(--ds-accent-muted)] hover:text-ds-primary"
+                          )}
+                          title={collapsed ? item.label : undefined}
+                        >
+                          <span
+                            className={cn(
+                              "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors",
+                              isActive
+                                ? "bg-white/[0.16] text-white"
+                                : isDark
+                                  ? "bg-white/[0.045] text-ds-tertiary group-hover:text-[var(--ds-accent)]"
+                                  : "bg-slate-100 text-slate-500 group-hover:text-[var(--ds-accent)]"
+                            )}
+                          >
+                            <ItemIcon className="h-4 w-4" strokeWidth={1.85} />
+                          </span>
+
+                          {!collapsed && (
+                            <span className="min-w-0 flex-1">
+                              <span className={cn("block truncate text-[13px]", isActive ? "font-extrabold" : "font-bold")}>
+                                {item.label}
+                              </span>
+                              <span className={cn("block truncate text-[10px]", isActive ? "text-white/70" : "text-ds-tertiary")}>
+                                {item.description}
+                              </span>
+                            </span>
+                          )}
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </nav>
 
-          {/* Bottom Actions */}
-          <div className="border-t border-ds-subtle">
-            {/* Collapse Toggle (desktop only) */}
-            <div className={cn("hidden md:flex px-3 pt-2 justify-center", collapsed && "px-2")}>
+          <div className={cn("border-t border-ds-subtle", collapsed ? "px-2 py-3" : "px-3 py-3")}>
+            {!collapsed && user && (
+              <div
+                className={cn(
+                  "mb-3 flex items-center gap-3 rounded-2xl border p-2.5",
+                  isDark ? "border-white/10 bg-white/[0.045]" : "border-slate-200 bg-slate-50"
+                )}
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--ds-accent)] text-xs font-extrabold text-white">
+                  {initialsFromEmail(user.email)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[12px] font-bold text-ds-primary">{user.email}</p>
+                  <p className="truncate text-[10px] font-extrabold uppercase tracking-[0.14em] text-ds-tertiary">
+                    {user.nivel_acesso}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1">
               <button
                 onClick={toggle}
-                className="flex items-center justify-center w-7 h-7 rounded-md transition-colors text-ds-tertiary hover:text-ds-secondary hover:bg-[var(--ds-accent-muted)]"
-                title={collapsed ? "Expandir" : "Recolher"}
+                className={cn(
+                  "hidden w-full items-center rounded-2xl px-3 py-2.5 text-ds-secondary transition-all hover:bg-[var(--ds-accent-muted)] hover:text-ds-primary md:flex",
+                  collapsed ? "justify-center" : "gap-3"
+                )}
+                title={collapsed ? "Expandir menu" : "Recolher menu"}
+                type="button"
               >
-                {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+                {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+                {!collapsed && <span className="text-[13px] font-bold">Recolher menu</span>}
               </button>
-            </div>
 
-            {/* Theme Toggle */}
-            <div className={cn("px-3 pt-1", collapsed && "px-2")}>
               <button
                 onClick={toggleTheme}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150 w-full group text-ds-tertiary hover:text-ds-secondary hover:bg-[var(--ds-accent-muted)]",
-                  collapsed && "justify-center px-2",
+                  "flex w-full items-center rounded-2xl px-3 py-2.5 text-ds-secondary transition-all hover:bg-[var(--ds-accent-muted)] hover:text-ds-primary",
+                  collapsed ? "justify-center" : "gap-3"
                 )}
-                title={collapsed ? (isDark ? "Modo Claro" : "Modo Escuro") : undefined}
+                title={collapsed ? (isDark ? "Modo claro" : "Modo escuro") : undefined}
+                type="button"
               >
-                {isDark
-                  ? <Sun className="w-4 h-4 flex-shrink-0" strokeWidth={1.75} />
-                  : <Moon className="w-4 h-4 flex-shrink-0" strokeWidth={1.75} />}
-                {!collapsed && (
-                  <span className="text-[13px] font-medium">
-                    {isDark ? "Modo Claro" : "Modo Escuro"}
-                  </span>
-                )}
+                {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                {!collapsed && <span className="text-[13px] font-bold">{isDark ? "Modo claro" : "Modo escuro"}</span>}
               </button>
-            </div>
 
-            {/* Logout */}
-            <div className={cn("px-3 pt-0.5 pb-2", collapsed && "px-2")}>
               <button
                 onClick={logout}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150 w-full group text-ds-tertiary hover:text-rose-500 hover:bg-rose-500/8",
-                  collapsed && "justify-center px-2",
+                  "flex w-full items-center rounded-2xl px-3 py-2.5 text-ds-secondary transition-all hover:bg-rose-500/10 hover:text-rose-500",
+                  collapsed ? "justify-center" : "gap-3"
                 )}
                 title={collapsed ? "Sair" : undefined}
+                type="button"
               >
-                <LogOut className="w-4 h-4 flex-shrink-0" strokeWidth={1.75} />
-                {!collapsed && <span className="text-[13px] font-medium">Sair</span>}
+                <LogOut className="h-4 w-4" />
+                {!collapsed && <span className="text-[13px] font-bold">Sair</span>}
               </button>
             </div>
 
-            {/* Status Footer */}
-            <div className="px-3 pb-3 pt-1">
-              <div className={cn(
-                "flex items-center gap-2 px-3 py-2 rounded-lg border border-ds-subtle",
-                collapsed && "justify-center px-2"
-              )}>
-                <span className="relative flex h-1.5 w-1.5 flex-shrink-0">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+            {collapsed && (
+              <div className="mt-3 flex justify-center">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
                 </span>
-                {!collapsed && <p className="text-[10px] font-medium text-ds-tertiary">Tempo real</p>}
               </div>
-            </div>
+            )}
           </div>
         </div>
       </aside>
 
-      {/* Overlay for mobile */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-30 md:hidden backdrop-blur-sm"
+          className="fixed inset-0 z-30 bg-slate-950/60 backdrop-blur-sm md:hidden"
           onClick={() => setIsOpen(false)}
         />
       )}

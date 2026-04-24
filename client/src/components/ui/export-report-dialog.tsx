@@ -163,7 +163,7 @@ export function ExportReportDialog({ selectedCasas, contentRef, pdfTitle = "Rela
 
                 <button
 
-                    className="group flex items-center gap-2.5 px-4 py-2.5 text-xs bg-white border border-gray-300 rounded-xl text-gray-700 hover:border-[#009FE3]/40 hover:bg-gray-50 hover:text-gray-900 transition-all duration-300 min-w-[100px] shadow-sm hover:shadow-md"
+                    className="group flex items-center gap-2.5 px-4 py-2.5 text-xs bg-ds-elevated border border-ds-default rounded-2xl text-ds-primary hover:border-ds-strong hover:bg-[var(--ds-accent-muted)] transition-all duration-300 min-w-[100px] shadow-sm hover:shadow-md"
 
                 >
 
@@ -175,11 +175,11 @@ export function ExportReportDialog({ selectedCasas, contentRef, pdfTitle = "Rela
 
             </DialogTrigger>
 
-            <DialogContent className="sm:max-w-[520px] bg-white border-gray-200 text-gray-900 p-0 gap-0 rounded-2xl overflow-hidden shadow-2xl shadow-black/10 z-[1000]">
+            <DialogContent className="sm:max-w-[540px] bg-ds-elevated border-ds-default text-ds-primary p-0 gap-0 rounded-3xl overflow-hidden shadow-2xl z-[1000]">
 
-                <DialogHeader className="px-6 pt-6 pb-5 border-b border-gray-200 bg-white">
+                <DialogHeader className="px-6 pt-6 pb-5 border-b border-ds-subtle bg-ds-elevated">
 
-                    <DialogTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                    <DialogTitle className="text-xl font-extrabold text-ds-primary flex items-center gap-2">
 
                         <Download className="w-5 h-5 text-[#009FE3]" />
 
@@ -187,7 +187,7 @@ export function ExportReportDialog({ selectedCasas, contentRef, pdfTitle = "Rela
 
                     </DialogTitle>
 
-                    <DialogDescription className="text-sm text-gray-600 mt-1">
+                    <DialogDescription className="text-sm text-ds-tertiary mt-1">
 
                         Escolha o período e formato para exportar os dados
 
@@ -197,12 +197,12 @@ export function ExportReportDialog({ selectedCasas, contentRef, pdfTitle = "Rela
 
 
 
-                <div className="px-6 py-5 space-y-6 bg-white">
+                <div className="px-6 py-5 space-y-6 bg-ds-elevated">
 
                     {/* Date Range Filter - Enhanced styling */}
 
                     <div>
-                        <label className="text-[10px] uppercase tracking-[0.15em] text-gray-600 font-bold flex items-center gap-1.5 mb-3">
+                        <label className="text-[10px] uppercase tracking-[0.15em] text-ds-tertiary font-extrabold flex items-center gap-1.5 mb-3">
                             <CalendarDays className="w-3 h-3" />
                             PERÍODO DO RELATÓRIO
                         </label>

@@ -1,150 +1,143 @@
 import { useState, useCallback, useEffect } from "react";
 import { ChevronDown, Check, Search } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 interface SelectCustomProps {
-    value: string;
-    onValueChange: (value: string) => void;
-    placeholder: string;
-    options: { value: string; label: string }[];
-    disabled?: boolean;
-    panelTitle?: string;
-    className?: string;
+  value: string;
+  onValueChange: (value: string) => void;
+  placeholder: string;
+  options: { value: string; label: string }[];
+  disabled?: boolean;
+  panelTitle?: string;
+  className?: string;
 }
 
 export function SelectCustom({
-    value,
-    onValueChange,
-    placeholder,
-    options,
-    disabled = false,
-    panelTitle,
-    className = "",
+  value,
+  onValueChange,
+  placeholder,
+  options,
+  disabled = false,
+  panelTitle,
+  className = "",
 }: SelectCustomProps) {
-    const [open, setOpen] = useState(false);
-    const [pending, setPending] = useState(value);
-    const [search, setSearch] = useState("");
-    const showSearch = options.length > 6;
+  const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState(value);
+  const [search, setSearch] = useState("");
+  const showSearch = options.length > 6;
 
-    // Sync pending with external value when popover opens
-    useEffect(() => {
-        if (open) {
-            setPending(value);
-            setSearch("");
-        }
-    }, [open, value]);
+  useEffect(() => {
+    if (open) {
+      setPending(value);
+      setSearch("");
+    }
+  }, [open, value]);
 
-    const selectedOption = options.find(opt => opt.value === value);
-    const displayText = selectedOption?.label || placeholder;
+  const selectedOption = options.find((opt) => opt.value === value);
+  const displayText = selectedOption?.label || placeholder;
 
-    const filteredOptions = search.trim()
-        ? options.filter(opt => opt.label.toLowerCase().includes(search.toLowerCase()))
-        : options;
+  const filteredOptions = search.trim()
+    ? options.filter((opt) => opt.label.toLowerCase().includes(search.toLowerCase()))
+    : options;
 
-    const handleConfirm = useCallback(() => {
-        onValueChange(pending);
-        setOpen(false);
-    }, [onValueChange, pending]);
+  const handleConfirm = useCallback(() => {
+    onValueChange(pending);
+    setOpen(false);
+  }, [onValueChange, pending]);
 
-    const handleCancel = useCallback(() => {
-        setPending(value);
-        setOpen(false);
-    }, [value]);
+  const handleCancel = useCallback(() => {
+    setPending(value);
+    setOpen(false);
+  }, [value]);
 
-    const pendingChanged = pending !== value;
+  const pendingChanged = pending !== value;
 
-    return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-                <button
-                    className={`group flex items-center gap-2.5 px-4 py-2.5 text-xs font-bold bg-white border border-gray-300 rounded-xl text-gray-900 hover:border-[#009FE3] hover:shadow-md transition-all duration-200 min-w-[180px] shadow-sm disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-gray-300 disabled:hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#009FE3]/30 focus:border-[#009FE3] ${className}`}
-                    disabled={disabled}
-                    type="button"
-                >
-                    <span className={`font-bold truncate flex-1 text-left ${value ? "text-gray-900" : "text-gray-500"}`}>{displayText}</span>
-                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 shrink-0 ${open ? "rotate-180" : ""} group-hover:text-[#009FE3]`} />
-                </button>
-            </PopoverTrigger>
-            <PopoverContent
-                className="w-[var(--radix-popover-trigger-width)] min-w-[240px] p-0 bg-white border border-gray-200 shadow-xl rounded-2xl overflow-hidden"
-                align="start"
-                sideOffset={8}
-            >
-                {/* Header */}
-                {panelTitle && (
-                    <div className="px-4 pt-3 pb-2 border-b border-gray-100 bg-gray-50/80">
-                        <p className="text-[10px] uppercase tracking-[0.15em] text-[#009FE3] font-extrabold">
-                            {panelTitle}
-                        </p>
-                    </div>
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className={cn(
+            "group flex min-w-[180px] items-center gap-2.5 rounded-2xl border border-ds-default bg-ds-elevated px-4 py-2.5 text-xs font-extrabold text-ds-primary shadow-sm transition-all duration-200 hover:border-ds-strong hover:bg-[var(--ds-accent-muted)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-ds-default focus:outline-none focus:ring-2 focus:ring-[var(--ds-accent)]/25",
+            className
+          )}
+          disabled={disabled}
+          type="button"
+        >
+          <span className={cn("flex-1 truncate text-left", value ? "text-ds-primary" : "text-ds-tertiary")}>{displayText}</span>
+          <ChevronDown className={cn("h-4 w-4 shrink-0 text-ds-tertiary transition-transform duration-200 group-hover:text-[var(--ds-accent)]", open && "rotate-180")} />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[var(--radix-popover-trigger-width)] min-w-[260px] overflow-hidden rounded-2xl border border-ds-default bg-ds-elevated p-0 text-ds-primary shadow-2xl"
+        align="start"
+        sideOffset={8}
+      >
+        {panelTitle && (
+          <div className="border-b border-ds-subtle bg-ds-inset px-4 pb-2.5 pt-3">
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[var(--ds-accent)]">{panelTitle}</p>
+          </div>
+        )}
+
+        {showSearch && (
+          <div className="px-3 pb-1 pt-3">
+            <div className="flex items-center gap-2 rounded-xl border border-ds-subtle bg-ds-inset px-3 py-2 transition-all focus-within:border-ds-strong focus-within:ring-2 focus-within:ring-[var(--ds-accent)]/15">
+              <Search className="h-3.5 w-3.5 shrink-0 text-ds-tertiary" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar..."
+                className="w-full bg-transparent text-xs font-semibold text-ds-primary placeholder:text-ds-tertiary outline-none"
+                autoFocus
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="max-h-[280px] space-y-0.5 overflow-y-auto p-2">
+          {filteredOptions.map((option) => {
+            const isSelected = pending === option.value;
+            return (
+              <button
+                key={option.value}
+                onClick={() => setPending(option.value)}
+                className={cn(
+                  "flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left text-xs transition-all duration-150",
+                  isSelected
+                    ? "bg-[var(--ds-accent-muted)] font-extrabold text-[var(--ds-accent)]"
+                    : "font-semibold text-ds-secondary hover:bg-ds-inset hover:text-ds-primary"
                 )}
+                type="button"
+              >
+                <span className="truncate">{option.label}</span>
+                {isSelected && <Check className="h-4 w-4 shrink-0 text-[var(--ds-accent)]" />}
+              </button>
+            );
+          })}
+          {filteredOptions.length === 0 && <p className="py-5 text-center text-xs font-semibold text-ds-tertiary">Nenhum resultado</p>}
+        </div>
 
-                {/* Search (only for long lists) */}
-                {showSearch && (
-                    <div className="px-3 pt-3 pb-1">
-                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 focus-within:border-[#009FE3] focus-within:ring-2 focus-within:ring-[#009FE3]/20 transition-all">
-                            <Search className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                            <input
-                                type="text"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Buscar..."
-                                className="bg-transparent text-xs text-gray-800 font-medium placeholder-gray-400 outline-none w-full"
-                                autoFocus
-                            />
-                        </div>
-                    </div>
-                )}
-
-                {/* Options */}
-                <div className="p-2 space-y-0.5 max-h-[260px] overflow-y-auto">
-                    {filteredOptions.map((option) => {
-                        const isSelected = pending === option.value;
-                        return (
-                            <button
-                                key={option.value}
-                                onClick={() => setPending(option.value)}
-                                className={`w-full text-left px-3 py-2.5 text-xs rounded-lg transition-all duration-150 flex items-center justify-between gap-2 ${
-                                    isSelected
-                                        ? "bg-[#009FE3]/8 text-[#009FE3] font-bold"
-                                        : "text-gray-700 font-medium hover:text-gray-900 hover:bg-gray-50"
-                                }`}
-                                type="button"
-                            >
-                                <span className="truncate">{option.label}</span>
-                                {isSelected && (
-                                    <Check className="w-4 h-4 text-[#009FE3] shrink-0" />
-                                )}
-                            </button>
-                        );
-                    })}
-                    {filteredOptions.length === 0 && (
-                        <p className="text-center text-gray-400 text-xs py-4 font-medium">Nenhum resultado</p>
-                    )}
-                </div>
-
-                {/* Action buttons */}
-                <div className="px-3 pb-3 pt-2 border-t border-gray-100 flex items-center gap-2">
-                    <button
-                        type="button"
-                        onClick={handleCancel}
-                        className="flex-1 px-3 py-2 text-xs font-bold text-gray-500 hover:text-gray-800 rounded-lg hover:bg-gray-50 border border-gray-200 transition-all duration-200"
-                    >
-                        Cancelar
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleConfirm}
-                        className={`flex-1 px-3 py-2 text-xs font-bold rounded-lg transition-all duration-200 ${
-                            pendingChanged
-                                ? "bg-[#009FE3] text-white hover:bg-[#0088CC] shadow-md shadow-[#009FE3]/20"
-                                : "bg-[#009FE3] text-white hover:bg-[#0088CC]"
-                        }`}
-                    >
-                        Confirmar
-                    </button>
-                </div>
-            </PopoverContent>
-        </Popover>
-    );
+        <div className="flex items-center gap-2 border-t border-ds-subtle px-3 pb-3 pt-2">
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="flex-1 rounded-xl border border-ds-subtle px-3 py-2 text-xs font-extrabold text-ds-secondary transition-all hover:bg-ds-inset hover:text-ds-primary"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            className={cn(
+              "flex-1 rounded-xl px-3 py-2 text-xs font-extrabold text-white transition-all",
+              pendingChanged ? "bg-[var(--ds-accent)] shadow-lg shadow-sky-500/10 hover:bg-[var(--ds-accent-hover)]" : "bg-[var(--ds-accent)] hover:bg-[var(--ds-accent-hover)]"
+            )}
+          >
+            Confirmar
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }

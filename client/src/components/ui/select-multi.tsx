@@ -1,224 +1,173 @@
 import { useState, useCallback, useEffect } from "react";
 import { ChevronDown, Check, Search, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 interface SelectMultiProps {
-    values: string[];
-    onValuesChange: (values: string[]) => void;
-    placeholder: string;
-    options: { value: string; label: string }[];
-    disabled?: boolean;
-    panelTitle?: string;
-    className?: string;
-    maxDisplay?: number;
+  values: string[];
+  onValuesChange: (values: string[]) => void;
+  placeholder: string;
+  options: { value: string; label: string }[];
+  disabled?: boolean;
+  panelTitle?: string;
+  className?: string;
+  maxDisplay?: number;
 }
 
 export function SelectMulti({
-    values,
-    onValuesChange,
-    placeholder,
-    options,
-    disabled = false,
-    panelTitle,
-    className = "",
-    maxDisplay = 2,
+  values,
+  onValuesChange,
+  placeholder,
+  options,
+  disabled = false,
+  panelTitle,
+  className = "",
+  maxDisplay = 2,
 }: SelectMultiProps) {
-    const [open, setOpen] = useState(false);
-    const [pending, setPending] = useState<string[]>(values);
-    const [search, setSearch] = useState("");
-    const showSearch = options.length > 6;
+  const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState<string[]>(values);
+  const [search, setSearch] = useState("");
+  const showSearch = options.length > 6;
 
-    useEffect(() => {
-        if (open) {
-            setPending(values);
-            setSearch("");
-        }
-    }, [open, values]);
+  useEffect(() => {
+    if (open) {
+      setPending(values);
+      setSearch("");
+    }
+  }, [open, values]);
 
-    const getDisplayText = () => {
-        if (values.length === 0) return placeholder;
-        if (values.length === 1) {
-            const opt = options.find(o => o.value === values[0]);
-            return opt?.label || values[0];
-        }
-        const selectedLabels = values
-            .slice(0, maxDisplay)
-            .map(v => options.find(o => o.value === v)?.label || v);
-        const remaining = values.length - maxDisplay;
-        if (remaining > 0) {
-            return `${selectedLabels.join(", ")} +${remaining}`;
-        }
-        return selectedLabels.join(", ");
-    };
+  const selectedLabels = values
+    .map((value) => options.find((opt) => opt.value === value)?.label || value)
+    .filter(Boolean);
 
-    const displayText = getDisplayText();
+  const displayText = selectedLabels.length === 0
+    ? placeholder
+    : selectedLabels.length <= maxDisplay
+      ? selectedLabels.join(", ")
+      : `${selectedLabels.slice(0, maxDisplay).join(", ")} +${selectedLabels.length - maxDisplay}`;
 
-    const filteredOptions = search.trim()
-        ? options.filter(opt => opt.label.toLowerCase().includes(search.toLowerCase()))
-        : options;
+  const filteredOptions = search.trim()
+    ? options.filter((opt) => opt.label.toLowerCase().includes(search.toLowerCase()))
+    : options;
 
-    const handleConfirm = useCallback(() => {
-        onValuesChange(pending);
-        setOpen(false);
-    }, [onValuesChange, pending]);
+  const toggleValue = useCallback((value: string) => {
+    setPending((prev) => prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value]);
+  }, []);
 
-    const handleCancel = useCallback(() => {
-        setPending(values);
-        setOpen(false);
-    }, [values]);
+  const handleConfirm = useCallback(() => {
+    onValuesChange(pending);
+    setOpen(false);
+  }, [onValuesChange, pending]);
 
-    const toggleOption = useCallback((value: string) => {
-        setPending(prev => {
-            if (prev.includes(value)) {
-                return prev.filter(v => v !== value);
-            }
-            return [...prev, value];
-        });
-    }, []);
+  const handleCancel = useCallback(() => {
+    setPending(values);
+    setOpen(false);
+  }, [values]);
 
-    const clearAll = useCallback(() => {
-        setPending([]);
-    }, []);
+  const handleClear = useCallback(() => setPending([]), []);
 
-    const selectAll = useCallback(() => {
-        setPending(options.map(o => o.value));
-    }, [options]);
+  const pendingChanged = pending.length !== values.length || pending.some((value) => !values.includes(value));
 
-    const pendingChanged = pending.length !== values.length || 
-        pending.some(v => !values.includes(v)) ||
-        values.some(v => !pending.includes(v));
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className={cn(
+            "group flex min-w-[180px] items-center gap-2.5 rounded-2xl border border-ds-default bg-ds-elevated px-4 py-2.5 text-xs font-extrabold text-ds-primary shadow-sm transition-all duration-200 hover:border-ds-strong hover:bg-[var(--ds-accent-muted)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-ds-default focus:outline-none focus:ring-2 focus:ring-[var(--ds-accent)]/25",
+            className
+          )}
+          disabled={disabled}
+          type="button"
+        >
+          <span className={cn("flex-1 truncate text-left", values.length > 0 ? "text-ds-primary" : "text-ds-tertiary")}>{displayText}</span>
+          {values.length > 0 && (
+            <span className="rounded-full bg-[var(--ds-accent-muted)] px-1.5 py-0.5 text-[10px] font-extrabold text-[var(--ds-accent)]">
+              {values.length}
+            </span>
+          )}
+          <ChevronDown className={cn("h-4 w-4 shrink-0 text-ds-tertiary transition-transform duration-200 group-hover:text-[var(--ds-accent)]", open && "rotate-180")} />
+        </button>
+      </PopoverTrigger>
 
-    return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-                <button
-                    className={`group flex items-center gap-2.5 px-4 py-2.5 text-xs font-bold bg-white border border-gray-300 rounded-xl text-gray-900 hover:border-[#009FE3] hover:shadow-md transition-all duration-200 min-w-[180px] shadow-sm disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-gray-300 disabled:hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#009FE3]/30 focus:border-[#009FE3] ${className}`}
-                    disabled={disabled}
-                    type="button"
-                >
-                    <span className={`font-bold truncate flex-1 text-left ${values.length > 0 ? "text-gray-900" : "text-gray-500"}`}>{displayText}</span>
-                    {values.length > 0 && (
-                        <span 
-                            className="flex items-center justify-center w-5 h-5 rounded-full bg-[#009FE3] text-white text-[10px] font-bold shrink-0"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onValuesChange([]);
-                            }}
-                        >
-                            <X className="w-3 h-3" />
-                        </span>
-                    )}
-                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 shrink-0 ${open ? "rotate-180" : ""} group-hover:text-[#009FE3]`} />
+      <PopoverContent
+        className="w-[var(--radix-popover-trigger-width)] min-w-[280px] overflow-hidden rounded-2xl border border-ds-default bg-ds-elevated p-0 text-ds-primary shadow-2xl"
+        align="start"
+        sideOffset={8}
+      >
+        {panelTitle && (
+          <div className="border-b border-ds-subtle bg-ds-inset px-4 pb-2.5 pt-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[var(--ds-accent)]">{panelTitle}</p>
+              {pending.length > 0 && (
+                <button type="button" onClick={handleClear} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-bold text-ds-tertiary hover:bg-[var(--ds-accent-muted)] hover:text-ds-primary">
+                  <X className="h-3 w-3" /> Limpar
                 </button>
-            </PopoverTrigger>
-            <PopoverContent
-                className="w-[var(--radix-popover-trigger-width)] min-w-[280px] p-0 bg-white border border-gray-200 shadow-xl rounded-2xl overflow-hidden"
-                align="start"
-                sideOffset={8}
-            >
-                {/* Header */}
-                {panelTitle && (
-                    <div className="px-4 pt-3 pb-2 border-b border-gray-100 bg-gray-50/80">
-                        <div className="flex items-center justify-between">
-                            <p className="text-[10px] uppercase tracking-[0.15em] text-[#009FE3] font-extrabold">
-                                {panelTitle}
-                            </p>
-                            <span className="text-[10px] text-gray-400 font-medium">
-                                {pending.length} selecionado{pending.length !== 1 ? 's' : ''}
-                            </span>
-                        </div>
-                    </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {showSearch && (
+          <div className="px-3 pb-1 pt-3">
+            <div className="flex items-center gap-2 rounded-xl border border-ds-subtle bg-ds-inset px-3 py-2 transition-all focus-within:border-ds-strong focus-within:ring-2 focus-within:ring-[var(--ds-accent)]/15">
+              <Search className="h-3.5 w-3.5 shrink-0 text-ds-tertiary" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar..."
+                className="w-full bg-transparent text-xs font-semibold text-ds-primary placeholder:text-ds-tertiary outline-none"
+                autoFocus
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="max-h-[300px] space-y-0.5 overflow-y-auto p-2">
+          {filteredOptions.map((option) => {
+            const isSelected = pending.includes(option.value);
+            return (
+              <button
+                key={option.value}
+                onClick={() => toggleValue(option.value)}
+                className={cn(
+                  "flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left text-xs transition-all duration-150",
+                  isSelected
+                    ? "bg-[var(--ds-accent-muted)] font-extrabold text-[var(--ds-accent)]"
+                    : "font-semibold text-ds-secondary hover:bg-ds-inset hover:text-ds-primary"
                 )}
+                type="button"
+              >
+                <span className="truncate">{option.label}</span>
+                <span className={cn("flex h-4 w-4 shrink-0 items-center justify-center rounded border", isSelected ? "border-[var(--ds-accent)] bg-[var(--ds-accent)] text-white" : "border-ds-default")}> 
+                  {isSelected && <Check className="h-3 w-3" />}
+                </span>
+              </button>
+            );
+          })}
+          {filteredOptions.length === 0 && <p className="py-5 text-center text-xs font-semibold text-ds-tertiary">Nenhum resultado</p>}
+        </div>
 
-                {/* Search */}
-                {showSearch && (
-                    <div className="px-3 pt-3 pb-1">
-                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 focus-within:border-[#009FE3] focus-within:ring-2 focus-within:ring-[#009FE3]/20 transition-all">
-                            <Search className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                            <input
-                                type="text"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Buscar..."
-                                className="bg-transparent text-xs text-gray-800 font-medium placeholder-gray-400 outline-none w-full"
-                                autoFocus
-                            />
-                        </div>
-                    </div>
-                )}
-
-                {/* Select All / Clear All */}
-                <div className="px-3 py-2 flex items-center gap-2 border-b border-gray-100">
-                    <button
-                        onClick={selectAll}
-                        className="text-[10px] text-[#009FE3] hover:text-[#0077B5] transition-colors font-bold"
-                        type="button"
-                    >
-                        Selecionar todos
-                    </button>
-                    <span className="text-gray-300">|</span>
-                    <button
-                        onClick={clearAll}
-                        className="text-[10px] text-gray-400 hover:text-gray-700 transition-colors font-medium"
-                        type="button"
-                    >
-                        Limpar
-                    </button>
-                </div>
-
-                {/* Options */}
-                <div className="p-2 space-y-0.5 max-h-[280px] overflow-y-auto">
-                    {filteredOptions.map((option) => {
-                        const isSelected = pending.includes(option.value);
-                        return (
-                            <button
-                                key={option.value}
-                                onClick={() => toggleOption(option.value)}
-                                className={`w-full text-left px-3 py-2.5 text-xs rounded-lg transition-all duration-150 flex items-center justify-between gap-2 ${
-                                    isSelected
-                                        ? "bg-[#009FE3]/8 text-[#009FE3] font-bold"
-                                        : "text-gray-700 font-medium hover:text-gray-900 hover:bg-gray-50"
-                                }`}
-                                type="button"
-                            >
-                                <span className="truncate">{option.label}</span>
-                                <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors shrink-0 ${
-                                    isSelected
-                                        ? "bg-[#009FE3] border-[#009FE3]"
-                                        : "border-gray-300 hover:border-gray-400"
-                                }`}>
-                                    {isSelected && <Check className="w-3 h-3 text-white" />}
-                                </div>
-                            </button>
-                        );
-                    })}
-                    {filteredOptions.length === 0 && (
-                        <p className="text-center text-gray-400 text-xs py-4 font-medium">Nenhum resultado</p>
-                    )}
-                </div>
-
-                {/* Action buttons */}
-                <div className="px-3 pb-3 pt-2 border-t border-gray-100 flex items-center gap-2">
-                    <button
-                        type="button"
-                        onClick={handleCancel}
-                        className="flex-1 px-3 py-2 text-xs font-bold text-gray-500 hover:text-gray-800 rounded-lg hover:bg-gray-50 border border-gray-200 transition-all duration-200"
-                    >
-                        Cancelar
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleConfirm}
-                        className={`flex-1 px-3 py-2 text-xs font-bold rounded-lg transition-all duration-200 ${
-                            pendingChanged
-                                ? "bg-[#009FE3] text-white hover:bg-[#0088CC] shadow-md shadow-[#009FE3]/20"
-                                : "bg-[#009FE3] text-white hover:bg-[#0088CC]"
-                        }`}
-                    >
-                        Confirmar ({pending.length})
-                    </button>
-                </div>
-            </PopoverContent>
-        </Popover>
-    );
+        <div className="flex items-center gap-2 border-t border-ds-subtle px-3 pb-3 pt-2">
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="flex-1 rounded-xl border border-ds-subtle px-3 py-2 text-xs font-extrabold text-ds-secondary transition-all hover:bg-ds-inset hover:text-ds-primary"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            className={cn(
+              "flex-1 rounded-xl px-3 py-2 text-xs font-extrabold text-white transition-all",
+              pendingChanged ? "bg-[var(--ds-accent)] shadow-lg shadow-sky-500/10 hover:bg-[var(--ds-accent-hover)]" : "bg-[var(--ds-accent)] hover:bg-[var(--ds-accent-hover)]"
+            )}
+          >
+            Confirmar
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
