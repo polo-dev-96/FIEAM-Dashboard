@@ -139,25 +139,6 @@ export function Sidebar() {
               )}
             </div>
 
-            {!collapsed && (
-              <div
-                className={cn(
-                  "mt-4 rounded-2xl border px-3 py-2.5",
-                  isDark ? "border-white/10 bg-white/[0.045]" : "border-slate-200 bg-slate-50"
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="relative flex h-2 w-2 shrink-0">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                  </span>
-                  <p className="text-[11px] font-bold text-ds-primary">Operação online</p>
-                </div>
-                <p className="mt-1 text-[10px] leading-4 text-ds-tertiary">
-                  Monitoramento institucional em tempo real.
-                </p>
-              </div>
-            )}
           </div>
 
           <nav className={cn("flex-1 overflow-y-auto", collapsed ? "px-2 py-4" : "px-3 py-4")}>
