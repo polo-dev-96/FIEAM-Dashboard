@@ -38,7 +38,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 // AuthProvider: provedor de autenticação; useAuth: hook para consumir o contexto
-import { AuthProvider, useAuth } from "@/lib/AuthContext";
+import { AuthProvider, useAuth, isAdminMaster } from "@/lib/AuthContext";
 
 // ThemeProvider: provedor de tema claro/escuro
 import { ThemeProvider } from "@/lib/ThemeContext";
@@ -51,6 +51,7 @@ import SearchPhonePage from "@/pages/SearchPhone";               // Busca por Te
 import DashboardAnualPage from "@/pages/DashboardAnual";         // Dashboard Anual
 import DashboardOpenAIPage from "@/pages/DashboardOpenAI";       // Dashboard IA (exclusivo)
 import DashboardPatrocinadosPage from "@/pages/DashboardPatrocinados"; // Patrocinados
+import AdminUsuariosPage from "@/pages/AdminUsuarios";               // Gerenciamento de usuários
 import NotFound from "@/pages/not-found";                        // Página 404
 
 /*
@@ -84,6 +85,9 @@ function Router() {
       {/* Rotas exclusivas - apenas master e casos especiais */}
       {canAccess("/openai")       && <Route path="/openai"       component={DashboardOpenAIPage} />}
       {canAccess("/patrocinados") && <Route path="/patrocinados" component={DashboardPatrocinadosPage} />}
+
+      {/* Rota de administração - exclusiva do admin master */}
+      {isAdminMaster() && <Route path="/admin/usuarios" component={AdminUsuariosPage} />}
 
       {/* Fallback: qualquer rota não encontrada exibe página 404 */}
       <Route component={NotFound} />

@@ -12,6 +12,7 @@ import {
   Phone,
   Search,
   Sun,
+  UserCog,
   Users,
   X,
   type LucideIcon,
@@ -20,10 +21,10 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useSidebar } from "./SidebarContext";
-import { useAuth } from "@/lib/AuthContext";
+import { useAuth, ADMIN_MASTER_EMAIL } from "@/lib/AuthContext";
 import { useTheme } from "@/lib/ThemeContext";
 
-type NavSection = "dashboards" | "consultas" | "inteligencia";
+type NavSection = "dashboards" | "consultas" | "inteligencia" | "administracao";
 
 type NavItem = {
   href: string;
@@ -40,12 +41,14 @@ const navItems: NavItem[] = [
   { href: "/protocolo", label: "Pesquisar Protocolo", description: "Consulta rápida por protocolo", icon: Search, section: "consultas" },
   { href: "/telefone", label: "Pesquisar Telefone", description: "Histórico de relacionamento", icon: Phone, section: "consultas" },
   { href: "/openai", label: "Dashboard OpenAI", description: "Custos, projetos e consumo de IA", icon: Brain, section: "inteligencia" },
+  { href: "/admin/usuarios", label: "Gerenciar Usuários", description: "Criar, editar e remover usuários", icon: UserCog, section: "administracao" },
 ];
 
 const sectionLabels: Record<NavSection, string> = {
   dashboards: "Dashboards",
   consultas: "Consultas",
   inteligencia: "Inteligência",
+  administracao: "Administração",
 };
 
 function initialsFromEmail(email?: string) {
@@ -275,9 +278,6 @@ export function Sidebar() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[12px] font-bold text-ds-primary">{user.email}</p>
-                  <p className="truncate text-[10px] font-extrabold uppercase tracking-[0.14em] text-ds-tertiary">
-                    {user.nivel_acesso}
-                  </p>
                 </div>
               </div>
             )}

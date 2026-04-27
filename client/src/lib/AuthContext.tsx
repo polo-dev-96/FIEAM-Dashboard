@@ -22,7 +22,7 @@ import { createContext, useContext, useState, useCallback } from "react";
 /*
  * NivelAcesso — Os 5 tipos de usuário do sistema
  * -------------------------------------------------------
- *   master      → Acesso total (Ryan, administrador principal)
+ *   master      → Acesso total (administrador principal)
  *   admin       → Acesso completo exceto páginas exclusivas do master
  *   gerente     → Igual ao admin (por enquanto tem as mesmas permissões)
  *   visualizador → Só pode ver a Visão Geral e o Dashboard Anual
@@ -33,14 +33,38 @@ export type NivelAcesso = "master" | "admin" | "gerente" | "visualizador" | "ent
 /*
  * UserInfo — Estrutura dos dados do usuário logado
  * -------------------------------------------------------
- *   id           → identificador único no banco de dados
- *   email        → e-mail de login
- *   nivel_acesso → qual dos 5 níveis esse usuário tem
+ *   id                → identificador único no banco de dados
+ *   email             → e-mail de login
+ *   nivel_acesso      → qual dos 5 níveis esse usuário tem
+ *   rotas_permitidas  → lista de rotas individuais (sobrescreve ALLOWED_ROUTES)
+ *                       null = usa as regras padrão do nivel_acesso
  */
 export interface UserInfo {
   id: number;
   email: string;
   nivel_acesso: NivelAcesso;
+  rotas_permitidas?: string[] | null;
+}
+
+/*
+ * ADMIN_MASTER_EMAIL — Email do administrador master do sistema
+ * Usuário que pode criar, deletar e editar permissões de outros usuários.
+ */
+export const ADMIN_MASTER_EMAIL = "admin@polotelecom.com.br";
+
+/*
+ * isAdminMaster() — Verifica se o usuário logado é o admin master
+ * Lida diretamente com localStorage para poder ser chamada fora de componentes React.
+ */
+export function isAdminMaster(): boolean {
+  try {
+    const stored = localStorage.getItem("auth_user");
+    if (!stored) return false;
+    const user: UserInfo = JSON.parse(stored);
+    return user.email === ADMIN_MASTER_EMAIL;
+  } catch {
+    return false;
+  }
 }
 
 /*
@@ -166,21 +190,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   /*
    * canAccess(route) — Verifica se o usuário pode acessar uma rota
    * -------------------------------------------------------
-   * Retorna true se a rota está na lista de permissões do nível do usuário.
+   * Prioridade:
+   *   1. Se user.rotas_permitidas existir (não-null), usa ESSE array
+   *   2. Caso contrário, usa ALLOWED_ROUTES[nivel_acesso] (regras padrão por papel)
    *
-   * Regra especial: /patrocinados também é liberado para usuária "Ariana",
-   * independente do nível de acesso formal dela.
+   * Regra especial: /patrocinados também é liberado para usuária "Ariana".
+   * Regra especial: /admin/usuarios é exclusivo do admin master (email fixo).
    */
   const canAccess = useCallback(
     (route: string) => {
-      if (!user) return false; // sem usuário logado, nenhum acesso
+      if (!user) return false;
+
+      // /admin/usuarios: exclusivo do admin master, nunca atribuível a outros
+      if (route === "/admin/usuarios") return user.email === ADMIN_MASTER_EMAIL;
+
+      // Se o usuário tem permissões individuais definidas, usa elas
+      if (user.rotas_permitidas != null) {
+        return user.rotas_permitidas.includes(route);
+      }
+
+      // Sem permissões individuais: usa as regras padrão do papel
       const routes = ALLOWED_ROUTES[user.nivel_acesso] || [];
       if (routes.includes(route)) return true;
+
       // Acesso especial: /patrocinados também para Ariana
       if (route === "/patrocinados" && user.email?.toLowerCase().includes("ariana")) return true;
+
       return false;
     },
-    [user] // [user] → recria a função apenas quando o usuário mudar
+    [user]
   );
 
   // Disponibiliza todos os valores para os componentes filhos

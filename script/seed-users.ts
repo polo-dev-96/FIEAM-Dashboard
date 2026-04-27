@@ -25,10 +25,10 @@ async function seed() {
       ["senai@polotelecom.com", hash]
     );
 
-    // Usuário Admin (acesso total)
+    // Usuário Admin Master (acesso total + gerenciamento de usuários)
     await conn.query(
       `INSERT INTO usuarios (email, senha_hash, nivel_acesso, ativo)
-       VALUES (?, ?, 'admin', 1)
+       VALUES (?, ?, 'master', 1)
        ON DUPLICATE KEY UPDATE senha_hash = VALUES(senha_hash), nivel_acesso = VALUES(nivel_acesso)`,
       ["admin@polotelecom.com.br", hash]
     );

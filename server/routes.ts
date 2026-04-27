@@ -90,8 +90,9 @@ export async function registerRoutes(
 
     try {
       // Busca usuário pelo email, excluindo inativos (ativo = 1)
+      // rotas_permitidas: JSON com as rotas individuais do usuário (pode ser NULL)
       const [rows] = await pool.query<RowDataPacket[]>(
-        "SELECT id, email, senha_hash, nivel_acesso FROM usuarios WHERE email = ? AND ativo = 1",
+        "SELECT id, email, senha_hash, nivel_acesso, rotas_permitidas FROM usuarios WHERE email = ? AND ativo = 1",
         [email]
       );
 
@@ -115,6 +116,18 @@ export async function registerRoutes(
       // Nota: em produção real, seria recomendado usar JWT (jsonwebtoken)
       const token = Buffer.from(`${user.id}:${user.email}:${Date.now()}`).toString("base64");
 
+      // Parseia rotas_permitidas: MySQL retorna JSON como string, converte para array
+      let rotasPermitidas: string[] | null = null;
+      if (user.rotas_permitidas) {
+        try {
+          rotasPermitidas = typeof user.rotas_permitidas === "string"
+            ? JSON.parse(user.rotas_permitidas)
+            : user.rotas_permitidas;
+        } catch {
+          rotasPermitidas = null;
+        }
+      }
+
       return res.json({
         success: true,
         token,
@@ -122,6 +135,7 @@ export async function registerRoutes(
           id: user.id,
           email: user.email,
           nivel_acesso: user.nivel_acesso,
+          rotas_permitidas: rotasPermitidas,
         },
       });
     } catch (error) {
@@ -129,6 +143,164 @@ export async function registerRoutes(
       return res.status(500).json({ message: "Erro interno do servidor" });
     }
   });
+
+  // ─── Rotas de Administração de Usuários ────────────────────────────────────
+  //
+  // Todas as rotas abaixo exigem que o token pertença ao admin master.
+  // O token base64 tem o formato "id:email:timestamp", decodificado para verificar o email.
+  //
+  // Helper: decodifica o token e retorna o email do usuário autenticado
+  function getEmailFromToken(authHeader?: string): string | null {
+    if (!authHeader?.startsWith("Bearer ")) return null;
+    try {
+      const token = authHeader.slice(7);
+      const decoded = Buffer.from(token, "base64").toString("utf-8");
+      // formato: "id:email:timestamp"
+      const parts = decoded.split(":");
+      // email pode conter ":", por isso junta do índice 1 até o penúltimo
+      if (parts.length < 3) return null;
+      return parts.slice(1, -1).join(":");
+    } catch {
+      return null;
+    }
+  }
+
+  const ADMIN_EMAIL = "admin@polotelecom.com.br";
+
+  // Helper: verifica se a requisição vem do admin master
+  function isAdminRequest(authHeader?: string): boolean {
+    const email = getEmailFromToken(authHeader);
+    return email === ADMIN_EMAIL;
+  }
+
+  /*
+   * GET /api/admin/users — Lista todos os usuários (exceto o próprio admin)
+   * Retorna: id, email, nivel_acesso, rotas_permitidas, ativo, data_criacao
+   */
+  app.get("/api/admin/users", async (req, res) => {
+    if (!isAdminRequest(req.headers.authorization)) {
+      return res.status(403).json({ message: "Acesso negado" });
+    }
+    try {
+      const [rows] = await pool.query<RowDataPacket[]>(
+        `SELECT id, email, nivel_acesso, rotas_permitidas, ativo, data_criacao
+         FROM usuarios
+         WHERE email != ?
+         ORDER BY data_criacao DESC`,
+        [ADMIN_EMAIL]
+      );
+      // Parseia rotas_permitidas de cada usuário
+      const users = rows.map((u) => ({
+        ...u,
+        rotas_permitidas: u.rotas_permitidas
+          ? (typeof u.rotas_permitidas === "string" ? JSON.parse(u.rotas_permitidas) : u.rotas_permitidas)
+          : null,
+      }));
+      return res.json(users);
+    } catch (error) {
+      console.error("Erro ao listar usuários:", error);
+      return res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
+  /*
+   * POST /api/admin/users — Cria um novo usuário
+   * Body: { email, password, rotas_permitidas: string[] }
+   */
+  app.post("/api/admin/users", async (req, res) => {
+    if (!isAdminRequest(req.headers.authorization)) {
+      return res.status(403).json({ message: "Acesso negado" });
+    }
+    const { email, password, rotas_permitidas } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email e senha são obrigatórios" });
+    }
+    if (email === ADMIN_EMAIL) {
+      return res.status(400).json({ message: "Não é possível criar este usuário" });
+    }
+    try {
+      // Verifica se o email já existe (ativo ou inativo)
+      const [existing] = await pool.query<RowDataPacket[]>(
+        "SELECT id FROM usuarios WHERE email = ?",
+        [email]
+      );
+      if (existing.length > 0) {
+        return res.status(409).json({ message: "Email já cadastrado" });
+      }
+      const senhaHash = await bcrypt.hash(password, 10);
+      const rotasJson = rotas_permitidas ? JSON.stringify(rotas_permitidas) : null;
+      await pool.query(
+        `INSERT INTO usuarios (email, senha_hash, nivel_acesso, rotas_permitidas, ativo)
+         VALUES (?, ?, 'visualizador', ?, 1)`,
+        [email, senhaHash, rotasJson]
+      );
+      return res.status(201).json({ message: "Usuário criado com sucesso" });
+    } catch (error) {
+      console.error("Erro ao criar usuário:", error);
+      return res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
+  /*
+   * PATCH /api/admin/users/:id/permissions — Atualiza as rotas permitidas de um usuário
+   * Body: { rotas_permitidas: string[] }
+   */
+  app.patch("/api/admin/users/:id/permissions", async (req, res) => {
+    if (!isAdminRequest(req.headers.authorization)) {
+      return res.status(403).json({ message: "Acesso negado" });
+    }
+    const { id } = req.params;
+    const { rotas_permitidas } = req.body;
+    try {
+      // Impede que o admin altere a si mesmo
+      const [rows] = await pool.query<RowDataPacket[]>(
+        "SELECT email FROM usuarios WHERE id = ?",
+        [id]
+      );
+      if (rows.length === 0) return res.status(404).json({ message: "Usuário não encontrado" });
+      if (rows[0].email === ADMIN_EMAIL) return res.status(400).json({ message: "Não é possível alterar o admin master" });
+
+      const rotasJson = rotas_permitidas ? JSON.stringify(rotas_permitidas) : null;
+      await pool.query(
+        "UPDATE usuarios SET rotas_permitidas = ?, data_atualizacao = NOW() WHERE id = ?",
+        [rotasJson, id]
+      );
+      return res.json({ message: "Permissões atualizadas com sucesso" });
+    } catch (error) {
+      console.error("Erro ao atualizar permissões:", error);
+      return res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
+  /*
+   * DELETE /api/admin/users/:id — Desativa um usuário (ativo = 0, não apaga do banco)
+   */
+  app.delete("/api/admin/users/:id", async (req, res) => {
+    if (!isAdminRequest(req.headers.authorization)) {
+      return res.status(403).json({ message: "Acesso negado" });
+    }
+    const { id } = req.params;
+    try {
+      // Impede que o admin se delete
+      const [rows] = await pool.query<RowDataPacket[]>(
+        "SELECT email FROM usuarios WHERE id = ?",
+        [id]
+      );
+      if (rows.length === 0) return res.status(404).json({ message: "Usuário não encontrado" });
+      if (rows[0].email === ADMIN_EMAIL) return res.status(400).json({ message: "Não é possível remover o admin master" });
+
+      await pool.query(
+        "UPDATE usuarios SET ativo = 0, data_atualizacao = NOW() WHERE id = ?",
+        [id]
+      );
+      return res.json({ message: "Usuário removido com sucesso" });
+    } catch (error) {
+      console.error("Erro ao remover usuário:", error);
+      return res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
+  // ─── Fim das Rotas de Administração ─────────────────────────────────────────
 
   /*
    * GET /api/casas — Lista todos os canais de atendimento distintos
