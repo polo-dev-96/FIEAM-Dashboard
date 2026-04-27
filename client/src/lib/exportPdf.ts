@@ -564,6 +564,21 @@ export async function exportElementToPdf(
   const children = Array.from(container.children) as HTMLElement[];
   const sections = children.filter((el) => !el.hasAttribute("data-pdf-exclude"));
 
+  // Helper: sanitiza o documento clonado do html2canvas para remover
+  // funções de cor modernas (color(), oklch(), lch()) que o html2canvas
+  // não consegue parsear, substituindo por valores seguros equivalentes.
+  function sanitizeClonedColors(doc: Document, root: HTMLElement) {
+    const unsafePattern = /^(color|oklch|lch|lab|display-p3)\s*\(/i;
+    const all = [root, ...Array.from(root.querySelectorAll("*"))] as HTMLElement[];
+    for (const el of all) {
+      const cs = doc.defaultView?.getComputedStyle(el);
+      if (!cs) continue;
+      if (unsafePattern.test(cs.backgroundColor)) el.style.backgroundColor = "transparent";
+      if (unsafePattern.test(cs.color))            el.style.color            = "#0f172a";
+      if (unsafePattern.test(cs.borderTopColor))   el.style.borderColor      = "#e2e8f0";
+    }
+  }
+
   const captures: HTMLCanvasElement[] = [];
   for (const section of sections) {
     const canvas = await html2canvas(section, {
@@ -571,6 +586,7 @@ export async function exportElementToPdf(
       useCORS: true,
       backgroundColor: "#ffffff",
       logging: false,
+      onclone: (doc, el) => sanitizeClonedColors(doc, el),
     });
     captures.push(canvas);
   }
