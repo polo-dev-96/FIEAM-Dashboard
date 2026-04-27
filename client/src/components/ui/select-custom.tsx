@@ -1,8 +1,54 @@
+/*
+ * ============================================================
+ * components/ui/select-custom.tsx — Seletor customizado com Popover
+ * ============================================================
+ *
+ * Substitui o <select> nativo do HTML por um Popover estilizado.
+ * Usado nos filtros de Entidade e Unidade em Overview e DashboardAnual.
+ *
+ * Comportamento "pending" (seleção em duas etapas):
+ *   1. O usuário clica em uma opção → atualiza `pending` (estado local)
+ *      mas NÃO chama onValueChange() ainda
+ *   2. O usuário clica "Confirmar" → chama onValueChange(pending)
+ *      e fecha o popover
+ *   3. O usuário clica "Cancelar" → descarta a seleção pendente
+ *      e restaura o valor anterior
+ *
+ * Isso evita que o dashboard refaça a query a cada clique na lista.
+ *
+ * Recursos:
+ *   - Busca interna (input de pesquisa) para listas com mais de 6 itens
+ *   - Ícone de check ✓ na opção selecionada
+ *   - Seta ChevronDown que gira ao abrir
+ *
+ * Props:
+ *   value          → valor atualmente selecionado
+ *   onValueChange  → callback chamado ao confirmar uma seleção
+ *   placeholder    → texto exibido quando nenhum valor está selecionado
+ *   options        → array de { value: string, label: string }
+ *   disabled       → desabilita o botão de trigger
+ *   panelTitle     → título opcional no topo do popover
+ *   className      → classes CSS adicionais no botão de trigger
+ * ============================================================
+ */
+
+// useState: estado local para open/pending/search
+// useCallback: memoiza handleConfirm/handleCancel para evitar recriações desnecessárias
+// useEffect: sincroniza pending com value quando o popover abre
 import { useState, useCallback, useEffect } from "react";
+
+// Ícones Lucide
 import { ChevronDown, Check, Search } from "lucide-react";
+
+// Popover: componente de painel flutuante (Radix UI via shadcn)
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
+// cn: combina classes CSS condicionalmente
 import { cn } from "@/lib/utils";
 
+/*
+ * SelectCustomProps — Props do componente SelectCustom
+ */
 interface SelectCustomProps {
   value: string;
   onValueChange: (value: string) => void;
@@ -22,35 +68,42 @@ export function SelectCustom({
   panelTitle,
   className = "",
 }: SelectCustomProps) {
-  const [open, setOpen] = useState(false);
-  const [pending, setPending] = useState(value);
-  const [search, setSearch] = useState("");
-  const showSearch = options.length > 6;
+  const [open, setOpen] = useState(false);          // popover aberto ou fechado
+  const [pending, setPending] = useState(value);    // valor selecionado mas ainda não confirmado
+  const [search, setSearch] = useState("");          // texto digitado no campo de busca
+  const showSearch = options.length > 6;             // só mostra busca para listas longas
 
+  // Quando o popover abre: reseta pending para o valor atual e limpa a busca
   useEffect(() => {
     if (open) {
-      setPending(value);
-      setSearch("");
+      setPending(value);  // descarta qualquer seleção pendente anterior
+      setSearch("");       // limpa o campo de busca
     }
   }, [open, value]);
 
+  // Encontra a opção selecionada para exibir o label no botão de trigger
   const selectedOption = options.find((opt) => opt.value === value);
-  const displayText = selectedOption?.label || placeholder;
+  const displayText = selectedOption?.label || placeholder; // exibe label ou placeholder
 
+  // Filtra as opções pelo texto de busca (case-insensitive)
   const filteredOptions = search.trim()
     ? options.filter((opt) => opt.label.toLowerCase().includes(search.toLowerCase()))
-    : options;
+    : options; // sem busca: exibe todas
 
+  // handleConfirm: aplica a seleção pendente e fecha o popover
   const handleConfirm = useCallback(() => {
-    onValueChange(pending);
+    onValueChange(pending); // notifica o componente pai
     setOpen(false);
   }, [onValueChange, pending]);
 
+  // handleCancel: descarta a seleção e restaura o valor anterior
   const handleCancel = useCallback(() => {
-    setPending(value);
+    setPending(value); // restaura o valor original
     setOpen(false);
   }, [value]);
 
+  // pendingChanged: true se o usuário selecionou algo diferente do valor atual
+  // Usado para alterar visualmente o botão Confirmar
   const pendingChanged = pending !== value;
 
   return (

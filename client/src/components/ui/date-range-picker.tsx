@@ -1,23 +1,78 @@
+/*
+ * ============================================================
+ * components/ui/date-range-picker.tsx — Seletor de Intervalo de Datas
+ * ============================================================
+ *
+ * Componente de seleção de período de datas para os filtros do dashboard.
+ * Usa um Popover com dois calendários lado a lado + atalhos de período (Presets).
+ *
+ * Comportamento:
+ *   - O usuário pode selecionar um intervalo no calendário
+ *   - OU clicar em um atalho de período (Hoje, Semana, Mês, etc.)
+ *   - A seleção só é aplicada ao clicar "Aplicar" (comportamento pending)
+ *   - Botão X permite limpar o período para o dia atual
+ *
+ * Props:
+ *   startDate → data inicial atual (YYYY-MM-DD)
+ *   endDate   → data final atual   (YYYY-MM-DD)
+ *   onApply   → callback chamado ao confirmar o período selecionado
+ *
+ * Presets disponíveis: Hoje, Ontem, Esta semana, Semana passada,
+ *   Últimos 7/15/30 dias, Este mês, Mês passado, Este ano
+ * ============================================================
+ */
+
+// useState/useCallback: hooks de estado e memoização
 import { useState, useCallback } from "react";
+
+// date-fns: funções de manipulação de datas
+// format             → formata data como string ("dd/MM/yyyy")
+// startOfWeek/Month  → primeiro dia da semana/mês
+// endOfMonth         → último dia do mês
+// subDays/Weeks/Months → subtrai dias/semanas/meses de uma data
+// startOfYear        → 01 de janeiro do ano atual
+// addMonths          → navegação para o próximo mês no calendário
 import { format, startOfWeek, startOfMonth, endOfMonth, subDays, subMonths, subWeeks, startOfYear, addMonths } from "date-fns";
+
+// ptBR: formata datas em português ("janeiro 2026" em vez de "January 2026")
 import { ptBR } from "date-fns/locale";
+
+// Ícones Lucide para o calendário
 import { CalendarDays, ChevronLeft, ChevronRight, X, Check, Clock, ChevronsLeft, ChevronsRight } from "lucide-react";
+
+// Popover: painel flutuante que contém os calendários
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
+// DayPicker: calendário interativo com suporte a intervalo de datas
 import { DayPicker } from "react-day-picker";
 import type { DateRange } from "react-day-picker";
 
+/*
+ * DateRangePickerProps — Props do componente
+ */
 interface DateRangePickerProps {
-    startDate: string;
-    endDate: string;
-    onApply: (startDate: string, endDate: string) => void;
+    startDate: string; // data inicial no formato YYYY-MM-DD
+    endDate: string;   // data final no formato YYYY-MM-DD
+    onApply: (startDate: string, endDate: string) => void; // callback ao confirmar
 }
 
+/*
+ * Preset — Atalho de período
+ *   label    → texto exibido no botão (ex: "Hoje", "Últimos 30 dias")
+ *   icon     → emoji de ícone decorativo
+ *   getRange → função que calcula as datas from/to em tempo real
+ *             (função porque "Hoje" muda a cada dia)
+ */
 interface Preset {
     label: string;
     icon: string;
     getRange: () => { from: Date; to: Date };
 }
 
+/*
+ * PRESETS — Lista dos atalhos de período disponíveis
+ * Cada preset calcula seu intervalo dinamicamente usando date-fns.
+ */
 const PRESETS: Preset[] = [
     {
         label: "Hoje",

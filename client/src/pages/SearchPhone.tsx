@@ -1,21 +1,61 @@
+/*
+ * ============================================================
+ * pages/SearchPhone.tsx — Página de Busca por Telefone
+ * ============================================================
+ *
+ * Permite buscar todos os atendimentos de um número de telefone/identificador.
+ * Usa busca parcial (LIKE %numero%) para encontrar mesmo com formatos diferentes.
+ *
+ * Diferenciais em relação ao SearchProtocol:
+ *   - Retorna MÚLTIPLOS atendimentos (histórico completo do contato)
+ *   - Inclui filtro de período (DateRangePicker)
+ *   - Implementa paginação (10/25/50/100 por página)
+ *   - Possui dropdown de itens por página
+ *
+ * Fluxo:
+ *   1. Usuário digita o número de telefone
+ *   2. Seleciona o período (opcional)
+ *   3. Clica buscar → GET /api/telefone/:telefone?startDate=...&endDate=...
+ *   4. Resultados exibidos em tabela paginada
+ *
+ * Estados:
+ *   query       → texto do campo de busca
+ *   results     → array de atendimentos (ou null antes da busca)
+ *   isLoading   → spinner durante requisição
+ *   error       → mensagem de erro
+ *   perPage     → número de itens por página (10/25/50/100)
+ *   currentPage → página atual da paginação
+ *   startDate   → data inicial do filtro de período
+ *   endDate     → data final do filtro de período
+ * ============================================================
+ */
+
 import { Layout } from "@/components/layout/Layout";
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+// DateRangePicker: seletor de período de datas para filtrar os atendimentos
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+
 import {
     Search, FileText, User, Phone, Hash,
     MessageSquare, Clock, Building2, Radio,
     AlertCircle, ChevronDown, ChevronLeft, ChevronRight
 } from "lucide-react";
+
+// startOfMonth: calcula o primeiro dia do mês atual (data inicial padrão)
 import { format, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useTheme } from "@/lib/ThemeContext";
 import { cn } from "@/lib/utils";
 
+/*
+ * Atendimento — Tipo de dado de um atendimento retornado pela API
+ */
 interface Atendimento {
     id: number;
     contato: string;
-    identificador: string;
+    identificador: string;  // número de telefone/identificador
     protocolo: string;
     canal: string;
     dataHoraInicio: string;
@@ -25,6 +65,7 @@ interface Atendimento {
     casa: string;
 }
 
+// PER_PAGE_OPTIONS: opções do dropdown "Exibir por página"
 const PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
 
 export default function SearchPhonePage() {

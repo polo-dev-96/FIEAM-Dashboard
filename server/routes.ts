@@ -1,15 +1,85 @@
+/*
+ * ============================================================
+ * server/routes.ts — Todas as rotas da API do backend
+ * ============================================================
+ *
+ * Este arquivo define TODAS as rotas HTTP da aplicação (o "backbone" da API).
+ * Cada rota é uma função que:
+ *   1. Recebe uma requisição HTTP (req) do frontend
+ *   2. Executa uma query SQL no MySQL via pool de conexões
+ *   3. Retorna os dados em formato JSON (res.json())
+ *
+ * Rotas disponíveis:
+ *   POST /api/login              → Autenticação de usuários
+ *   GET  /api/casas              → Lista de "casas" (canais de atendimento) distintos
+ *   GET  /api/stats              → Estatísticas gerais (principal rota do dashboard)
+ *   GET  /api/stats/anual        → Dados anuais agregados por mês
+ *   GET  /api/protocolo/:id      → Busca um atendimento por número de protocolo
+ *   GET  /api/telefone/:numero   → Busca atendimentos por número de telefone
+ *   GET  /api/openai/stats       → Estatísticas do banco OpenAI (senai_pf)
+ *   GET  /api/patrocinados/stats → Estatísticas de patrocinadores
+ *   GET  /api/export/excel       → Exportação de dados em planilha Excel
+ *
+ * Conceito de Query Parameters:
+ *   Parâmetros passados na URL após "?": /api/stats?startDate=2026-01-01&endDate=2026-01-31
+ *   Acessados via req.query.startDate, req.query.endDate
+ *
+ * Conceito de async/await:
+ *   Operações de banco de dados são assíncronas (demoram um tempo para responder).
+ *   async/await permite escrever esse código de forma sequencial e legível.
+ *   try/catch captura erros e retorna status 500 (Internal Server Error) ao frontend.
+ * ============================================================
+ */
+
+// Express: tipos para a aplicação web (Express) e servidor HTTP
 import type { Express } from "express";
 import type { Server } from "http";
+
+// pool: conexão principal com o banco de dados MySQL
+// TABLE_NAME: nome da tabela configurado no .env (padrão: base_senai)
+// poolOpenAI: pool separado para o banco senai_pf (dashboard OpenAI)
 import pool, { TABLE_NAME, poolOpenAI } from "./db";
+
+// RowDataPacket: tipo do mysql2 para linhas retornadas por queries
 import type { RowDataPacket } from "mysql2";
+
+// ExcelJS: biblioteca para criar planilhas Excel (.xlsx) programaticamente
 import ExcelJS from "exceljs";
+
+// bcryptjs: biblioteca para verificar senhas com hash (segurança)
+// bcrypt.compare(senhaDigitada, hashSalvo) → retorna true se a senha estiver correta
 import bcrypt from "bcryptjs";
 
+/*
+ * registerRoutes(httpServer, app) — Registra todas as rotas na aplicação Express
+ * -------------------------------------------------------
+ * Chamada em server/index.ts durante a inicialização.
+ * Recebe a instância do Express e registra cada rota com app.get() ou app.post().
+ */
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
 
+  /*
+   * POST /api/login — Autentica um usuário pelo email e senha
+   * -------------------------------------------------------
+   * Recebe: { email: string, password: string } no body da requisição
+   *
+   * Processo:
+   *   1. Valida que email e senha foram fornecidos
+   *   2. Busca o usuário no banco pelo email (somente usuários ativos: ativo = 1)
+   *   3. Usa bcrypt.compare() para verificar a senha contra o hash salvo
+   *      (bcrypt é usado para NUNCA salvar a senha em texto puro no banco)
+   *   4. Atualiza data_atualizacao com o horário do último acesso
+   *   5. Gera um token base64 simples: "id:email:timestamp"
+   *   6. Retorna o token + dados do usuário para o frontend
+   *
+   * Erros possíveis:
+   *   400 → email ou senha não fornecidos
+   *   401 → usuário não encontrado OU senha incorreta (mesma mensagem por segurança)
+   *   500 → erro interno do servidor
+   */
   // POST /api/login - Autenticação com banco de dados (tabela usuarios)
   app.post("/api/login", async (req, res) => {
     const { email, password } = req.body;
@@ -19,16 +89,19 @@ export async function registerRoutes(
     }
 
     try {
+      // Busca usuário pelo email, excluindo inativos (ativo = 1)
       const [rows] = await pool.query<RowDataPacket[]>(
         "SELECT id, email, senha_hash, nivel_acesso FROM usuarios WHERE email = ? AND ativo = 1",
         [email]
       );
 
+      // Se não encontrou nenhum usuário com esse email
       if (rows.length === 0) {
         return res.status(401).json({ message: "Email ou senha inválidos" });
       }
 
       const user = rows[0];
+      // bcrypt.compare verifica se a senha digitada bate com o hash salvo no banco
       const senhaCorreta = await bcrypt.compare(password, user.senha_hash);
 
       if (!senhaCorreta) {
@@ -38,6 +111,8 @@ export async function registerRoutes(
       // Atualiza data_atualizacao com o horário do último acesso
       await pool.query("UPDATE usuarios SET data_atualizacao = NOW() WHERE id = ?", [user.id]);
 
+      // Gera token simples em base64: "id:email:timestamp" → codificado em base64
+      // Nota: em produção real, seria recomendado usar JWT (jsonwebtoken)
       const token = Buffer.from(`${user.id}:${user.email}:${Date.now()}`).toString("base64");
 
       return res.json({
@@ -55,6 +130,19 @@ export async function registerRoutes(
     }
   });
 
+  /*
+   * GET /api/casas — Lista todos os canais de atendimento distintos
+   * -------------------------------------------------------
+   * Retorna: string[] com os nomes de todas as "casas" no banco
+   *
+   * COALESCE(NULLIF(TRIM(casa), ''), 'Falta de Interação'):
+   *   - TRIM() remove espaços extras
+   *   - NULLIF(..., '') converte string vazia para NULL
+   *   - COALESCE(..., 'Falta de Interação') substitui NULL pelo texto padrão
+   *   Resultado: casas sem valor recebem o nome "Falta de Interação"
+   *
+   * Usado para popular os dropdowns de filtro de entidade/equipe no dashboard.
+   */
   // GET /api/stats - Metricas agregadas do dashboard
   // Supports optional ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
   // GET /api/casas - Lista de casas distintas
@@ -66,13 +154,41 @@ export async function registerRoutes(
         WHERE \`data e hora de fim\` IS NOT NULL
         ORDER BY nome ASC
       `);
-      res.json(rows.map((r) => r.nome));
+      res.json(rows.map((r) => r.nome)); // extrai apenas o campo "nome" de cada linha
     } catch (error) {
       console.error("Erro ao buscar casas:", error);
       res.status(500).json({ message: "Erro ao buscar casas" });
     }
   });
 
+  /*
+   * GET /api/stats — Estatísticas gerais do dashboard (rota principal)
+   * -------------------------------------------------------
+   * A rota MAIS USADA do sistema. Retorna todos os dados da Visão Geral.
+   *
+   * Query Parameters (opcionais):
+   *   startDate  → data inicial do filtro (YYYY-MM-DD)
+   *   endDate    → data final do filtro   (YYYY-MM-DD)
+   *   casa       → array de casas para filtrar (pode passar ?casa=X&casa=Y)
+   *   allOpcoes  → "true" para retornar TODAS as opções selecionadas
+   *   allCasas   → "true" para retornar TODAS as casas (sem LIMIT 10)
+   *
+   * Dados retornados (objeto JSON):
+   *   totais        → { total, hoje, semana, mes, duracaoMedia }
+   *   porCanal      → atendimentos agrupados por canal (WhatsApp, site, etc.)
+   *   porCasa       → atendimentos agrupados por casa/equipe
+   *   porResumo     → assuntos das conversas (para o Top 20)
+   *   porAssunto    → alias de porResumo (usado em DashboardAnual)
+   *   porOpcao      → opções selecionadas pelos usuários (menu de opções)
+   *   porHora       → distribuição de atendimentos por hora do dia
+   *   porDia        → distribuição de atendimentos por dia da semana
+   *   tendencia     → atendimentos dos últimos 30 dias (para gráfico de linha)
+   *
+   * Técnica de parametrização SQL (?) :
+   *   Usamos "?" como placeholder para evitar SQL Injection.
+   *   Os valores reais são passados no array filterParams separado.
+   *   Ex: WHERE `casa` IN (?, ?) → mysql2 substitui os "?" com segurança
+   */
   app.get("/api/stats", async (req, res) => {
     try {
       const conn = await pool.getConnection();
@@ -81,6 +197,7 @@ export async function registerRoutes(
         const { startDate, endDate, casa, allOpcoes, allCasas } = req.query;
 
         // Build date filter clause
+        // Quando startDate e endDate são fornecidos, adiciona cláusula WHERE de data
         let dateFilter = "";
         const dateParams: string[] = [];
         if (startDate && endDate) {
@@ -89,6 +206,8 @@ export async function registerRoutes(
         }
 
         // Build casa filter clause (supports multiple values)
+        // Monta a cláusula IN (?,?,?) para filtrar por múltiplas casas
+        // "Falta de Interação" é tratada especialmente (casa vazia/null no banco)
         let casaFilter = "";
         const casaParams: string[] = [];
         if (casa) {
@@ -103,7 +222,7 @@ export async function registerRoutes(
               casaParams.push(...realCasas);
             }
             if (hasFalta) {
-              conditions.push(`(TRIM(casa) = '' OR casa IS NULL)`);
+              conditions.push(`(TRIM(casa) = '' OR casa IS NULL)`); // captura casas vazias
             }
             casaFilter = `AND (${conditions.join(' OR ')})`;
           }
@@ -268,6 +387,20 @@ export async function registerRoutes(
     }
   });
 
+  /*
+   * GET /api/recentes — Últimos atendimentos finalizados (sem duplicatas de protocolo)
+   * -------------------------------------------------------
+   * Retorna os atendimentos mais recentes para exibir na tabela da Visão Geral.
+   *
+   * Técnica de deduplication com INNER JOIN:
+   *   Um mesmo protocolo pode ter múltiplas linhas no banco (histórico de mensagens).
+   *   O INNER JOIN com subquery garante que pegamos apenas o registro de maior id
+   *   (o mais recente) de cada protocolo, evitando linhas duplicadas.
+   *
+   *   Subquery: SELECT MAX(id) AS max_id ... GROUP BY protocolo
+   *   → Para cada protocolo, pega o id máximo (registro mais recente)
+   *   INNER JOIN: filtra a tabela principal para manter só esses ids
+   */
   // GET /api/recentes - Ultimos atendimentos finalizados (sem duplicatas de protocolo)
   // Supports optional ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
   app.get("/api/recentes", async (req, res) => {
@@ -335,6 +468,18 @@ export async function registerRoutes(
     }
   });
 
+  /*
+   * GET /api/protocolo/:protocolo — Busca um atendimento pelo número de protocolo
+   * -------------------------------------------------------
+   * Usado pela página SearchProtocol.tsx.
+   *
+   * :protocolo → é um "route param" (parâmetro na URL)
+   *   Ex: GET /api/protocolo/20240001 → req.params.protocolo = "20240001"
+   *
+   * LIMIT 1 garante que retornamos apenas 1 registro (o mais recente, ORDER BY id DESC).
+   *
+   * Retorna 404 se o protocolo não existir no banco.
+   */
   // GET /api/protocolo/:protocolo - Busca por protocolo (sem duplicatas)
   app.get("/api/protocolo/:protocolo", async (req, res) => {
     try {
@@ -369,6 +514,18 @@ export async function registerRoutes(
     }
   });
 
+  /*
+   * GET /api/telefone/:telefone — Busca atendimentos por número de telefone
+   * -------------------------------------------------------
+   * Usado pela página SearchPhone.tsx.
+   *
+   * Usa LIKE `%${telefone}%` (busca parcial) no campo `identificador`.
+   * Isso permite buscar mesmo que o número esteja formatado de forma diferente.
+   * Ex: buscar "92999" vai encontrar "(92) 99999-9999" e "92999999999"
+   *
+   * Retorna TODOS os atendimentos desse telefone (sem dedup), ordenados por data.
+   * Retorna 404 se nenhum atendimento for encontrado.
+   */
   // GET /api/telefone/:telefone — Search all atendimentos by phone number
   app.get("/api/telefone/:telefone", async (req, res) => {
     try {
@@ -411,6 +568,22 @@ export async function registerRoutes(
     }
   });
 
+  /*
+   * GET /api/export-xlsx — Exporta atendimentos como planilha Excel (.xlsx)
+   * -------------------------------------------------------
+   * Gera e faz o download de uma planilha Excel com os atendimentos filtrados.
+   * Aceita os mesmos parâmetros de filtro de /api/stats (startDate, endDate, casa).
+   *
+   * Processo:
+   *   1. Busca os atendimentos do banco (com dedup por protocolo via INNER JOIN)
+   *   2. Cria uma planilha Excel com ExcelJS
+   *   3. Define cabeçalhos e formata as colunas
+   *   4. Adiciona cada atendimento como uma linha
+   *   5. Envia o arquivo como stream HTTP com header de download
+   *
+   * O header Content-Disposition: attachment; filename="...xlsx" instrui
+   * o navegador a baixar o arquivo em vez de exibi-lo.
+   */
   // GET /api/export-xlsx — Export atendimentos as XLSX download
   app.get("/api/export-xlsx", async (req, res) => {
     try {
@@ -530,6 +703,23 @@ export async function registerRoutes(
     }
   });
 
+  /*
+   * GET /api/anual-stats — Estatísticas anuais para o Dashboard Anual
+   * -------------------------------------------------------
+   * Usado pela página DashboardAnual.tsx.
+   *
+   * Query Parameters:
+   *   year  → ano selecionado (padrão: ano atual)
+   *   month → mês(es) selecionados (array: ?month=1&month=2)
+   *   casa  → filtro de casas (mesmo padrão de /api/stats)
+   *
+   * Dados retornados:
+   *   evolucao   → atendimentos por mês agrupados por canal (gráfico de linha/barra)
+   *   porOrigem  → distribuição por tipo de canal (WhatsApp, site, etc.)
+   *   porCasa    → top casas/equipes no período
+   *   porAssunto → top assuntos das conversas (para o ranking horizontal)
+   *   totais     → totais do período selecionado
+   */
   // GET /api/anual-stats - Stats for the Annual Dashboard
   app.get("/api/anual-stats", async (req, res) => {
     try {
@@ -569,6 +759,7 @@ export async function registerRoutes(
           : [selectedYear];
 
         // 1. Evolução dos Atendimentos por Mês agrupado por Canal
+        // MONTH() extrai o número do mês (1=Jan, ..., 12=Dez) da data
         const [evolucao] = await conn.query<RowDataPacket[]>(`
           SELECT
             MONTH(\`data e hora de fim\`) AS mes,
@@ -583,7 +774,8 @@ export async function registerRoutes(
           ORDER BY mes ASC, canal ASC
         `, [...dateParams, ...casaParams]);
 
-        // 2. Atendimentos por Origem (tipo de canal) — deduplicated per protocol
+        // 2. Atendimentos por Origem (tipo de canal) — deduplicado por protocolo
+        // MIN(id) + GROUP BY protocolo garante que cada protocolo é contado uma vez
         const [porOrigem] = await conn.query<RowDataPacket[]>(`
           SELECT
             COALESCE(NULLIF(TRIM(t.\`tipo de canal\`), ''), 'Não informado') AS nome,
@@ -753,6 +945,13 @@ export async function registerRoutes(
     }
   });
 
+  /*
+   * GET /api/opcao-drilldown — Detalhe dos atendimentos por opção selecionada
+   * -------------------------------------------------------
+   * Quando o usuário clica em uma barra do gráfico de Opções Selecionadas,
+   * esta rota retorna os atendimentos individuais daquela opção.
+   * Permite "drill-down" (aprofundamento) nos dados do gráfico.
+   */
   // GET /api/opcao-drilldown - Drill-down for opcaoselecionada chart (Overview)
   app.get("/api/opcao-drilldown", async (req, res) => {
     try {
@@ -826,7 +1025,25 @@ export async function registerRoutes(
     }
   });
 
-  // ─── OpenAI Dashboard Routes (base_openai in senai_pf) ────────────
+  /*
+   * ─── Rotas do Dashboard OpenAI (banco senai_pf, tabela base_openai) ────────────────────────
+   * Essas rotas usam `poolOpenAI` (conexão com banco separado senai_pf)
+   * em vez do `pool` principal.
+   *
+   * Desafios especiais do banco OpenAI:
+   *   - start_time: campo varchar no formato "dd-MM-yyyy" (não é DATE real)
+   *     → Convertemos com STR_TO_DATE(start_time, '%d-%m-%Y')
+   *   - value: campo varchar com prefixo "$" (ex: "$0.00123")
+   *     → Removemos com REPLACE(value, '$', '') e convertemos com CAST...AS DECIMAL
+   *   - Linhas inválidas: start_time = 'Invalid DateTime' ou value = ''
+   *     → Filtramos com OPENAI_VALID_ROW para excluir essas linhas
+   *
+   * Constantes SQL reutilizadas em todas as queries OpenAI:
+   *   OPENAI_PARSED_DATE  → expressão SQL que converte start_time para DATE real
+   *   OPENAI_PARSED_VALUE → expressão SQL que converte value para DECIMAL (número)
+   *   OPENAI_VALID_ROW    → cláusula WHERE que filtra linhas válidas
+   */
+  // ─── OpenAI Dashboard Routes (base_openai in senai_pf) ────────────────────────
   // Nota: start_time é varchar no formato "dd-MM-yyyy", value é varchar com prefixo "$"
   // Usamos STR_TO_DATE e REPLACE para converter corretamente.
 
@@ -834,6 +1051,12 @@ export async function registerRoutes(
   const OPENAI_PARSED_VALUE = `CAST(REPLACE(value, '$', '') AS DECIMAL(20,6))`;
   const OPENAI_VALID_ROW = `start_time IS NOT NULL AND TRIM(start_time) != '' AND start_time != 'Invalid DateTime' AND value IS NOT NULL AND TRIM(value) != ''`;
 
+  /*
+   * GET /api/openai-projects — Lista os nomes de projetos OpenAI distintos
+   * -------------------------------------------------------
+   * Usado para popular o dropdown de filtro de projeto no Dashboard OpenAI.
+   * Consulta a tabela base_openai do banco senai_pf via poolOpenAI.
+   */
   // GET /api/openai-projects - Lista de project_name distintos
   app.get("/api/openai-projects", async (_req, res) => {
     try {
@@ -850,6 +1073,20 @@ export async function registerRoutes(
     }
   });
 
+  /*
+   * GET /api/openai-stats — Estatísticas de custos/uso da OpenAI
+   * -------------------------------------------------------
+   * Usado pelo DashboardOpenAI.tsx (acesso exclusivo: master).
+   *
+   * Query Parameters:
+   *   startDate, endDate → período (aplicado sobre start_time convertido)
+   *   project            → filtro de projeto (array)
+   *
+   * Dados retornados:
+   *   totalValue  → soma total de custos no período ($)
+   *   timeline    → custos por dia (para gráfico de linha)
+   *   porProjeto  → distribuição de custos por projeto (para gráfico de pizza)
+   */
   // GET /api/openai-stats - Stats do dashboard OpenAI
   app.get("/api/openai-stats", async (req, res) => {
     try {
@@ -922,6 +1159,12 @@ export async function registerRoutes(
     }
   });
 
+  /*
+   * GET /api/openai-export-xlsx — Exporta dados OpenAI como planilha Excel
+   * -------------------------------------------------------
+   * Mesmo padrão de /api/export-xlsx, mas para os dados do banco OpenAI.
+   * Aceita parâmetro adicional `moeda` para converter valores de USD para BRL.
+   */
   // GET /api/openai-export-xlsx — Export OpenAI data as XLSX
   app.get("/api/openai-export-xlsx", async (req, res) => {
     try {
@@ -1016,6 +1259,28 @@ export async function registerRoutes(
     }
   });
 
+  /*
+   * GET /api/patrocinados-stats — Estatísticas de atendimentos patrocinados e campanhas
+   * -------------------------------------------------------
+   * Usado pelo DashboardPatrocinados.tsx (acesso restrito).
+   *
+   * Regras de negócio:
+   *   - Só processa registros onde AMBOS os campos têm valor real:
+   *     patrocinados ≠ NULL, '', 'false'
+   *     variaveis    ≠ NULL, '', 'false'
+   *   - Ignora dados antes de 12/04/2026 (data de início do rastreamento)
+   *
+   * Classificação por conteúdo do campo `variaveis`:
+   *   - Começa com 'PATROCINADO' → categoria Patrocinado
+   *   - Começa com 'CAMPANHA'    → categoria Campanha
+   *   - Qualquer outro valor     → categoria Outros
+   *
+   * Dados retornados:
+   *   totais             → { totalPatrocinados, totalCampanhas, totalOutros }
+   *   rankingPatrocinados → top patrocinadores por volume de atendimentos
+   *   rankingCampanhas   → top campanhas por volume de atendimentos
+   *   timeline           → evolução temporal dos atendimentos por categoria
+   */
   // ─── Dashboard Patrocinados/Campanhas ────────────────────────────
   // Regras:
   //   - Só traz registros onde patrocinados tem valor real (NOT NULL, != '', != 'false')

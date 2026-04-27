@@ -1,3 +1,33 @@
+/*
+ * ============================================================
+ * pages/DashboardOpenAI.tsx — Dashboard de Custos da OpenAI
+ * ============================================================
+ *
+ * Painel exclusivo para monitorar o uso e custo do assistente OpenAI.
+ * Acesso restrito: apenas usuários com papel "master" (AuthContext).
+ *
+ * Funcionalidades:
+ *   - KPI: Custo total no período selecionado
+ *   - Filtros: Período (DateRangePicker), Projetos OpenAI (SelectMulti)
+ *   - Filtro de moeda: USD ou BRL (com taxa de câmbio aplicada)
+ *   - Gráfico de Timeline: custo diário (AreaChart)
+ *   - Gráfico por Projeto: distribuição de custos (BarChart)
+ *   - Exportação Excel via GET /api/openai-export-xlsx
+ *
+ * Dados buscados via React Query:
+ *   - GET /api/openai-projects → lista de projetos para o filtro
+ *   - GET /api/openai-stats    → totalValue, timeline, porProjeto
+ *
+ * Diferenças vs Overview:
+ *   - Usa banco separado (senai_pf, tabela base_openai)
+ *   - Sem filtros de entidade/casa
+ *   - Dados monetários (não contagem de atendimentos)
+ *   - Exportação Excel própria (não usa ExportReportDialog padrão)
+ *
+ * Constante REFRESH_INTERVAL: re-busca os dados a cada 60 segundos.
+ * ============================================================
+ */
+
 import { Layout } from "@/components/layout/Layout";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -8,13 +38,19 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+
+// SelectMulti: seleção múltipla de projetos (vários projetos de uma vez)
 import { SelectMulti } from "@/components/ui/select-multi";
+
+// SelectCustom: seleção única da moeda (USD ou BRL)
 import { SelectCustom } from "@/components/ui/select-custom";
 import {
   RefreshCw, TrendingUp, DollarSign, Building2,
   CalendarRange, Settings2, Brain,
   FileSpreadsheet, Loader2
 } from "lucide-react";
+
+// subMonths: usada para calcular a data inicial padrão (3 meses atrás)
 import { format, startOfMonth, subMonths } from "date-fns";
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useTheme } from "@/lib/ThemeContext";

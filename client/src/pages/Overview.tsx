@@ -1,13 +1,67 @@
+/*
+ * ============================================================
+ * pages/Overview.tsx — Dashboard Principal (Visão Geral)
+ * ============================================================
+ *
+ * Esta é a página mais complexa do sistema. Exibe o painel principal
+ * de análise de atendimentos com filtros, KPIs e múltiplos gráficos.
+ *
+ * Funcionalidades:
+ *   - KPIs: Total, Hoje, Semana, Mês, Duração Média
+ *   - Filtros: Período (DateRangePicker), Entidade, Unidade SESI, Equipe
+ *   - Gráficos: Timeline (área), Por Canal (barras), Por Casa (barras horizontais),
+ *               Por Assunto (barras), Por Opção Selecionada (barras)
+ *   - Tabela "Recentes": últimos atendimentos em tempo real
+ *   - Drill-down: clicar em barras abre modal com lista detalhada de atendimentos
+ *   - Exportação: PDF (html2canvas) e Excel (API)
+ *
+ * Dados buscados via React Query (useQuery):
+ *   - GET /api/stats     → dados agregados para os gráficos
+ *   - GET /api/recentes  → atendimentos recentes para a tabela
+ *   - GET /api/casas     → lista de casas para os filtros
+ *
+ * Lógica de filtro de entidade/unidade:
+ *   Depende do usuário logado (Ariana/Master vs outros).
+ *   Usa as funções de entidadeMapping.ts para calcular quais
+ *   casas incluir no parâmetro ?casa= da query da API.
+ *
+ * Drill-down:
+ *   Ao clicar num ponto/barra de gráfico:
+ *   → drilldownState é atualizado com tipo + valor
+ *   → GET /api/drilldown?type=assunto&value=X (ou opcao-drilldown)
+ *   → Modal exibe a lista detalhada de atendimentos
+ * ============================================================
+ */
+
+// Layout: estrutura visual com sidebar e header
 import { Layout } from "@/components/layout/Layout";
+
+// useQuery: hook do TanStack React Query para buscar dados da API com cache
 import { useQuery } from "@tanstack/react-query";
+
+// apiRequest: função utilitária para fazer fetch à API (queryClient.ts)
 import { apiRequest } from "@/lib/queryClient";
+
+// Recharts: biblioteca de gráficos para React
+// BarChart/Bar → gráficos de barras
+// AreaChart/Area → gráfico de área (timeline)
+// XAxis/YAxis → eixos dos gráficos
+// CartesianGrid → grade de fundo
+// Tooltip → tooltip interativo
+// ResponsiveContainer → torna o gráfico responsivo ao container
+// Cell → customiza cor de barras individuais
+// LabelList → exibe valores sobre as barras
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   AreaChart, Area, Cell, LabelList
 } from "recharts";
+
+// Componentes shadcn/ui
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+
+// Componentes customizados do dashboard
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { SelectCustom } from "@/components/ui/select-custom";
 import { SelectMulti } from "@/components/ui/select-multi";
@@ -15,16 +69,30 @@ import { ExportReportDialog } from "@/components/ui/export-report-dialog";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { ChartCard } from "@/components/ui/chart-card";
 import { FilterToolbar } from "@/components/ui/filter-toolbar";
+
+// Utilitários de gráfico: cores, estilos de tooltip, gradientes, etc.
 import { CHART_COLORS, getTooltipStyle, getGridStroke, getAxisColor, getAxisTickFill, barGradientDefs, getBarGradient, PremiumTooltip } from "@/lib/chart-utils";
+
+// Ícones Lucide
 import {
   MessageSquare, CalendarDays, TrendingUp,
   RefreshCw, Users, Building2, ChevronLeft, ChevronRight, Filter, Cloud,
   CalendarRange, Settings2
 } from "lucide-react";
+
+// date-fns: manipulação e formatação de datas
+// differenceInCalendarDays/Months → calcula quantos dias/meses há entre duas datas
+// startOfMonth → primeiro dia do mês atual (data inicial padrão)
 import { format, differenceInCalendarDays, differenceInCalendarMonths, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
+
+// React hooks
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+
+// Funções de mapeamento de entidade/unidade/equipe/assunto (entidadeMapping.ts)
 import { agruparAssuntos, getCasasForFiltro, getCasasForFiltroGerente, getEquipesForEntidade, getCasasForEquipeLabels, mapCasaToEntidadeUnidade, mapCasaToEntidadeGerente, isArianaUser, type AssuntoAggregado, type Entidade, type UnidadeSESI } from "@/lib/entidadeMapping";
+
+// Contextos de autenticação e tema
 import { useAuth } from "@/lib/AuthContext";
 import { useTheme } from "@/lib/ThemeContext";
 import { cn } from "@/lib/utils";

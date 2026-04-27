@@ -1,31 +1,92 @@
+/*
+ * ============================================================
+ * exportPdf.ts — Exportação de telas do dashboard para PDF
+ * ============================================================
+ *
+ * Este arquivo é responsável por gerar arquivos PDF profissionais
+ * a partir das telas do dashboard.
+ *
+ * Como funciona o processo de exportação:
+ *   1. Força o tema CLARO na tela (para o PDF ter fundo branco)
+ *   2. Captura cada seção da tela como imagem usando html2canvas
+ *   3. Restaura o tema original do usuário
+ *   4. Cria um documento PDF A4 Paisagem usando jsPDF
+ *   5. Adiciona uma página de capa com logos e informações
+ *   6. Distribui as imagens capturadas nas páginas do PDF
+ *   7. Faz o download automático do arquivo .pdf
+ *
+ * Bibliotecas usadas:
+ *   html2canvas → "tira uma foto" de elementos HTML como imagem canvas
+ *   jsPDF       → cria e manipula documentos PDF programaticamente
+ *
+ * Desafio do tema escuro:
+ *   O dashboard usa cores escuras (dark mode), mas PDFs precisam
+ *   de fundo branco. Por isso existe a lógica forceLightInlineStyles()
+ *   que detecta e troca temporariamente as cores escuras por claras
+ *   antes de capturar a tela.
+ * ============================================================
+ */
+
+// html2canvas: converte um elemento HTML em um canvas (imagem bitmap)
 import html2canvas from "html2canvas";
+
+// jsPDF: biblioteca para criar/editar documentos PDF em JavaScript
 import { jsPDF } from "jspdf";
 
+/*
+ * ─── Constantes do tamanho da página A4 Paisagem (em milímetros) ───
+ *
+ * PW = 297mm → largura total do A4 paisagem
+ * PH = 210mm → altura total do A4 paisagem
+ * MX = 15mm  → margem horizontal (esquerda e direita)
+ * MY = 12mm  → margem vertical (topo e fundo)
+ */
 // ─── A4 Landscape Constants (mm) ────────────────────────────────────
-const PW = 297;
-const PH = 210;
-const MX = 15;
-const MY = 12;
+const PW = 297; // Page Width  (largura)
+const PH = 210; // Page Height (altura)
+const MX = 15;  // Margin X    (margem horizontal)
+const MY = 12;  // Margin Y    (margem vertical)
 
+/*
+ * ─── Paleta de Cores Profissional do PDF ───────────────────────────
+ * Cores definidas como arrays [R, G, B] (0-255), formato que o jsPDF usa.
+ * "as const" é TypeScript dizendo que esses arrays são imutáveis (tuplas).
+ */
 // ─── Professional Color Palette ─────────────────────────────────────
-const NAVY      = [12, 33, 53]     as const; // #0C2135
-const NAVY_L    = [20, 45, 70]     as const; // lighter navy
-const ACCENT    = [0, 159, 227]    as const; // #009FE3
-const ACCENT_D  = [0, 120, 180]    as const; // darker cyan
-const TEXT_DARK  = [30, 41, 59]     as const; // #1e293b
-const TEXT_MID   = [100, 116, 139]  as const; // #64748b
-const TEXT_LIGHT = [148, 163, 184]  as const; // #94a3b8
-const BORDER     = [226, 232, 240]  as const; // #e2e8f0
-const BG_PAGE    = [245, 247, 250]  as const; // #f5f7fa
-const WHITE      = [255, 255, 255]  as const;
+const NAVY       = [12, 33, 53]     as const; // azul-escuro principal   (#0C2135)
+const NAVY_L     = [20, 45, 70]     as const; // azul-escuro mais claro
+const ACCENT     = [0, 159, 227]    as const; // ciano FIEAM             (#009FE3)
+const ACCENT_D   = [0, 120, 180]    as const; // ciano mais escuro
+const TEXT_DARK  = [30, 41, 59]     as const; // texto escuro legível    (#1e293b)
+const TEXT_MID   = [100, 116, 139]  as const; // texto médio (subtítulos) (#64748b)
+const TEXT_LIGHT = [148, 163, 184]  as const; // texto claro (rodapés)   (#94a3b8)
+const BORDER     = [226, 232, 240]  as const; // cor de borda suave      (#e2e8f0)
+const BG_PAGE    = [245, 247, 250]  as const; // fundo cinza claro       (#f5f7fa)
+const WHITE      = [255, 255, 255]  as const; // branco puro
 
-const USABLE_W   = PW - MX * 2;
-const HEADER_H   = 13;
-const FOOTER_H   = 10;
-const CONTENT_TOP = MY + HEADER_H + 7;
-const CONTENT_BOT = PH - MY - FOOTER_H - 3;
-const GAP = 5;
+/*
+ * Dimensões calculadas da área de conteúdo (em mm)
+ * -------------------------------------------------------
+ * USABLE_W   → largura disponível (total - 2 margens): 297 - 30 = 267mm
+ * HEADER_H   → altura do cabeçalho azul no topo de cada página: 13mm
+ * FOOTER_H   → altura do rodapé no fundo de cada página: 10mm
+ * CONTENT_TOP → Y onde o conteúdo começa (abaixo do header): MY + HEADER_H + 7
+ * CONTENT_BOT → Y onde o conteúdo termina (acima do footer)
+ * GAP         → espaço entre elementos na página: 5mm
+ */
+const USABLE_W    = PW - MX * 2;              // 267mm de largura útil
+const HEADER_H    = 13;                        // altura do header
+const FOOTER_H    = 10;                        // altura do footer
+const CONTENT_TOP = MY + HEADER_H + 7;         // onde começa o conteúdo
+const CONTENT_BOT = PH - MY - FOOTER_H - 3;   // onde termina o conteúdo
+const GAP = 5;                                 // espaço entre blocos (mm)
 
+/*
+ * timestamp() — Gera uma string com a data e hora atual formatadas
+ * -------------------------------------------------------
+ * Exemplo de saída: "Gerado em 27 de abril de 2026 às 14:32"
+ * Usado no rodapé e na capa do PDF.
+ */
 // ─── Helper: formatted timestamp ────────────────────────────────────
 function timestamp() {
   const now = new Date();
@@ -34,6 +95,18 @@ function timestamp() {
   return `Gerado em ${d} às ${t}`;
 }
 
+/*
+ * loadImageAsDataUrl(src) — Carrega uma imagem e converte para base64
+ * -------------------------------------------------------
+ * O jsPDF precisa de imagens no formato base64 (data URL) para inserir no PDF.
+ * Esta função:
+ *   1. Cria um elemento <img> e carrega a imagem da URL dada
+ *   2. Desenha a imagem em um <canvas> temporário
+ *   3. Converte o canvas para string base64 (data:image/png;base64,...)
+ *
+ * Retorna null se a imagem não puder ser carregada (ex: arquivo não encontrado).
+ * Usado para carregar os logos FIEAM, SESI, SENAI e IEL da capa.
+ */
 // ─── Helper: load image as base64 data URL ──────────────────────────
 async function loadImageAsDataUrl(src: string): Promise<string | null> {
   try {
@@ -55,6 +128,23 @@ async function loadImageAsDataUrl(src: string): Promise<string | null> {
   }
 }
 
+/*
+ * ═══════════════════════════════════════════════════════════════════════
+ * drawCoverPage(pdf, title, opts?) — Desenha a página de capa do PDF
+ * ═══════════════════════════════════════════════════════════════════════
+ * Cria a primeira página do PDF com design corporativo escuro:
+ *   - Fundo azul-escuro (NAVY) com linhas sutis de textura
+ *   - Barra ciano no topo
+ *   - Logos das 4 instituições (FIEAM, SESI, SENAI, IEL)
+ *   - Título, período e subtítulo em destaque
+ *   - Timestamp de geração
+ *   - Rodapé com branding e marcação confidencial
+ *
+ * Parâmetros:
+ *   pdf    → instância do documento jsPDF onde desenhar
+ *   title  → título principal (ex: "Visão Geral - Atendimentos")
+ *   opts   → opções opcionais: subtitle (subtítulo) e period (período de datas)
+ */
 // ═══════════════════════════════════════════════════════════════════════
 //  COVER PAGE — elegant, dark, corporate with logos
 // ═══════════════════════════════════════════════════════════════════════
@@ -154,6 +244,23 @@ async function drawCoverPage(
   pdf.text("Documento confidencial · Uso interno", PW - MX - 8, PH - 13, { align: "right" });
 }
 
+/*
+ * ═══════════════════════════════════════════════════════════════════════
+ * drawPageChrome(pdf, title, pageNum, totalPages) — Desenha o layout base de cada página
+ * ═══════════════════════════════════════════════════════════════════════
+ * Aplicado em todas as páginas de conteúdo (não na capa).
+ * Desenha:
+ *   - Fundo cinza claro (BG_PAGE)
+ *   - Barra ciano no topo (accent)
+ *   - Header azul-escuro com título e número de página
+ *   - Linha separadora e rodapé com branding + timestamp + numeração
+ *
+ * Parâmetros:
+ *   pdf        → instância do jsPDF
+ *   title      → título exibido no header (ex: "Visão Geral")
+ *   pageNum    → número da página atual (para exibir "Página 2 de 5")
+ *   totalPages → total de páginas do documento
+ */
 // ═══════════════════════════════════════════════════════════════════════
 //  CONTENT PAGE CHROME — header, footer, background
 // ═══════════════════════════════════════════════════════════════════════
@@ -213,6 +320,25 @@ function drawPageChrome(pdf: jsPDF, title: string, pageNum: number, totalPages: 
   pdf.text(`${pageNum}`, MX + USABLE_W, fy - 3.5, { align: "right" });
 }
 
+/*
+ * ═══════════════════════════════════════════════════════════════════════
+ * forceLightInlineStyles — Sistema de conversão Dark → Light para captura
+ * ═══════════════════════════════════════════════════════════════════════
+ * O dashboard tem tema escuro (dark mode), mas o PDF precisa de fundo branco.
+ * Esta seção define:
+ *
+ *   DARK_BG_MAP   → pares [cor-escura, cor-clara] para substituir fundos
+ *   DARK_BORDER_MAP → pares para substituir bordas escuras
+ *   LIGHT_TEXT_MAP  → pares para escurecer textos claros (brancos/cinzas)
+ *
+ * A função forceLightInlineStyles() percorre TODOS os elementos HTML dentro
+ * do container sendo exportado e aplica as substituições inline antes da captura.
+ * Retorna uma função de "restore" para desfazer tudo após a captura.
+ *
+ * Também lida com elementos SVG do Recharts (gráficos), que têm seus
+ * fill (cor de preenchimento de texto) baked diretamente nos atributos,
+ * não sendo afetados pelo CSS normal.
+ */
 // ═══════════════════════════════════════════════════════════════════════
 //  FORCE LIGHT MODE — inline style overrides for html2canvas
 // ═══════════════════════════════════════════════════════════════════════
@@ -242,6 +368,13 @@ const LIGHT_TEXT_MAP: [string, string][] = [
   ["rgb(156, 163, 175)", "#64748b"],  // gray-400
 ];
 
+/*
+ * parseColor(input) — Converte uma string de cor CSS para array [R, G, B]
+ * -------------------------------------------------------
+ * Aceita formatos: "#fff", "#0C2135", "rgb(12, 33, 53)", "rgba(12, 33, 53, 1)"
+ * Retorna null se não conseguir interpretar o formato.
+ * Necessária para comparar cores programaticamente e calcular luminosidade.
+ */
 // Parse an "rgb(r, g, b)" / "rgba(r, g, b, a)" / "#rrggbb" string into [r,g,b] (0-255) or null
 function parseColor(input: string): [number, number, number] | null {
   if (!input) return null;
@@ -261,6 +394,16 @@ function parseColor(input: string): [number, number, number] | null {
   return null;
 }
 
+/*
+ * luminance(rgb) — Calcula a luminosidade percebida de uma cor
+ * -------------------------------------------------------
+ * Usa a fórmula padrão de luminância perceptual (ITU-R BT.709):
+ *   L = 0.2126 × R + 0.7152 × G + 0.0722 × B
+ *
+ * Retorna um valor de 0 (preto) a 255 (branco).
+ * Cores com L >= 170 são consideradas "claras demais" para fundo branco
+ * e precisam ser escurecidas para serem legíveis no PDF.
+ */
 // Perceived luminance (0-255). >= 170 is "too light for white bg".
 function luminance(rgb: [number, number, number]): number {
   return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
@@ -359,6 +502,15 @@ function forceLightInlineStyles(root: HTMLElement): () => void {
   };
 }
 
+/*
+ * ═══════════════════════════════════════════════════════════════════════
+ * exportElementToPdf — Função principal exportada para uso nas páginas
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * PdfExportOptions — Opções extras para a exportação
+ *   subtitle → texto adicional na capa (ex: "Relatório mensal")
+ *   period   → período de datas (ex: "01 jan 2026 — 30 jan 2026")
+ */
 // ═══════════════════════════════════════════════════════════════════════
 //  MAIN EXPORT FUNCTION
 // ═══════════════════════════════════════════════════════════════════════
@@ -367,13 +519,35 @@ export interface PdfExportOptions {
   period?: string;
 }
 
+/*
+ * exportElementToPdf(container, filename, title, options?)
+ * -------------------------------------------------------
+ * Função principal chamada pelos botões de exportação nas páginas.
+ *
+ * Parâmetros:
+ *   container → elemento HTML a ser exportado (geralmente uma div com ref)
+ *   filename  → nome do arquivo sem extensão (ex: "visao-geral-jan-2026")
+ *   title     → título exibido na capa e headers do PDF
+ *   options   → subtitle e period opcionais para a capa
+ *
+ * Passos executados:
+ *   1. Salva o tema atual e força tema claro temporariamente
+ *   2. Mostra elementos marcados com [data-pdf-only] (visíveis só no PDF)
+ *   3. Aguarda 300ms para o browser re-renderizar com tema claro
+ *   4. Aplica as substituições de cor inline (forceLightInlineStyles)
+ *   5. Captura cada filho do container como imagem (html2canvas)
+ *   6. Restaura todas as alterações (tema, estilos, visibilidade)
+ *   7. Calcula o layout: quantas imagens cabem por página
+ *   8. Cria o documento jsPDF e adiciona capa + páginas de conteúdo
+ *   9. Salva o arquivo .pdf no computador do usuário
+ */
 export async function exportElementToPdf(
   container: HTMLElement,
   filename: string,
   title: string,
   options?: PdfExportOptions
 ) {
-  // ── Force light theme during capture
+  // ── Salva o tema atual e força tema claro para captura
   const prevTheme = document.documentElement.getAttribute("data-theme");
   document.documentElement.setAttribute("data-theme", "light");
 

@@ -1,12 +1,50 @@
+/*
+ * ============================================================
+ * components/ui/kpi-card.tsx — Card de KPI (Indicador de Desempenho)
+ * ============================================================
+ *
+ * KPI = Key Performance Indicator (Indicador-Chave de Desempenho)
+ * É o componente dos cards no topo da Visão Geral, como:
+ *   "Total de Atendimentos: 12.543"
+ *   "Atendimentos Hoje: 87"
+ *
+ * Props:
+ *   title    → título do indicador (ex: "Total de Atendimentos")
+ *   value    → valor numérico ou string a exibir em destaque
+ *   icon     → ícone Lucide renderizado no canto direito do card
+ *   accent   → cor de destaque: "blue" | "green" | "amber" | "red"
+ *   subtitle → texto secundário opcional abaixo do título
+ *   className → classes CSS adicionais opcionais
+ *   isDark   → recebe o tema (não utilizado diretamente, CSS variables cuidam disso)
+ *
+ * O card usa CSS custom properties (--ds-accent, --ds-bg-secondary) para
+ * se adaptar automaticamente ao tema claro/escuro sem precisar de lógica JS.
+ * ============================================================
+ */
+
+// React: necessário para usar JSX e o tipo ReactNode
 import * as React from "react";
+
+// cn: função utilitária para combinar classes CSS condicionalmente
 import { cn } from "@/lib/utils";
 
+/*
+ * ACCENT_MAP — Mapeamento de cor de destaque para classes CSS
+ * -------------------------------------------------------
+ * Cada cor de acento define 4 classes para partes diferentes do card:
+ *   border  → cor da borda do card
+ *   glow    → brilho suave no canto superior direito
+ *   iconBg  → fundo do quadrado do ícone
+ *   iconText → cor do ícone em si
+ *
+ * "as const" torna o objeto imutável (read-only) em TypeScript.
+ */
 const ACCENT_MAP = {
   blue: {
-    border: "border-[var(--ds-accent)]/25",
-    glow: "bg-[var(--ds-accent)]/20",
-    iconBg: "bg-[var(--ds-accent-muted)]",
-    iconText: "text-[var(--ds-accent)]",
+    border: "border-[var(--ds-accent)]/25",      // borda azul ciano FIEAM
+    glow: "bg-[var(--ds-accent)]/20",             // brilho azul sutil
+    iconBg: "bg-[var(--ds-accent-muted)]",        // fundo do ícone azul claro
+    iconText: "text-[var(--ds-accent)]",          // ícone azul ciano
   },
   green: {
     border: "border-emerald-500/20",
@@ -28,16 +66,20 @@ const ACCENT_MAP = {
   },
 } as const;
 
+// Accent: tipo derivado das chaves do ACCENT_MAP ("blue" | "green" | "amber" | "red")
 type Accent = keyof typeof ACCENT_MAP;
 
+/*
+ * KpiCardProps — Props (parâmetros) do componente KpiCard
+ */
 interface KpiCardProps {
   title: string;
   value: string | number;
-  icon: React.ReactNode;
-  accent?: Accent;
+  icon: React.ReactNode;     // qualquer elemento React (ícone Lucide)
+  accent?: Accent;           // "?" significa opcional (padrão: "blue")
   subtitle?: string;
   className?: string;
-  isDark: boolean;
+  isDark: boolean;           // recebido mas tratado via CSS variables
 }
 
 export function KpiCard({ title, value, icon, accent = "blue", subtitle, className }: KpiCardProps) {

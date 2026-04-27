@@ -1,23 +1,78 @@
+/*
+ * ============================================================
+ * components/layout/Layout.tsx — Estrutura visual de todas as páginas
+ * ============================================================
+ *
+ * Este é o "invólucro" que envolve o conteúdo de todas as páginas
+ * do dashboard (exceto Login). Cada página usa <Layout title="...">conteúdo</Layout>.
+ *
+ * O Layout é composto por:
+ *   1. Sidebar (barra lateral de navegação)
+ *   2. Header (cabeçalho com título, ícone, logos e data)
+ *   3. Section (área principal onde o conteúdo da página é renderizado)
+ *
+ * Hierarquia de componentes:
+ *   <Layout>
+ *     <SidebarProvider>   ← contexto que controla se sidebar está collapsed ou não
+ *       <LayoutInner>
+ *         <LayoutPolish>  ← injeta CSS global da "fieam-shell" (estilos globais)
+ *         <Sidebar />     ← barra lateral
+ *         <main>
+ *           <header>      ← cabeçalho com título da página
+ *           <section>     ← {children} — conteúdo da página passado como prop
+ *
+ * Conceito de "children" em React:
+ *   <Layout title="Visão Geral">
+ *     <OverviewContent />   ← isso é o children
+ *   </Layout>
+ *   O Layout não sabe o que é o children, apenas o renderiza em <section>
+ * ============================================================
+ */
+
+// ReactNode: tipo TypeScript para "qualquer coisa que pode ser renderizada no React"
+// (strings, elementos JSX, arrays, null, etc.)
 import type { ReactNode } from "react";
+
+// Lucide: ícones usados no header para identificar visualmente cada página
 import {
-  Activity,
-  Building2,
-  Clock3,
-  Gauge,
-  ShieldCheck,
-  Sparkles,
+  Activity,   // ícone para página de Telefone
+  Building2,  // ícone para página de Patrocinados
+  Clock3,     // ícone no badge "Dados operacionais"
+  Gauge,      // ícone padrão (Overview e Anual)
+  ShieldCheck, // ícone para página de Protocolo e badge "Ambiente institucional"
+  Sparkles,   // ícone para página de OpenAI
 } from "lucide-react";
+
+// Sidebar: componente da barra lateral de navegação
 import { Sidebar } from "./Sidebar";
+
+// SidebarProvider: contexto que controla se o sidebar está expandido/colapsado
+// useSidebar: hook para ler o estado do sidebar dentro de LayoutInner
 import { SidebarProvider, useSidebar } from "./SidebarContext";
+
+// useTheme: hook para saber se está no modo escuro ou claro (ThemeContext)
 import { useTheme } from "@/lib/ThemeContext";
+
+// cn: função utilitária para combinar classes CSS (utils.ts)
 import { cn } from "@/lib/utils";
 
+/*
+ * LayoutProps — Props aceitas pelo componente Layout
+ * -------------------------------------------------------
+ * children  → o conteúdo da página (o que vai dentro de <section>)
+ * title     → título exibido no header (ex: "Visão Geral", "Dashboard Anual")
+ * subtitle  → subtítulo opcional abaixo do título (se não fornecido, usa o descritivo automático)
+ */
 interface LayoutProps {
   children: ReactNode;
   title: string;
   subtitle?: string;
 }
 
+/*
+ * LOGOS — Lista de logos das instituições exibidos no header
+ * Carregados da pasta /public/anexo/ (arquivos PNG)
+ */
 const LOGOS = [
   { src: "/anexo/FIEAM-removebg-preview.png", alt: "FIEAM", className: "h-8 object-contain opacity-90" },
   { src: "/anexo/SESI-removebg-preview.png", alt: "SESI", className: "h-8 object-contain opacity-90" },
@@ -25,6 +80,17 @@ const LOGOS = [
   { src: "/anexo/IEL-removebg-preview.png", alt: "IEL", className: "h-8 object-contain opacity-90" },
 ];
 
+/*
+ * getPageContext(title) — Retorna o contexto visual baseado no título da página
+ * -------------------------------------------------------
+ * Mapeia o título da página para um conjunto de informações visuais:
+ *   eyebrow    → texto pequeno acima do título (ex: "Consulta operacional")
+ *   description → descrição da página exibida no header
+ *   icon        → ícone Lucide exibido ao lado do título
+ *
+ * Usa normalized.includes() para fazer um match flexível
+ * (ex: "Busca por Protocolo" → includes("protocolo") → ShieldCheck)
+ */
 function getPageContext(title: string) {
   const normalized = title.toLowerCase();
 
@@ -75,6 +141,25 @@ function getPageContext(title: string) {
   };
 }
 
+/*
+ * LayoutPolish — Injeta estilos CSS globais da "fieam-shell"
+ * -------------------------------------------------------
+ * Este componente não renderiza nada visível, apenas injeta uma tag <style>.
+ * A classe .fieam-shell é aplicada no elemento raiz de LayoutInner.
+ *
+ * Por que usar inline <style> em vez de um arquivo CSS separado?
+ *   Porque esses estilos dependem de CSS custom properties (variáveis como
+ *   --ds-bg-primary, --ds-accent) que são definidas pelo tema claro/escuro.
+ *   Injetar aqui garante que essas variáveis estão disponíveis em contexto.
+ *
+ * O que esses estilos fazem:
+ *   - Aplica o gradiente de fundo do tema claro/escuro
+ *   - Estiliza tabelas, botões, inputs com animações suaves
+ *   - Personaliza os gráficos Recharts (barras, linhas, labels)
+ *   - Define transparência e blur nos cards
+ *   - Adapta para mobile (tabela com scroll)
+ *   - Desativa animações para usuários com preferência de movimento reduzido
+ */
 function LayoutPolish() {
   return (
     <style>{`
@@ -234,9 +319,22 @@ function LayoutPolish() {
   );
 }
 
+/*
+ * LayoutInner — O layout real da página (com acesso ao SidebarContext)
+ * -------------------------------------------------------
+ * Separado do componente Layout exportado para poder usar useSidebar(),
+ * que depende do SidebarProvider envolvente.
+ *
+ * Usa collapsed (do SidebarContext) para ajustar a margem esquerda
+ * do conteúdo (md:ml-64 quando expandido, md:ml-20 quando colapsado).
+ *
+ * Usa isDark (do ThemeContext) para alternar classes de cor condicional.
+ *
+ * Usa Intl.DateTimeFormat para formatar a data de hoje em português.
+ */
 function LayoutInner({ children, title, subtitle }: LayoutProps) {
-  const { collapsed } = useSidebar();
-  const { isDark } = useTheme();
+  const { collapsed } = useSidebar(); // sidebar expandido (false) ou colapsado (true)
+  const { isDark } = useTheme();       // true = tema escuro
   const pageContext = getPageContext(title);
   const PageIcon = pageContext.icon;
   const todayLabel = new Intl.DateTimeFormat("pt-BR", {
@@ -370,6 +468,22 @@ function LayoutInner({ children, title, subtitle }: LayoutProps) {
   );
 }
 
+/*
+ * Layout — Componente público exportado (usado pelas páginas)
+ * -------------------------------------------------------
+ * Envolve LayoutInner com o SidebarProvider.
+ * O SidebarProvider precisa estar fora de LayoutInner pois
+ * LayoutInner consome useSidebar() (que requer o Provider acima).
+ *
+ * Uso nas páginas:
+ *   export default function Overview() {
+ *     return (
+ *       <Layout title="Visão Geral">
+ *         <p>Conteúdo aqui...</p>
+ *       </Layout>
+ *     );
+ *   }
+ */
 export function Layout({ children, title, subtitle }: LayoutProps) {
   return (
     <SidebarProvider>

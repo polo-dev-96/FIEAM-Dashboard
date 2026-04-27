@@ -1,43 +1,100 @@
+/*
+ * ============================================================
+ * pages/Login.tsx — Página de Login do Dashboard
+ * ============================================================
+ *
+ * Esta é a primeira tela que o usuário vê ao abrir a aplicação.
+ * É renderizada por AppContent (App.tsx) quando isAuthenticated = false.
+ *
+ * Layout:
+ *   - Tela dividida em 2 paineis (lado a lado em desktop):
+ *     LEFT PANEL  → Branding (logo, destaque, cards de features)
+ *     RIGHT PANEL → Formulário de login
+ *   - Em mobile: apenas o painel direito é exibido
+ *
+ * Fluxo de login:
+ *   1. Usuário preenche email e senha
+ *   2. handleSubmit() chama POST /api/login
+ *   3. Se bem-sucedido: chama onLogin(token, user)
+ *      → AuthContext.login() salva o token/user no localStorage
+ *      → isAuthenticated vira true → Router redireciona para o dashboard
+ *   4. Se falhar: exibe mensagem de erro
+ *
+ * Estados React (useState):
+ *   email         → valor digitado no campo email
+ *   password      → valor digitado no campo senha
+ *   showPassword  → toggle para mostrar/ocultar a senha
+ *   error         → mensagem de erro da API
+ *   isLoading     → controla o botão de submit enquanto aguarda resposta
+ *   focused       → qual campo está em foco (para animações CSS)
+ * ============================================================
+ */
+
+// useState: hook do React para criar e gerenciar estado do componente
 import { useState } from "react";
+
+// Lucide: biblioteca de ícones SVG para React (cada import é um ícone)
 import { Eye, EyeOff, Lock, Mail, Loader2, BarChart3, Shield, Activity } from "lucide-react";
+
+// UserInfo: tipo TypeScript que define o objeto de dados do usuário
 import type { UserInfo } from "@/lib/AuthContext";
 
+/*
+ * LoginPageProps — Props (parâmetros) aceitos pelo componente
+ * -------------------------------------------------------
+ * onLogin: função passada pelo App.tsx que executa o login no AuthContext
+ */
 interface LoginPageProps {
   onLogin: (token: string, user: UserInfo) => void;
 }
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [focused, setFocused] = useState<string | null>(null);
+  // ─── Estados do formulário ────────────────────────────────────────────────
+  const [email, setEmail] = useState("");             // valor do campo email
+  const [password, setPassword] = useState("");       // valor do campo senha
+  const [showPassword, setShowPassword] = useState(false); // toggle eye icon
+  const [error, setError] = useState("");             // mensagem de erro da API
+  const [isLoading, setIsLoading] = useState(false);  // estado de carregamento
+  const [focused, setFocused] = useState<string | null>(null); // campo em foco
 
+  /*
+   * handleSubmit — Função executada ao submeter o formulário
+   * -------------------------------------------------------
+   * e.preventDefault() evita o comportamento padrão do HTML
+   * (que recarregaria a página ao submeter um form).
+   *
+   * fetch() faz uma requisição HTTP para a API do backend.
+   * O bloco try/catch garante que erros de rede sejam tratados.
+   * O bloco finally garante que isLoading volta a false mesmo se der erro.
+   */
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setIsLoading(true);
+    e.preventDefault(); // impede reload da página
+    setError("");        // limpa erros anteriores
+    setIsLoading(true); // ativa o spinner no botão
 
     try {
+      // Chama a rota POST /api/login do backend (server/routes.ts)
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password }), // envia no corpo da requisição
       });
 
-      const data = await res.json();
+      const data = await res.json(); // lê a resposta como JSON
 
+      // res.ok é true para status 200-299, false para 400/401/500
       if (!res.ok) {
-        setError(data.message || "Erro ao fazer login");
+        setError(data.message || "Erro ao fazer login"); // exibe o erro da API
         return;
       }
 
+      // Login bem-sucedido: chama AuthContext.login() via prop
       onLogin(data.token, data.user);
     } catch {
+      // Erro de rede (servidor offline, sem internet, etc.)
       setError("Erro de conexão com o servidor");
     } finally {
-      setIsLoading(false);
+      setIsLoading(false); // sempre desativa o spinner
     }
   };
 

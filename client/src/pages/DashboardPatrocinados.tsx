@@ -1,3 +1,33 @@
+/*
+ * ============================================================
+ * pages/DashboardPatrocinados.tsx — Dashboard de Patrocinados/Campanhas
+ * ============================================================
+ *
+ * Painel para monitorar atendimentos originados de canais patrocinados
+ * e campanhas de marketing. Dados só disponíveis a partir de 13/04/2026.
+ *
+ * Funcionalidades:
+ *   - KPIs: Total Patrocinados, Total Campanhas, Total Outros
+ *   - Filtros: Período (DateRangePicker), Filtro de Casa
+ *   - Gráfico de Ranking de Patrocinadores (BarChart)
+ *   - Gráfico de Ranking de Campanhas (BarChart)
+ *   - Gráfico de Ranking de Outros (BarChart)
+ *   - Auto-refresh a cada 60 segundos (REFRESH_INTERVAL)
+ *
+ * Dados buscados via React Query:
+ *   - GET /api/patrocinados-stats → totais, rankings, timeline
+ *
+ * Classificação dos atendimentos:
+ *   - Campo `variaveis` começa com 'PATROCINADO' → Patrocinado
+ *   - Campo `variaveis` começa com 'CAMPANHA'    → Campanha
+ *   - Qualquer outro valor                       → Outros
+ *
+ * Restrição de data mínima (MIN_DATE = "2026-04-13"):
+ *   O rastreamento de patrocinados só começou nessa data,
+ *   então o DateRangePicker não permite selecionar datas anteriores.
+ * ============================================================
+ */
+
 import { Layout } from "@/components/layout/Layout";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";

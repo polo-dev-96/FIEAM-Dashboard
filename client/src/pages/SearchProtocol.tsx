@@ -1,27 +1,66 @@
+/*
+ * ============================================================
+ * pages/SearchProtocol.tsx — Página de Busca por Protocolo
+ * ============================================================
+ *
+ * Permite buscar um atendimento específico pelo seu número de protocolo.
+ * Acesso restrito por AuthContext (não acessível para todos os papéis).
+ *
+ * Fluxo:
+ *   1. Usuário digita o número do protocolo no campo de busca
+ *   2. Ao pressionar Enter ou clicar no botão, handleSearch() é chamado
+ *   3. Faz GET /api/protocolo/:protocolo
+ *   4. Exibe o resultado (dados do atendimento) ou mensagem de erro
+ *
+ * Estados:
+ *   query     → texto digitado no campo de busca
+ *   results   → array de atendimentos retornados (ou null antes da busca)
+ *   isLoading → controla o spinner durante a requisição
+ *   error     → mensagem de erro (404 = não encontrado, 500 = erro do servidor)
+ * ============================================================
+ */
+
+// Layout: estrutura visual padrão com sidebar e header
 import { Layout } from "@/components/layout/Layout";
+
+// useState: hook de estado local
 import { useState } from "react";
+
+// Componentes de Card do shadcn (contêiner visual para o resultado)
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+// Ícones Lucide para o resultado do atendimento
 import {
   Search, FileText, User, Phone, Hash,
   MessageSquare, Clock, Building2, Radio,
   AlertCircle
 } from "lucide-react";
+
+// date-fns: formata datas para exibição
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+
+// useTheme: acessa o tema atual (claro/escuro)
 import { useTheme } from "@/lib/ThemeContext";
+
+// cn: combina classes CSS condicionalmente
 import { cn } from "@/lib/utils";
 
+/*
+ * Atendimento — Tipo que representa os dados de um atendimento retornado pela API
+ * Espelha os campos retornados pela rota GET /api/protocolo/:protocolo
+ */
 interface Atendimento {
   id: number;
-  contato: string;
-  identificador: string;
-  protocolo: string;
-  canal: string;
-  dataHoraInicio: string;
-  dataHoraFim: string;
-  tipoCanal: string;
-  resumoConversa: string;
-  casa: string;
+  contato: string;        // nome do contato
+  identificador: string;  // número de telefone ou identificador
+  protocolo: string;      // número do protocolo
+  canal: string;          // canal de atendimento (ex: WhatsApp)
+  dataHoraInicio: string; // data/hora de início do atendimento
+  dataHoraFim: string;    // data/hora de término
+  tipoCanal: string;      // tipo do canal (ex: chatbot, humano)
+  resumoConversa: string; // resumo/assunto da conversa
+  casa: string;           // equipe/unidade que atendeu
 }
 
 export default function SearchProtocolPage() {

@@ -1,12 +1,71 @@
+/*
+ * ============================================================
+ * components/ui/export-report-dialog.tsx — Diálogo de Exportação de Relatório
+ * ============================================================
+ *
+ * Componente de dialog (modal) para exportar dados do dashboard.
+ * Acionado pelo botão "Exportar" na FilterToolbar.
+ *
+ * Tipos de exportação disponíveis:
+ *   1. Excel (.xlsx) → GET /api/export-xlsx (download direto do arquivo)
+ *   2. PDF           → usa exportElementToPdf() (html2canvas + jsPDF)
+ *
+ * Fluxo do diálogo:
+ *   1. Botão "Exportar" abre o <Dialog>
+ *   2. Usuário pode ajustar o período de data (DatePickerField)
+ *   3. Usuário clica "Excel" ou "PDF" para iniciar a exportação
+ *   4. Um spinner (Loader2) é exibido enquanto aguarda
+ *
+ * Props recebidos:
+ *   selectedCasas → lista de casas filtradas (para incluir no parâmetro da URL do Excel)
+ *   contentRef    → ref para o elemento DOM a capturar no PDF (passado pelo pai)
+ *   pdfTitle      → título da página de capa do PDF
+ *   pdfSubtitle   → subtítulo da página de capa do PDF
+ *   startDate     → data inicial do período (do estado da página pai — fonte única da verdade)
+ *   endDate       → data final do período
+ *
+ * Nota sobre DatePickerField:
+ *   Componente interno deste arquivo (não exportado) que renderiza
+ *   um campo de data com Popover + DayPicker.
+ * ============================================================
+ */
+
+// useState/useCallback/useEffect: hooks React de estado, memoização e efeitos
+// RefObject: tipo para refs de elementos DOM
 import { useState, useCallback, useEffect, type RefObject } from "react";
+
+// date-fns: biblioteca de manipulação de datas
+// format → formata uma data (ex: "dd/MM/yyyy")
+// addMonths/subMonths → navegação do calendário
 import { format, addMonths, subMonths } from "date-fns";
+
+// ptBR: locale português para formatacão de datas (ex: "janeiro 2026" em vez de "January 2026")
 import { ptBR } from "date-fns/locale";
+
+// Ícones Lucide para o diálogo
 import { Download, FileSpreadsheet, FileText, Loader2, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+
+// Dialog: componente de modal (Radix UI via shadcn)
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
+
+// Popover: painel flutuante para o calendário de datas
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
+// DayPicker: componente de calendário interativo (react-day-picker)
 import { DayPicker } from "react-day-picker";
+
+// exportElementToPdf: função de exportação PDF (lib/exportPdf.ts)
 import { exportElementToPdf } from "@/lib/exportPdf";
 
+/*
+ * DatePickerField — Campo de data com calendário popover
+ * -------------------------------------------------------
+ * Componente interno (não exportado) usado dentro do diálogo.
+ * Renderiza um botão que abre um calendário (DayPicker) para selecionar uma data.
+ *
+ * value + "T12:00:00": adiciona horário fixo para evitar problemas de
+ * fuso horário (sem isso, "2026-01-01" poderia virar "31/12/2025" em UTC-3)
+ */
 function DatePickerField({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
     const [open, setOpen] = useState(false);
     const dateValue = new Date(value + "T12:00:00");
@@ -76,13 +135,16 @@ function DatePickerField({ value, onChange, label }: { value: string; onChange: 
     );
 }
 
+/*
+ * ExportReportDialogProps — Props do componente
+ */
 interface ExportReportDialogProps {
-    selectedCasas: string[];
-    contentRef?: RefObject<HTMLDivElement | null>;
-    pdfTitle?: string;
-    pdfSubtitle?: string;
-    startDate: string;
-    endDate: string;
+    selectedCasas: string[];                        // casas selecionadas no filtro (para Excel)
+    contentRef?: RefObject<HTMLDivElement | null>;  // ref do elemento DOM para PDF
+    pdfTitle?: string;                              // título da capa do PDF
+    pdfSubtitle?: string;                           // subtítulo (entidade/unidade selecionada)
+    startDate: string;                              // data inicial (YYYY-MM-DD) da página pai
+    endDate: string;                                // data final (YYYY-MM-DD) da página pai
 }
 
 
@@ -102,9 +164,20 @@ export function ExportReportDialog({ selectedCasas, contentRef, pdfTitle = "Rela
 
 
 
+    /*
+     * handleExportXLSX — Exporta os dados como planilha Excel
+     * -------------------------------------------------------
+     * 1. Monta a URL de download com os parâmetros de filtro
+     * 2. Faz fetch da rota GET /api/export-xlsx
+     * 3. Recebe a resposta como Blob (arquivo binário)
+     * 4. Cria uma URL temporária com URL.createObjectURL(blob)
+     * 5. Cria um <a> invisível com href e download, dispara o clique
+     * 6. Remove o elemento e libera a URL temporária da memória
+     */
     const handleExportXLSX = useCallback(async () => {
-        setExporting(true);
+        setExporting(true); // ativa o spinner
         try {
+            // Monta os parâmetros de casa: ?casa=X&casa=Y (URL-encoded)
             const casaParam = selectedCasas.length > 0
                 ? selectedCasas.map((c) => `&casa=${encodeURIComponent(c)}`).join("")
                 : "";
@@ -113,15 +186,16 @@ export function ExportReportDialog({ selectedCasas, contentRef, pdfTitle = "Rela
             const response = await fetch(url);
             if (!response.ok) throw new Error("Erro ao exportar XLSX");
 
+            // Converte resposta para Blob e cria link de download programático
             const blob = await response.blob();
-            const downloadUrl = URL.createObjectURL(blob);
-            const a = document.createElement("a");
+            const downloadUrl = URL.createObjectURL(blob); // cria URL temporária
+            const a = document.createElement("a");          // cria <a> invisível
             a.href = downloadUrl;
             a.download = `relatorio_${periodo.startDate}_${periodo.endDate}.xlsx`;
             document.body.appendChild(a);
-            a.click();
+            a.click(); // dispara o download
             document.body.removeChild(a);
-            URL.revokeObjectURL(downloadUrl);
+            URL.revokeObjectURL(downloadUrl); // libera memória
         } catch (err) {
             console.error("Erro ao exportar XLSX:", err);
             alert("Erro ao exportar XLSX. Tente novamente.");
@@ -132,15 +206,26 @@ export function ExportReportDialog({ selectedCasas, contentRef, pdfTitle = "Rela
 
 
 
+    /*
+     * handleExportPDF — Exporta o dashboard como PDF
+     * -------------------------------------------------------
+     * Usa exportElementToPdf() (lib/exportPdf.ts) que por sua vez usa
+     * html2canvas (captura o DOM como imagem) e jsPDF (cria o PDF).
+     *
+     * contentRef.current é o elemento DOM que será capturado.
+     * Passado pelo componente pai (Overview, DashboardAnual) via prop.
+     */
     const handleExportPDF = useCallback(async () => {
-        if (!contentRef?.current) return;
+        if (!contentRef?.current) return; // só exporta se o ref estiver válido
         setExportingPdf(true);
         try {
             const filename = `relatorio_${periodo.startDate}_${periodo.endDate}`;
+            // fmtDate: formata "YYYY-MM-DD" como "dd/MM/yyyy" para exibir no PDF
             const fmtDate = (d: string) => {
                 try { return format(new Date(d + "T12:00:00"), "dd/MM/yyyy"); } catch { return d; }
             };
             const periodStr = `Período: ${fmtDate(periodo.startDate)} a ${fmtDate(periodo.endDate)}`;
+            // Chama a função de exportação em exportPdf.ts com título e período
             await exportElementToPdf(contentRef.current, filename, pdfTitle, {
                 period: periodStr,
                 subtitle: pdfSubtitle || "Todas as Entidades",

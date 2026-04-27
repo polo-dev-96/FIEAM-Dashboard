@@ -1,30 +1,69 @@
+/*
+ * ============================================================
+ * components/ui/chart-card.tsx — Card de Gráfico
+ * ============================================================
+ *
+ * Componente "casca" que envolve todos os gráficos do dashboard.
+ * Fornece um layout padronizado com:
+ *   - Header: ícone colorido + título + badge opcional + área de ações
+ *   - Body:   área onde o gráfico (children) é renderizado
+ *
+ * Analogia: é como uma moldura de quadro. O quadro em si (o gráfico)
+ * é passado como children — o ChartCard só fornece a moldura visual.
+ *
+ * Props:
+ *   title      → título exibido no header do card
+ *   icon       → ícone Lucide opcional no header
+ *   iconAccent → cor do ícone ("blue" | "green" | "amber" | "red" | "purple" | "cyan" | "orange")
+ *   badge      → texto de badge opcional (ex: "TOP 20", "AO VIVO")
+ *   actions    → elementos React opcionais na direita do header (botões, toggles)
+ *   children   → o gráfico ou conteúdo real do card
+ *   height     → altura fixa opcional do corpo do card
+ *   className  → classes CSS adicionais
+ *   isDark     → tema (tratado via CSS variables)
+ *   noPadding  → se true, remove padding do corpo (útil para tabelas)
+ *   subtitle   → texto pequeno abaixo do título
+ * ============================================================
+ */
+
+// React: necessário para JSX e tipos como ReactNode
 import * as React from "react";
+
+// cn: função para combinar classes CSS condicionalmente
 import { cn } from "@/lib/utils";
 
+/*
+ * ICON_ACCENT_MAP — Mapeamento de cores para o ícone do header
+ * Define o fundo (bg) e a cor do texto/ícone (text) para cada acento.
+ */
 const ICON_ACCENT_MAP = {
-  blue: { bg: "bg-[var(--ds-accent-muted)]", text: "text-[var(--ds-accent)]" },
-  green: { bg: "bg-emerald-500/10", text: "text-emerald-400" },
-  amber: { bg: "bg-amber-500/10", text: "text-amber-400" },
-  red: { bg: "bg-rose-500/10", text: "text-rose-400" },
-  purple: { bg: "bg-purple-500/10", text: "text-purple-400" },
-  cyan: { bg: "bg-cyan-500/10", text: "text-cyan-400" },
-  orange: { bg: "bg-orange-500/10", text: "text-orange-400" },
+  blue:   { bg: "bg-[var(--ds-accent-muted)]", text: "text-[var(--ds-accent)]" },
+  green:  { bg: "bg-emerald-500/10",            text: "text-emerald-400" },
+  amber:  { bg: "bg-amber-500/10",              text: "text-amber-400" },
+  red:    { bg: "bg-rose-500/10",               text: "text-rose-400" },
+  purple: { bg: "bg-purple-500/10",             text: "text-purple-400" },
+  cyan:   { bg: "bg-cyan-500/10",               text: "text-cyan-400" },
+  orange: { bg: "bg-orange-500/10",             text: "text-orange-400" },
 } as const;
 
+// IconAccent: tipo derivado das chaves do mapa de acentos
 type IconAccent = keyof typeof ICON_ACCENT_MAP;
 
+/*
+ * ChartCardProps — Props do componente ChartCard
+ */
 interface ChartCardProps {
   title: string;
-  icon?: React.ReactNode;
-  iconAccent?: IconAccent;
-  badge?: string;
-  actions?: React.ReactNode;
-  children: React.ReactNode;
-  height?: string | number;
+  icon?: React.ReactNode;         // ícone no header (opcional)
+  iconAccent?: IconAccent;        // cor do ícone (padrão: "blue")
+  badge?: string;                 // badge de texto no header (opcional)
+  actions?: React.ReactNode;      // botões/controles adicionais no header
+  children: React.ReactNode;      // o gráfico ou conteúdo do card
+  height?: string | number;       // altura fixa do body (em px ou string CSS)
   className?: string;
   isDark: boolean;
-  noPadding?: boolean;
-  subtitle?: string;
+  noPadding?: boolean;            // remove padding do body (para tabelas/listas)
+  subtitle?: string;              // subtítulo abaixo do título
 }
 
 export function ChartCard({

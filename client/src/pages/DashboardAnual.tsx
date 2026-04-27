@@ -1,13 +1,50 @@
+/*
+ * ============================================================
+ * pages/DashboardAnual.tsx — Dashboard SAC Anual
+ * ============================================================
+ *
+ * Painel de análise estratégica com visão anual dos atendimentos.
+ * Usa os mesmos filtros de entidade/unidade do Overview, mas
+ * o período é selecionado por ANO + MÊS em vez de intervalo de datas.
+ *
+ * Funcionalidades:
+ *   - Filtros: Ano, Mês (MonthPicker), Entidade, Unidade SESI, Equipe
+ *   - Gráfico de Evolução: atendimentos por mês e canal (LineChart)
+ *   - Gráfico de Origem: atendimentos por canal no período (BarChart)
+ *   - Gráfico de Assuntos: assuntos mais frequentes (BarChart)
+ *   - Prazo SLA: dentro/fora do prazo (BarChart)
+ *   - Drill-down: clicar em barras abre modal com lista de atendimentos
+ *   - Exportação: PDF e Excel via ExportReportDialog
+ *
+ * Dados buscados via React Query:
+ *   - GET /api/anual-stats → dados de evolução, origem, assuntos e prazo
+ *   - GET /api/casas       → lista de casas para os filtros
+ *   - GET /api/drilldown   → (sob demanda) lista detalhada ao clicar num gráfico
+ *
+ * Diferença principal vs Overview:
+ *   - MonthPicker em vez de DateRangePicker
+ *   - Foca em análise histórica e tendências por mês/canal
+ * ============================================================
+ */
+
 import { Layout } from "@/components/layout/Layout";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+
+// Recharts: componentes de gráfico
+// LineChart/Line → gráfico de linhas (evolução mensal)
+// BarChart/Bar   → gráfico de barras (origem, assuntos, prazo)
+// Legend         → legenda dos gráficos com múltiplas séries
 import {
     LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
     Tooltip as RechartsTooltip, ResponsiveContainer, Cell, Legend, LabelList
 } from "recharts";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+
+// MonthPicker: seletor de mês/ano (diferente do DateRangePicker do Overview)
 import { MonthPicker } from "@/components/ui/month-picker";
 import { SelectCustom } from "@/components/ui/select-custom";
 import { SelectMulti } from "@/components/ui/select-multi";
@@ -15,10 +52,12 @@ import { ExportReportDialog } from "@/components/ui/export-report-dialog";
 import { ChartCard } from "@/components/ui/chart-card";
 import { FilterToolbar } from "@/components/ui/filter-toolbar";
 import { CHART_COLORS, getTooltipStyle, getGridStroke, getAxisColor, getAxisTickFill, barGradientDefs, getBarGradient, PremiumTooltip } from "@/lib/chart-utils";
+
 import {
     RefreshCw, TrendingUp, Headphones, FileText, Clock, Filter,
     Building2, Users, CalendarDays, Settings2
 } from "lucide-react";
+
 import { useState, useMemo, useCallback, useRef } from "react";
 import { format } from "date-fns";
 import { agruparAssuntos, Entidade, UnidadeSESI, getCasasForFiltro, getCasasForFiltroGerente, getEquipesForEntidade, getCasasForEquipeLabels, isArianaUser } from "@/lib/entidadeMapping";

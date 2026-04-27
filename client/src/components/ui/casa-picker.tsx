@@ -1,24 +1,59 @@
+/*
+ * ============================================================
+ * components/ui/casa-picker.tsx — Seletor de Múltiplas Casas
+ * ============================================================
+ *
+ * Permite selecionar MÚLTIPLAS casas (canais de atendimento) de uma vez.
+ * Diferente do SelectCustom (seleção única), este permite multi-seleção.
+ *
+ * Comportamento "staged" (seleção em duas etapas):
+ *   - O usuário clica em casas → atualiza `staged` (estado local, ainda não confirmado)
+ *   - Clica "Aplicar" → chama onChange(staged) e fecha o popover
+ *   - Clica "Cancelar" → descarta staged e restaura a seleção anterior
+ *
+ * Lógica de "Todas as Casas":
+ *   - staged vazio (length === 0) significa "Todas" (sem filtro)
+ *   - Botão "Todas" limpa staged para []
+ *
+ * Props:
+ *   value   → array de casas atualmente selecionadas ([] = Todas)
+ *   casas   → lista completa de casas disponíveis (do banco)
+ *   onChange → callback ao confirmar a seleção
+ * ============================================================
+ */
+
+// useState: estado local (open, search, staged)
+// useCallback: memoiza funções que não precisam ser recriadas a cada render
+// useMemo: memoiza a lista filtrada de casas para evitar recalcular a cada digitação
+// useEffect: sincroniza staged com value quando o popover abre
 import { useState, useCallback, useMemo, useEffect } from "react";
+
+// Ícones Lucide
 import { Building2, Check, Search, X } from "lucide-react";
+
+// Popover: painel flutuante com a lista de casas
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
+/*
+ * CasaPickerProps — Props do componente
+ */
 interface CasaPickerProps {
-    value: string[];          // array of selected casas
-    casas: string[];
-    onChange: (casas: string[]) => void;
+    value: string[];          // casas selecionadas (array vazio = Todas)
+    casas: string[];          // lista completa de casas disponíveis
+    onChange: (casas: string[]) => void; // callback ao confirmar
 }
 
 export function CasaPicker({ value, casas, onChange }: CasaPickerProps) {
-    const [open, setOpen] = useState(false);
-    const [search, setSearch] = useState("");
+    const [open, setOpen] = useState(false);        // controla o popover
+    const [search, setSearch] = useState("");        // texto de busca
 
-    // Staged selection — only applied on confirm
+    // staged: seleção temporária (não aplicada ainda) — padrão "pending"
     const [staged, setStaged] = useState<string[]>(value);
 
-    // Sync staged with external value when popover opens
+    // Quando o popover abre: sincroniza staged com o valor atual (descarta pendências)
     useEffect(() => {
         if (open) {
-            setStaged(value);
+            setStaged(value); // reseta para o valor confirmado
         }
     }, [open]);
 
