@@ -6,24 +6,44 @@ import * as React from "react";
 
 // ── Shared chart color palette ──────────────────────────────────────
 export const CHART_COLORS = [
-  '#00AEEF', '#0077CC', '#14B8A6', '#10B981', '#F59E0B',
-  '#8B5CF6', '#F97316', '#06B6D4', '#64748B', '#22C55E',
-  '#3B82F6', '#A855F7', '#EAB308', '#0EA5E9', '#EF4444',
+  // Paleta executiva: azul institucional, teal e neutros premium.
+  // A ordem prioriza barras mais importantes com menos “efeito arco-íris”.
+  '#1CB5E9',
+  '#1677C8',
+  '#2DD4BF',
+  '#10B981',
+  '#64748B',
+  '#F59E0B',
+  '#7C5CFF',
+  '#38BDF8',
+  '#334155',
+  '#22C55E',
+  '#0EA5E9',
+  '#94A3B8',
+  '#D97706',
+  '#14B8A6',
+  '#E85D75',
 ];
 
-// Lighter top / darker bottom for gradient shading
+// Blend de cor mais controlado para gradientes institucionais.
+function mix(hex: string, target: string, amount: number): string {
+  const normalize = (value: string) => value.replace('#', '');
+  const source = parseInt(normalize(hex), 16);
+  const destination = parseInt(normalize(target), 16);
+
+  const sr = (source >> 16) & 0xff;
+  const sg = (source >> 8) & 0xff;
+  const sb = source & 0xff;
+  const dr = (destination >> 16) & 0xff;
+  const dg = (destination >> 8) & 0xff;
+  const db = destination & 0xff;
+
+  const blend = (a: number, b: number) => Math.round(a + (b - a) * amount);
+  return `#${blend(sr, dr).toString(16).padStart(2, '0')}${blend(sg, dg).toString(16).padStart(2, '0')}${blend(sb, db).toString(16).padStart(2, '0')}`;
+}
+
 function shade(hex: string, percent: number): string {
-  const h = hex.replace('#', '');
-  const num = parseInt(h, 16);
-  const r = (num >> 16) & 0xff;
-  const g = (num >> 8) & 0xff;
-  const b = num & 0xff;
-  const adjust = (c: number) =>
-    Math.round(Math.min(255, Math.max(0, c + (percent / 100) * 255)));
-  const rr = adjust(r).toString(16).padStart(2, '0');
-  const gg = adjust(g).toString(16).padStart(2, '0');
-  const bb = adjust(b).toString(16).padStart(2, '0');
-  return `#${rr}${gg}${bb}`;
+  return percent >= 0 ? mix(hex, '#ffffff', percent / 100) : mix(hex, '#020617', Math.abs(percent) / 100);
 }
 
 // ── Gradient defs for bar charts (horizontal bars: x1=0 x2=1) ────────
@@ -47,8 +67,9 @@ export function barGradientDefs(
       x2={horizontal ? "1" : "0"}
       y2={horizontal ? "0" : "1"}
     >
-      <stop offset="0%" stopColor={shade(color, 8)} stopOpacity={1} />
-      <stop offset="100%" stopColor={shade(color, -10)} stopOpacity={1} />
+      <stop offset="0%" stopColor={shade(color, 16)} stopOpacity={1} />
+      <stop offset="58%" stopColor={color} stopOpacity={0.96} />
+      <stop offset="100%" stopColor={shade(color, -18)} stopOpacity={0.92} />
     </linearGradient>
   ));
 }
@@ -83,21 +104,21 @@ export function PremiumTooltip({
       style={{
         background: isDark ? 'rgba(15, 42, 66, 0.96)' : 'rgba(255,255,255,0.98)',
         border: `1px solid ${isDark ? 'rgba(0,159,227,0.22)' : 'rgba(15,23,41,0.08)'}`,
-        borderRadius: 18,
-        padding: '10px 14px',
+        borderRadius: 16,
+        padding: '10px 12px',
         boxShadow: isDark
           ? '0 12px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,159,227,0.06)'
           : '0 12px 32px rgba(15,23,41,0.08), 0 0 0 1px rgba(15,23,41,0.04)',
         backdropFilter: 'blur(12px)',
-        minWidth: 176,
+        minWidth: 168,
       }}
     >
       {formattedLabel !== undefined && formattedLabel !== '' && (
         <div
           style={{
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: '0.02em',
+            fontSize: 10,
+            fontWeight: 800,
+            letterSpacing: '0.08em',
             color: isDark ? 'rgba(255,255,255,0.5)' : '#94A3B8',
             textTransform: 'uppercase',
             marginBottom: 6,
@@ -126,18 +147,18 @@ export function PremiumTooltip({
               <span
                 style={{
                   display: 'inline-block',
-                  width: 8,
-                  height: 8,
-                  borderRadius: 3,
+                  width: 7,
+                  height: 7,
+                  borderRadius: 999,
                   background: dotColor || entry.color || entry.payload?.fill || '#009FE3',
                   boxShadow: `0 0 0 2px ${isDark ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.8)'}`,
                 }}
               />
               <span
                 style={{
-                  fontSize: 12,
-                  color: isDark ? 'rgba(255,255,255,0.7)' : '#475569',
-                  fontWeight: 500,
+                  fontSize: 11,
+                  color: isDark ? 'rgba(255,255,255,0.66)' : '#475569',
+                  fontWeight: 700,
                 }}
               >
                 {name}
@@ -146,7 +167,7 @@ export function PremiumTooltip({
             <span
               style={{
                 fontSize: 13,
-                fontWeight: 700,
+                fontWeight: 800,
                 color: isDark ? '#F0F4F8' : '#0F1729',
                 fontVariantNumeric: 'tabular-nums',
               }}
@@ -171,7 +192,7 @@ export function getTooltipStyle(isDark: boolean) {
       boxShadow: isDark
         ? '0 12px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,159,227,0.06)'
         : '0 12px 32px rgba(15,23,41,0.08), 0 0 0 1px rgba(15,23,41,0.04)',
-      padding: '10px 14px',
+      padding: '10px 12px',
       fontSize: '12px',
       backdropFilter: 'blur(12px)',
     },
@@ -181,7 +202,7 @@ export function getTooltipStyle(isDark: boolean) {
       marginBottom: '6px',
       fontSize: '11px',
       textTransform: 'uppercase' as const,
-      letterSpacing: '0.02em',
+      letterSpacing: '0.08em',
     },
     itemStyle: {
       color: isDark ? '#F0F4F8' : '#0F1729',
@@ -194,21 +215,40 @@ export function getTooltipStyle(isDark: boolean) {
 
 // ── Theme-aware grid / axis ─────────────────────────────────────────
 export function getGridStroke(isDark: boolean): string {
-  return isDark ? 'rgba(148,163,184,0.09)' : '#E8EEF5';
+  return isDark ? 'rgba(148,163,184,0.065)' : '#E7EDF4';
 }
 
 export function getAxisColor(isDark: boolean): string {
-  return isDark ? '#60758A' : '#94A3B8';
+  return isDark ? 'rgba(148,163,184,0.34)' : '#CBD5E1';
 }
 
 export function getAxisTickFill(isDark: boolean): string {
-  return isDark ? '#9AAABC' : '#64748B';
+  return isDark ? 'rgba(203,213,225,0.70)' : '#64748B';
 }
 
 export function getAxisTickStyle(isDark: boolean) {
   return {
     fill: getAxisTickFill(isDark),
     fontSize: 11,
-    fontWeight: 500,
+    fontWeight: 700,
   };
+}
+
+
+export function getChartCursor(isDark: boolean, mode: 'bar' | 'line' = 'bar') {
+  if (mode === 'line') {
+    return {
+      stroke: isDark ? 'rgba(56,189,248,0.30)' : 'rgba(14,116,144,0.24)',
+      strokeWidth: 1,
+      strokeDasharray: '5 6',
+    };
+  }
+
+  return {
+    fill: isDark ? 'rgba(56,189,248,0.055)' : 'rgba(14,116,144,0.045)',
+  };
+}
+
+export function getLabelFill(isDark: boolean): string {
+  return isDark ? '#EAF2F8' : '#1E293B';
 }

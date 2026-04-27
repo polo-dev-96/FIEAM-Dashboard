@@ -45,16 +45,17 @@ export function ChartCard({
     <div
       data-fieam-surface="true"
       className={cn(
-        "group relative overflow-hidden rounded-2xl border bg-ds-secondary shadow-ds-card transition-theme card-hover animate-fade-up",
+        "group relative overflow-hidden rounded-[22px] border bg-ds-secondary shadow-ds-card transition-theme card-hover animate-fade-up",
         className
       )}
     >
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[var(--ds-accent)]/60 to-transparent opacity-70" />
-      <div className="pointer-events-none absolute -right-24 -top-24 h-56 w-56 rounded-full bg-[var(--ds-accent)]/[0.055] blur-3xl transition-opacity group-hover:opacity-80" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent opacity-60" />
+      <div className="pointer-events-none absolute -right-24 -top-24 h-56 w-56 rounded-full bg-[var(--ds-accent)]/[0.045] blur-3xl transition-opacity group-hover:opacity-90" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_0%,rgba(255,255,255,0.045),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.025),transparent_46%)]" />
 
       <div className="relative flex items-center gap-3 border-b border-ds-subtle px-5 py-4">
         {icon && (
-          <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl transition-transform group-hover:scale-105", ia.bg, ia.text)}>
+          <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ring-1 ring-white/5 transition-transform group-hover:scale-105", ia.bg, ia.text)}>
             {icon}
           </div>
         )}

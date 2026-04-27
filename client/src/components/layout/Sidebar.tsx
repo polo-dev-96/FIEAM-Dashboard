@@ -2,6 +2,7 @@ import { Link, useLocation } from "wouter";
 import {
   Brain,
   CalendarRange,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   LayoutDashboard,
@@ -62,6 +63,11 @@ function initialsFromEmail(email?: string) {
 export function Sidebar() {
   const [location] = useLocation();
   const [isOpen, setIsOpen] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<Record<NavSection, boolean>>({
+    dashboards: true,
+    consultas: true,
+    inteligencia: true,
+  });
   const { collapsed, toggle } = useSidebar();
   const { logout, canAccess, user } = useAuth();
   const { isDark, toggleTheme } = useTheme();
@@ -152,63 +158,108 @@ export function Sidebar() {
           </div>
 
           <nav className={cn("flex-1 overflow-y-auto", collapsed ? "px-2 py-4" : "px-3 py-4")}>
-            {sections.map((group) => (
-              <div key={group.section} className="mb-5 last:mb-0">
-                {!collapsed && (
-                  <div className="mb-2 px-2">
-                    <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-ds-tertiary">
-                      {group.label}
-                    </p>
-                  </div>
-                )}
+            {sections.map((group) => {
+              const isGroupOpen = collapsed || expandedSections[group.section];
+              const hasActiveItem = group.items.some((item) => item.href === location);
 
-                <div className="space-y-1">
-                  {group.items.map((item) => {
-                    const isActive = location === item.href;
-                    const ItemIcon = item.icon;
-
-                    return (
-                      <Link key={item.href} href={item.href} className="block" onClick={() => setIsOpen(false)}>
-                        <div
+              return (
+                <div key={group.section} className={cn("last:mb-0", collapsed ? "mb-3" : "mb-4")}>
+                  {!collapsed ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedSections((current) => ({
+                          ...current,
+                          [group.section]: !current[group.section],
+                        }))
+                      }
+                      className={cn(
+                        "mb-2 flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left transition-all duration-200",
+                        hasActiveItem
+                          ? "border-[var(--ds-accent)]/24 bg-[var(--ds-accent-muted)] text-ds-primary"
+                          : "border-transparent text-ds-tertiary hover:border-ds-subtle hover:bg-white/[0.035] hover:text-ds-secondary"
+                      )}
+                      aria-expanded={isGroupOpen}
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span
                           className={cn(
-                            "group relative flex items-center rounded-2xl transition-all duration-200",
-                            collapsed ? "justify-center px-2 py-2.5" : "gap-3 px-3 py-2.5",
-                            isActive
-                              ? "bg-[var(--ds-accent)] text-white shadow-[0_12px_30px_rgba(0,159,227,.22)]"
-                              : "text-ds-secondary hover:bg-[var(--ds-accent-muted)] hover:text-ds-primary"
+                            "h-1.5 w-1.5 shrink-0 rounded-full transition-colors",
+                            hasActiveItem ? "bg-[var(--ds-accent)] shadow-[0_0_0_4px_rgba(0,159,227,.12)]" : "bg-ds-tertiary/45"
                           )}
-                          title={collapsed ? item.label : undefined}
-                        >
-                          <span
-                            className={cn(
-                              "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors",
-                              isActive
-                                ? "bg-white/[0.16] text-white"
-                                : isDark
-                                  ? "bg-white/[0.045] text-ds-tertiary group-hover:text-[var(--ds-accent)]"
-                                  : "bg-slate-100 text-slate-500 group-hover:text-[var(--ds-accent)]"
-                            )}
-                          >
-                            <ItemIcon className="h-4 w-4" strokeWidth={1.85} />
-                          </span>
+                        />
+                        <span className="truncate text-[10px] font-extrabold uppercase tracking-[0.18em]">
+                          {group.label}
+                        </span>
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <span className="rounded-full bg-ds-inset px-2 py-0.5 text-[9px] font-extrabold tabular-nums text-ds-tertiary">
+                          {group.items.length}
+                        </span>
+                        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", isGroupOpen ? "rotate-0" : "-rotate-90")} />
+                      </span>
+                    </button>
+                  ) : (
+                    <div className="mx-auto mb-2 h-px w-8 bg-gradient-to-r from-transparent via-ds-default to-transparent" />
+                  )}
 
-                          {!collapsed && (
-                            <span className="min-w-0 flex-1">
-                              <span className={cn("block truncate text-[13px]", isActive ? "font-extrabold" : "font-bold")}>
-                                {item.label}
-                              </span>
-                              <span className={cn("block truncate text-[10px]", isActive ? "text-white/70" : "text-ds-tertiary")}>
-                                {item.description}
-                              </span>
-                            </span>
-                          )}
-                        </div>
-                      </Link>
-                    );
-                  })}
+                  <div
+                    className={cn(
+                      "grid transition-[grid-template-rows,opacity] duration-300 ease-out",
+                      isGroupOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                    )}
+                  >
+                    <div className="min-h-0 overflow-hidden">
+                      <div className="space-y-1">
+                        {group.items.map((item) => {
+                          const isActive = location === item.href;
+                          const ItemIcon = item.icon;
+
+                          return (
+                            <Link key={item.href} href={item.href} className="block" onClick={() => setIsOpen(false)}>
+                              <div
+                                className={cn(
+                                  "group relative flex items-center rounded-2xl transition-all duration-200",
+                                  collapsed ? "justify-center px-2 py-2.5" : "gap-3 px-3 py-2.5",
+                                  isActive
+                                    ? "bg-[var(--ds-accent)] text-white shadow-[0_12px_30px_rgba(0,159,227,.22)]"
+                                    : "text-ds-secondary hover:bg-[var(--ds-accent-muted)] hover:text-ds-primary"
+                                )}
+                                title={collapsed ? item.label : undefined}
+                              >
+                                <span
+                                  className={cn(
+                                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors",
+                                    isActive
+                                      ? "bg-white/[0.16] text-white"
+                                      : isDark
+                                        ? "bg-white/[0.045] text-ds-tertiary group-hover:text-[var(--ds-accent)]"
+                                        : "bg-slate-100 text-slate-500 group-hover:text-[var(--ds-accent)]"
+                                  )}
+                                >
+                                  <ItemIcon className="h-4 w-4" strokeWidth={1.85} />
+                                </span>
+
+                                {!collapsed && (
+                                  <span className="min-w-0 flex-1">
+                                    <span className={cn("block truncate text-[13px]", isActive ? "font-extrabold" : "font-bold")}>
+                                      {item.label}
+                                    </span>
+                                    <span className={cn("block truncate text-[10px]", isActive ? "text-white/70" : "text-ds-tertiary")}>
+                                      {item.description}
+                                    </span>
+                                  </span>
+                                )}
+                              </div>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </nav>
 
           <div className={cn("border-t border-ds-subtle", collapsed ? "px-2 py-3" : "px-3 py-3")}>

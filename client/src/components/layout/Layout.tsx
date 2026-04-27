@@ -161,10 +161,39 @@ function LayoutPolish() {
 
       .fieam-shell .recharts-wrapper text {
         font-family: var(--font-sans);
+        letter-spacing: -0.01em;
       }
 
       .fieam-shell .recharts-cartesian-grid line {
-        stroke-opacity: 0.72;
+        stroke-opacity: 0.58;
+        stroke-dasharray: 2 8;
+      }
+
+      .fieam-shell .recharts-layer.recharts-bar-rectangles path,
+      .fieam-shell .recharts-bar-rectangle path {
+        filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.10));
+        transition: opacity 160ms ease, filter 160ms ease, transform 160ms ease;
+      }
+
+      .fieam-shell .recharts-bar-rectangle path:hover {
+        opacity: 0.92;
+        filter: drop-shadow(0 10px 18px rgba(0, 159, 227, 0.18));
+      }
+
+      .fieam-shell .recharts-area-area {
+        filter: saturate(0.96);
+      }
+
+      .fieam-shell .recharts-area-curve,
+      .fieam-shell .recharts-line-curve {
+        filter: drop-shadow(0 6px 14px rgba(0, 159, 227, 0.12));
+      }
+
+      .fieam-shell .recharts-label-list text {
+        paint-order: stroke;
+        stroke: color-mix(in srgb, var(--ds-bg-secondary) 82%, transparent);
+        stroke-width: 4px;
+        stroke-linejoin: round;
       }
 
       .fieam-shell .number-display {
