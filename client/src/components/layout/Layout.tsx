@@ -205,6 +205,18 @@ function LayoutPolish() {
         box-shadow: 0 24px 80px rgba(0, 0, 0, 0.34);
       }
 
+      [data-theme="light"] .fieam-shell [data-fieam-surface="true"] {
+        border-color: var(--ds-border-default);
+      }
+
+      [data-theme="light"] .fieam-shell .card-hover:hover {
+        border-color: var(--ds-border-strong);
+      }
+
+      [data-theme="light"] .fieam-shell .recharts-label-list text {
+        stroke: rgba(255,255,255,0.86);
+      }
+
       @media (max-width: 768px) {
         .fieam-shell table {
           min-width: 880px;
@@ -314,23 +326,23 @@ function LayoutInner({ children, title, subtitle }: LayoutProps) {
               <div className="flex flex-col gap-4 lg:items-end">
                 <div
                   className={cn(
-                    "flex flex-wrap items-center gap-2 rounded-2xl border p-2",
+                    "flex flex-wrap items-center gap-2 rounded-2xl border p-2 shadow-sm",
                     isDark
                       ? "border-white/10 bg-white/[0.045]"
-                      : "border-slate-200/80 bg-white/70"
+                      : "border-slate-200/70 bg-slate-950/[0.88] shadow-[inset_0_1px_0_rgba(255,255,255,.12),0_12px_30px_rgba(15,23,42,.08)]"
                   )}
                 >
                   {LOGOS.map((logo) => (
                     <div
                       key={logo.alt}
                       className={cn(
-                        "flex h-10 w-[76px] items-center justify-center rounded-xl border px-2",
+                        "flex h-10 w-[76px] items-center justify-center rounded-xl border px-2 transition-transform duration-200 hover:-translate-y-0.5",
                         isDark
                           ? "border-white/10 bg-white/[0.04]"
-                          : "border-slate-100 bg-white shadow-sm"
+                          : "border-white/10 bg-white/[0.07] shadow-[inset_0_1px_0_rgba(255,255,255,.10)]"
                       )}
                     >
-                      <img src={logo.src} alt={logo.alt} className="max-h-7 max-w-full object-contain" />
+                      <img src={logo.src} alt={logo.alt} className="max-h-7 max-w-full object-contain drop-shadow-[0_1px_3px_rgba(0,0,0,.32)]" />
                     </div>
                   ))}
                 </div>
