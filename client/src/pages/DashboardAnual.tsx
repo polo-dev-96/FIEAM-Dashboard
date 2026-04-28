@@ -100,6 +100,34 @@ const MONTH_NAMES = [
     "Jul", "Ago", "Set", "Out", "Nov", "Dez"
 ];
 
+// ─── Helpers: Normalização de Canais ────────────────────────────────
+
+function normalizarCanal(canal: string): string {
+    const lower = (canal || "").toLowerCase().trim();
+    if (lower.includes("instagram")) return "Instagram Direct";
+    if (lower.includes("messenger")) return "Messenger";
+    if (lower.includes("whatsapp"))  return "Whatsapp";
+    if (lower.includes("web"))       return "Web";
+    if (lower.includes("email"))     return "Email";
+    if (lower.includes("sms"))       return "SMS";
+    return canal.replace(/\s+(SENAI|SESI|IEL)$/i, "").trim() || canal;
+}
+
+// Cores fixas por canal (alta distinção visual)
+const CANAL_COLORS: Record<string, string> = {
+    "Whatsapp":          "#10B981", // verde
+    "Instagram Direct":  "#F97316", // laranja
+    "Messenger":         "#3B82F6", // azul royal
+    "Web":               "#64748B", // cinza slate
+    "Email":             "#7C5CFF", // roxo
+    "SMS":               "#F59E0B", // âmbar
+    "Telefone":          "#E85075", // vermelho/rosa
+};
+
+function getCanalColor(canal: string): string {
+    return CANAL_COLORS[normalizarCanal(canal)] ?? CANAL_COLORS[canal] ?? '#1CB5E9';
+}
+
 const LINE_COLORS = CHART_COLORS;
 
 const ASSUNTO_COLORS = [
@@ -156,16 +184,16 @@ function EvolucaoTooltip({ active, payload, label, isDark }: any) {
                                     width: 8,
                                     height: 8,
                                     borderRadius: 3,
-                                    background: entry.stroke || entry.color,
+                                    background: getCanalColor(entry.dataKey),
                                     boxShadow: `0 0 0 2px ${dark ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.8)'}`,
                                     flexShrink: 0,
                                 }}
                             />
                             <span style={{ fontSize: 12, color: dark ? 'rgba(255,255,255,0.7)' : '#475569', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {entry.dataKey}
+                                {normalizarCanal(entry.dataKey)}
                             </span>
                         </div>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: dark ? '#F0F4F8' : '#0F1729', fontVariantNumeric: 'tabular-nums' }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: getCanalColor(entry.dataKey), fontVariantNumeric: 'tabular-nums' }}>
                             {(entry.value || 0).toLocaleString("pt-BR")}
                         </span>
                     </div>
@@ -320,15 +348,22 @@ export default function DashboardAnualPage() {
     const { chartData, canais } = useMemo(() => {
         if (!stats?.evolucao?.length) return { chartData: [], canais: [] };
 
-        // Get unique canais
-        const uniqueCanais = Array.from(new Set(stats.evolucao.map(e => e.canal))).sort();
+        // Normaliza e soma canais com o mesmo nome base
+        const rawMap = new Map<string, Map<number, number>>();
+        for (const e of stats.evolucao) {
+            const nome = normalizarCanal(e.canal);
+            if (!rawMap.has(nome)) rawMap.set(nome, new Map());
+            const mesMap = rawMap.get(nome)!;
+            mesMap.set(e.mes, (mesMap.get(e.mes) || 0) + e.total);
+        }
 
-        // Build one row per month
+        const uniqueCanais = Array.from(rawMap.keys()).sort();
+
         const monthData = MONTH_NAMES.map((name, idx) => {
+            const mes = idx + 1;
             const row: Record<string, any> = { mes: name };
             uniqueCanais.forEach(canal => {
-                const entry = stats.evolucao.find(e => e.mes === idx + 1 && e.canal === canal);
-                row[canal] = entry?.total || 0;
+                row[canal] = rawMap.get(canal)?.get(mes) || 0;
             });
             return row;
         });
@@ -355,11 +390,18 @@ export default function DashboardAnualPage() {
     // ─── Origem percentages ────────────────────────────────────────
     const origemData = useMemo(() => {
         if (!stats?.porOrigem?.length) return [];
-        const total = stats.porOrigem.reduce((sum, item) => sum + item.total, 0);
-        return stats.porOrigem.map(item => ({
-            ...item,
-            percent: total > 0 ? (item.total / total) * 100 : 0,
-        }));
+        // Agrupa por canal normalizado
+        const map = new Map<string, number>();
+        for (const item of stats.porOrigem) {
+            const nome = normalizarCanal(item.nome);
+            map.set(nome, (map.get(nome) || 0) + item.total);
+        }
+        const total = Array.from(map.values()).reduce((sum, v) => sum + v, 0);
+        return Array.from(map.entries()).map(([nome, value]) => ({
+            nome,
+            total: value,
+            percent: total > 0 ? (value / total) * 100 : 0,
+        })).sort((a, b) => b.total - a.total);
     }, [stats?.porOrigem]);
 
     // ─── Year navigation ──────────────────────────────────────────
@@ -592,27 +634,63 @@ export default function DashboardAnualPage() {
                                 content={<EvolucaoTooltip isDark={isDark} />}
                             />
                             <Legend
-                                iconType="circle"
-                                iconSize={8}
-                                wrapperStyle={{ paddingTop: '14px', fontSize: '11px' }}
-                                formatter={(value: string) => (
-                                    <span style={{ color: isDark ? 'rgba(255,255,255,0.75)' : '#475569', fontWeight: 500, marginRight: 8 }}>
-                                        {value}
-                                    </span>
-                                )}
+                                content={(props: any) => {
+                                    const { payload } = props;
+                                    if (!payload) return null;
+                                    return (
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '12px 20px', paddingTop: '14px' }}>
+                                            {payload.map((entry: any, index: number) => {
+                                                const label = normalizarCanal(entry.value);
+                                                const color = getCanalColor(entry.value);
+                                                return (
+                                                    <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                        <span style={{
+                                                            display: 'inline-block',
+                                                            width: 10,
+                                                            height: 10,
+                                                            borderRadius: '50%',
+                                                            background: color,
+                                                            flexShrink: 0,
+                                                        }} />
+                                                        <span style={{
+                                                            color: isDark ? 'rgba(255,255,255,0.9)' : '#334155',
+                                                            fontSize: 12,
+                                                            fontWeight: 600,
+                                                            whiteSpace: 'nowrap',
+                                                        }}>
+                                                            {label}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    );
+                                }}
                             />
                             {canais.map((canal, idx) => (
                                 <Line
                                     key={canal}
                                     type="monotone"
                                     dataKey={canal}
-                                    stroke={LINE_COLORS[idx % LINE_COLORS.length]}
+                                    stroke={getCanalColor(canal)}
                                     strokeWidth={2.5}
-                                    dot={{ r: 4, fill: LINE_COLORS[idx % LINE_COLORS.length], stroke: isDark ? '#0C2135' : '#ffffff', strokeWidth: 2 }}
+                                    dot={{ r: 4, fill: getCanalColor(canal), stroke: isDark ? '#0C2135' : '#ffffff', strokeWidth: 2 }}
                                     activeDot={{ r: 6, strokeWidth: 2, stroke: isDark ? '#0C2135' : '#ffffff' }}
                                     connectNulls
                                     animationDuration={1100 + idx * 80}
-                                />
+                                >
+                                    <LabelList
+                                        dataKey={canal}
+                                        position="top"
+                                        offset={18}
+                                        fontSize={11}
+                                        fontWeight={700}
+                                        fill={isDark ? '#ffffff' : '#0f172a'}
+                                        stroke={isDark ? '#081422' : '#ffffff'}
+                                        strokeWidth={isDark ? 4 : 3}
+                                        formatter={(value: number) => value > 500 ? value.toLocaleString('pt-BR') : ''}
+                                    />
+                                </Line>
                             ))}
                         </LineChart>
                     </ResponsiveContainer>
@@ -649,7 +727,7 @@ export default function DashboardAnualPage() {
                                         const rowTotal = chartData.reduce((sum, row) => sum + (Number(row[canal]) || 0), 0);
                                         return (
                                             <tr key={canal} className={idx % 2 === 0 ? "bg-white/[0.02]" : ""}>
-                                                <td className="py-1.5 px-2 text-gray-300 font-medium whitespace-nowrap">{canal}</td>
+                                                <td className="py-1.5 px-2 text-gray-300 font-medium whitespace-nowrap">{normalizarCanal(canal)}</td>
                                                 {chartData.map((row, mi) => (
                                                     <td key={mi} className="py-1.5 px-1.5 text-gray-400 text-right tabular-nums">
                                                         {(Number(row[canal]) || 0).toLocaleString("pt-BR")}

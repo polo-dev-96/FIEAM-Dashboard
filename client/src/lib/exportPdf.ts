@@ -555,10 +555,21 @@ export async function exportElementToPdf(
   const pdfOnlyEls = container.querySelectorAll("[data-pdf-only]") as NodeListOf<HTMLElement>;
   pdfOnlyEls.forEach((el) => (el.style.display = ""));
 
-  await new Promise((r) => setTimeout(r, 300));
+  await new Promise((r) => setTimeout(r, 1500));
 
   // ── Force light inline styles (bypasses CSS specificity issues)
   const restoreLight = forceLightInlineStyles(container);
+
+  // ── Fix overflow clipping: html2canvas struggles with overflow:hidden on text
+  const overflowFixes: Array<{ el: HTMLElement; prev: string }> = [];
+  const allTextEls = container.querySelectorAll("[class*='truncate'], [class*='overflow-hidden']") as NodeListOf<HTMLElement>;
+  for (const el of Array.from(allTextEls)) {
+    overflowFixes.push({ el, prev: el.style.overflow });
+    el.style.overflow = "visible";
+  }
+  // Also fix the container itself if it clips children
+  overflowFixes.push({ el: container, prev: container.style.overflow });
+  container.style.overflow = "visible";
 
   // ── Capture DOM sections
   const children = Array.from(container.children) as HTMLElement[];
@@ -576,6 +587,10 @@ export async function exportElementToPdf(
       if (unsafePattern.test(cs.backgroundColor)) el.style.backgroundColor = "transparent";
       if (unsafePattern.test(cs.color))            el.style.color            = "#0f172a";
       if (unsafePattern.test(cs.borderTopColor))   el.style.borderColor      = "#e2e8f0";
+      // Prevent text clipping in html2canvas clone
+      if (cs.overflow === "hidden" && (el.classList.contains("truncate") || el.closest("[data-fieam-surface]"))) {
+        el.style.overflow = "visible";
+      }
     }
   }
 
@@ -593,6 +608,9 @@ export async function exportElementToPdf(
 
   // ── Restore UI state
   restoreLight();
+  for (const { el, prev } of overflowFixes) {
+    el.style.overflow = prev;
+  }
   pdfOnlyEls.forEach((el) => (el.style.display = "none"));
   if (prevTheme) {
     document.documentElement.setAttribute("data-theme", prevTheme);
