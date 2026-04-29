@@ -610,7 +610,7 @@ export default function DashboardAnualPage() {
             >
                 {chartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={chartData} margin={{ top: 24, right: 24, bottom: 12, left: 0 }}>
+                        <LineChart data={chartData} margin={{ top: 32, right: 40, bottom: 12, left: 20 }}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={getGridStroke(isDark)} />
                             <XAxis
                                 dataKey="mes"
@@ -627,7 +627,7 @@ export default function DashboardAnualPage() {
                                 tick={{ fill: getAxisTickFill(isDark), fontWeight: 500 }}
                                 axisLine={false}
                                 tickLine={false}
-                                width={50}
+                                width={65}
                             />
                             <RechartsTooltip
                                 cursor={{ stroke: isDark ? 'rgba(0,159,227,0.3)' : 'rgba(0,119,204,0.3)', strokeWidth: 1, strokeDasharray: '4 4' }}
@@ -683,12 +683,27 @@ export default function DashboardAnualPage() {
                                         dataKey={canal}
                                         position="top"
                                         offset={18}
-                                        fontSize={11}
-                                        fontWeight={700}
-                                        fill={isDark ? '#ffffff' : '#0f172a'}
-                                        stroke={isDark ? '#081422' : '#ffffff'}
-                                        strokeWidth={isDark ? 4 : 3}
-                                        formatter={(value: number) => value > 500 ? value.toLocaleString('pt-BR') : ''}
+                                        content={(props: any) => {
+                                            const { x, y, value } = props;
+                                            if (!value || value <= 500) return null;
+                                            const text = (value as number).toLocaleString('pt-BR');
+                                            const adjustedX = (x as number) < 90 ? (x as number) + 36 : (x as number);
+                                            return (
+                                                <text
+                                                    x={adjustedX}
+                                                    y={(y as number) - 10}
+                                                    textAnchor="middle"
+                                                    fill={isDark ? '#ffffff' : '#0f172a'}
+                                                    fontSize={11}
+                                                    fontWeight={700}
+                                                    stroke={isDark ? '#081422' : '#ffffff'}
+                                                    strokeWidth={isDark ? 4 : 3}
+                                                    paintOrder="stroke"
+                                                >
+                                                    {text}
+                                                </text>
+                                            );
+                                        }}
                                     />
                                 </Line>
                             ))}

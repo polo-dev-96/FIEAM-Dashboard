@@ -435,20 +435,18 @@ function forceLightInlineStyles(root: HTMLElement): () => void {
     let touched = false;
     const orig = { bg: el.style.backgroundColor, color: el.style.color, borderColor: el.style.borderColor };
 
-    for (const [dark, light] of DARK_BG_MAP) {
-      if (cs.backgroundColor === dark) {
-        el.style.backgroundColor = light;
-        touched = true;
-        break;
-      }
+    // Detecta fundo escuro por luminância (cobre rgb(), rgba() com qualquer alpha e hex)
+    const parsedBg = parseColor(cs.backgroundColor);
+    if (parsedBg && luminance(parsedBg) < 100) {
+      el.style.backgroundColor = "#ffffff";
+      touched = true;
     }
 
-    for (const [dark, light] of DARK_BORDER_MAP) {
-      if (cs.borderTopColor === dark) {
-        el.style.borderColor = light;
-        touched = true;
-        break;
-      }
+    // Detecta bordas escuras por luminância
+    const parsedBorder = parseColor(cs.borderTopColor);
+    if (parsedBorder && luminance(parsedBorder) < 100) {
+      el.style.borderColor = "#e2e8f0";
+      touched = true;
     }
 
     // Force-darken any HTML text that is too light to be readable on a white background.
