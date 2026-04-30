@@ -51,6 +51,13 @@ const sectionLabels: Record<NavSection, string> = {
   administracao: "Administração",
 };
 
+const sectionIcons: Record<NavSection, LucideIcon> = {
+  dashboards: LayoutDashboard,
+  consultas: Search,
+  inteligencia: Brain,
+  administracao: UserCog,
+};
+
 function initialsFromEmail(email?: string) {
   if (!email) return "FI";
   const name = email.split("@")[0]?.replace(/[._-]+/g, " ").trim();
@@ -70,7 +77,9 @@ export function Sidebar() {
     dashboards: true,
     consultas: true,
     inteligencia: true,
+    administracao: true,
   });
+  const [hoveredSection, setHoveredSection] = useState<string | null>(null);
   const { collapsed, toggle } = useSidebar();
   const { logout, canAccess, user } = useAuth();
   const { isDark, toggleTheme } = useTheme();
@@ -141,13 +150,18 @@ export function Sidebar() {
 
           </div>
 
-          <nav className={cn("flex-1 overflow-y-auto", collapsed ? "px-2 py-4" : "px-3 py-4")}>
+          <nav className={cn("flex-1", collapsed ? "overflow-visible px-2 py-4" : "overflow-y-auto px-3 py-4")}>
             {sections.map((group) => {
               const isGroupOpen = collapsed || expandedSections[group.section];
               const hasActiveItem = group.items.some((item) => item.href === location);
 
               return (
-                <div key={group.section} className={cn("last:mb-0", collapsed ? "mb-3" : "mb-4")}>
+                <div
+                  key={group.section}
+                  className={cn("last:mb-0", collapsed ? "relative mb-3" : "mb-4")}
+                  onMouseEnter={() => collapsed && setHoveredSection(group.section)}
+                  onMouseLeave={() => setHoveredSection(null)}
+                >
                   {!collapsed ? (
                     <button
                       type="button"
@@ -187,44 +201,104 @@ export function Sidebar() {
                     <div className="mx-auto mb-2 h-px w-8 bg-gradient-to-r from-transparent via-ds-default to-transparent" />
                   )}
 
-                  <div
-                    className={cn(
-                      "grid transition-[grid-template-rows,opacity] duration-300 ease-out",
-                      isGroupOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
-                    )}
-                  >
-                    <div className="min-h-0 overflow-hidden">
+                  {/* Hover mini-menu when sidebar is collapsed */}
+                  {collapsed && hoveredSection === group.section && (
+                    <div
+                      className={cn(
+                        "absolute left-full top-0 z-50 ml-2 w-56 rounded-xl border p-3 shadow-xl backdrop-blur-xl",
+                        isDark
+                          ? "border-white/10 bg-[#071A2E]/95 text-white"
+                          : "border-slate-200 bg-white/95 text-slate-900"
+                      )}
+                    >
+                      <div className="mb-2 flex items-center gap-2 border-b pb-2 text-[10px] font-extrabold uppercase tracking-[0.18em] opacity-70">
+                        <span className="h-1.5 w-1.5 rounded-full bg-[var(--ds-accent)]" />
+                        {group.label}
+                      </div>
                       <div className="space-y-1">
                         {group.items.map((item) => {
                           const isActive = location === item.href;
                           const ItemIcon = item.icon;
-
                           return (
                             <Link key={item.href} href={item.href} className="block" onClick={() => setIsOpen(false)}>
                               <div
                                 className={cn(
-                                  "group relative flex items-center rounded-2xl transition-all duration-200",
-                                  collapsed ? "justify-center px-2 py-2.5" : "gap-3 px-3 py-2.5",
+                                  "flex items-center gap-2.5 rounded-xl px-2 py-2 transition-colors",
                                   isActive
-                                    ? "bg-[var(--ds-accent)] text-white shadow-[0_12px_30px_rgba(0,159,227,.22)]"
-                                    : "text-ds-secondary hover:bg-[var(--ds-accent-muted)] hover:text-ds-primary"
+                                    ? "bg-[var(--ds-accent)] text-white"
+                                    : "hover:bg-[var(--ds-accent-muted)] hover:text-ds-primary"
                                 )}
-                                title={collapsed ? item.label : undefined}
                               >
-                                <span
+                                <ItemIcon className="h-4 w-4 shrink-0" strokeWidth={1.85} />
+                                <div className="min-w-0">
+                                  <span className={cn("block truncate text-[13px] font-bold", isActive ? "font-extrabold" : "")}>
+                                    {item.label}
+                                  </span>
+                                  <span className={cn("block truncate text-[10px]", isActive ? "text-white/70" : "opacity-60")}>
+                                    {item.description}
+                                  </span>
+                                </div>
+                              </div>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {collapsed ? (
+                    <div className="flex justify-center py-1">
+                      <span
+                        className={cn(
+                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors",
+                          hasActiveItem
+                            ? "bg-[var(--ds-accent)] text-white shadow-[0_8px_20px_rgba(0,159,227,.25)]"
+                            : isDark
+                              ? "bg-white/[0.06] text-ds-tertiary"
+                              : "bg-slate-100 text-slate-500"
+                        )}
+                      >
+                        {(() => {
+                          const SectionIcon = sectionIcons[group.section];
+                          return <SectionIcon className="h-4 w-4" strokeWidth={1.85} />;
+                        })()}
+                      </span>
+                    </div>
+                  ) : (
+                    <div
+                      className={cn(
+                        "grid transition-[grid-template-rows,opacity] duration-300 ease-out",
+                        isGroupOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                      )}
+                    >
+                      <div className="min-h-0 overflow-hidden">
+                        <div className="space-y-1">
+                          {group.items.map((item) => {
+                            const isActive = location === item.href;
+                            const ItemIcon = item.icon;
+
+                            return (
+                              <Link key={item.href} href={item.href} className="block" onClick={() => setIsOpen(false)}>
+                                <div
                                   className={cn(
-                                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors",
+                                    "group relative flex items-center gap-3 rounded-2xl px-3 py-2.5 transition-all duration-200",
                                     isActive
-                                      ? "bg-white/[0.16] text-white"
-                                      : isDark
-                                        ? "bg-white/[0.045] text-ds-tertiary group-hover:text-[var(--ds-accent)]"
-                                        : "bg-slate-100 text-slate-500 group-hover:text-[var(--ds-accent)]"
+                                      ? "bg-[var(--ds-accent)] text-white shadow-[0_12px_30px_rgba(0,159,227,.22)]"
+                                      : "text-ds-secondary hover:bg-[var(--ds-accent-muted)] hover:text-ds-primary"
                                   )}
                                 >
-                                  <ItemIcon className="h-4 w-4" strokeWidth={1.85} />
-                                </span>
-
-                                {!collapsed && (
+                                  <span
+                                    className={cn(
+                                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors",
+                                      isActive
+                                        ? "bg-white/[0.16] text-white"
+                                        : isDark
+                                          ? "bg-white/[0.045] text-ds-tertiary group-hover:text-[var(--ds-accent)]"
+                                          : "bg-slate-100 text-slate-500 group-hover:text-[var(--ds-accent)]"
+                                    )}
+                                  >
+                                    <ItemIcon className="h-4 w-4" strokeWidth={1.85} />
+                                  </span>
                                   <span className="min-w-0 flex-1">
                                     <span className={cn("block truncate text-[13px]", isActive ? "font-extrabold" : "font-bold")}>
                                       {item.label}
@@ -233,14 +307,14 @@ export function Sidebar() {
                                       {item.description}
                                     </span>
                                   </span>
-                                )}
-                              </div>
-                            </Link>
-                          );
-                        })}
+                                </div>
+                              </Link>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               );
             })}

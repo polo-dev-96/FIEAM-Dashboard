@@ -59,10 +59,11 @@ const SidebarContext = createContext<SidebarContextType>({
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
     const [collapsed, setCollapsed] = useState(() => {
         try {
-            // Lê a preferência salva: "true" → colapsada, "false"/null → expandida
-            return localStorage.getItem("sidebar-collapsed") === "true";
+            // Lê a preferência salva: "false" → expandida, "true"/null → colapsada (padrão)
+            const saved = localStorage.getItem("sidebar-collapsed");
+            return saved === null ? true : saved === "true";
         } catch {
-            return false; // fallback se localStorage não estiver disponível
+            return true; // fallback: colapsada por padrão
         }
     });
 
