@@ -66,6 +66,11 @@ const COLORS = CHART_COLORS;
 
 const MIN_DATE = "2026-04-13";
 
+// Remove prefixos PATROCINADO_ e CAMPANHA_ dos nomes para exibição
+function cleanNome(nome: string): string {
+  return nome.replace(/^(PATROCINADO|CAMPANHA)_/, "");
+}
+
 function getDefaultDates() {
   const now = new Date();
   const monthStart = format(startOfMonth(now), "yyyy-MM-dd");
@@ -379,7 +384,10 @@ function RankingChart({ title, subtitle, icon, data, colorOffset, isDark, color,
             tick={{ fill: getAxisTickFill(isDark), fontSize: 12, fontWeight: 500 }}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(v: string) => v.length > 38 ? v.slice(0, 38) + '…' : v}
+            tickFormatter={(v: string) => {
+              const cleaned = cleanNome(v);
+              return cleaned.length > 38 ? cleaned.slice(0, 38) + '…' : cleaned;
+            }}
           />
           <RechartsTooltip
             cursor={{ fill: isDark ? 'rgba(0,159,227,0.06)' : 'rgba(0,159,227,0.04)' }}
