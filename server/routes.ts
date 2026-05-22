@@ -1580,5 +1580,113 @@ export async function registerRoutes(
     }
   });
 
+  /*
+   * GET /api/patrocinados-clientes — Atendimentos individuais de um patrocinado/campanha
+   * -------------------------------------------------------
+   * Retorna os atendimentos (deduplicados por protocolo) de um item específico
+   * do ranking de patrocinados/campanhas para exibir no drawer lateral.
+   *
+   * Query params:
+   *   variaveis  — valor exato do campo `variaveis` (PATROCINADO_... ou CAMPANHA_...)
+   *   tipo       — 'patrocinado' | 'campanha' | 'outros'
+   *   startDate  — data inicial (YYYY-MM-DD)
+   *   endDate    — data final (YYYY-MM-DD)
+   *   page       — página (default 1, 20 registros por página)
+   */
+  app.get("/api/patrocinados-clientes", async (req, res) => {
+    try {
+      const conn = await pool.getConnection();
+      try {
+        const { variaveis, tipo, startDate, endDate, page } = req.query;
+        const pageNum = Math.max(1, parseInt(String(page || "1"), 10));
+        const limit = 20;
+        const offset = (pageNum - 1) * limit;
+
+        if (!variaveis) {
+          conn.release();
+          return res.status(400).json({ message: "Parâmetro 'variaveis' é obrigatório" });
+        }
+
+        const baseCondition = `
+          \`data e hora de fim\` IS NOT NULL
+          AND DATE(\`data e hora de fim\`) > '2026-04-12'
+          AND patrocinados IS NOT NULL AND TRIM(patrocinados) != '' AND TRIM(patrocinados) != 'false'
+          AND variaveis IS NOT NULL AND TRIM(variaveis) != '' AND TRIM(variaveis) != 'false'
+        `;
+
+        const params: (string | number)[] = [];
+        let itemCondition = "";
+
+        if (tipo === "outros") {
+          // Para "outros": filtra por patrocinados e exclui PATROCINADO/CAMPANHA
+          itemCondition = `AND TRIM(patrocinados) = ?
+            AND UPPER(TRIM(variaveis)) NOT LIKE 'PATROCINADO%'
+            AND UPPER(TRIM(variaveis)) NOT LIKE 'CAMPANHA%'`;
+          params.push(String(variaveis));
+        } else {
+          // Para patrocinado/campanha: filtra exatamente pelo campo variaveis
+          itemCondition = `AND TRIM(variaveis) = ?`;
+          params.push(String(variaveis));
+        }
+
+        let dateFilter = "";
+        const dateParams: string[] = [];
+        if (startDate && endDate) {
+          dateFilter = `AND DATE(\`data e hora de fim\`) >= ? AND DATE(\`data e hora de fim\`) <= ?`;
+          dateParams.push(String(startDate), String(endDate));
+        }
+
+        const allParams = [...params, ...dateParams];
+
+        // Conta total de registros distintos por protocolo
+        const [countRows] = await conn.query<RowDataPacket[]>(`
+          SELECT COUNT(DISTINCT protocolo) AS total
+          FROM \`${TABLE_NAME}\`
+          WHERE ${baseCondition}
+            ${itemCondition}
+            ${dateFilter}
+        `, allParams);
+
+        const totalCount = countRows[0]?.total || 0;
+
+        // Busca registros deduplicados (max id por protocolo)
+        const [rows] = await conn.query<RowDataPacket[]>(`
+          SELECT
+            t.protocolo,
+            t.contato,
+            t.identificador,
+            t.canal,
+            t.\`data e hora de fim\` AS dataHoraFim
+          FROM \`${TABLE_NAME}\` t
+          INNER JOIN (
+            SELECT MAX(id) AS max_id
+            FROM \`${TABLE_NAME}\`
+            WHERE ${baseCondition}
+              ${itemCondition}
+              ${dateFilter}
+            GROUP BY protocolo
+          ) sub ON t.id = sub.max_id
+          ORDER BY t.\`data e hora de fim\` DESC
+          LIMIT ? OFFSET ?
+        `, [...allParams, limit, offset]);
+
+        conn.release();
+
+        res.json({
+          total: totalCount,
+          page: pageNum,
+          totalPages: Math.ceil(totalCount / limit),
+          items: rows,
+        });
+      } catch (queryErr) {
+        conn.release();
+        throw queryErr;
+      }
+    } catch (error) {
+      console.error("Erro ao buscar clientes patrocinados:", error);
+      res.status(500).json({ message: "Erro ao buscar atendimentos" });
+    }
+  });
+
   return httpServer;
 }

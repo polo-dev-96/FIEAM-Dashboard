@@ -50,6 +50,7 @@ import { KpiCard } from "@/components/ui/kpi-card";
 import { ChartCard } from "@/components/ui/chart-card";
 import { FilterToolbar } from "@/components/ui/filter-toolbar";
 import { CHART_COLORS, getGridStroke, getAxisTickFill, barGradientDefs, getBarGradient, PremiumTooltip } from "@/lib/chart-utils";
+import { PatrocinadosDrawer, type SelectedPatrocinado } from "@/components/ui/PatrocinadosDrawer";
 
 interface PatrocinadosStats {
   totalPatrocinados: number;
@@ -85,6 +86,7 @@ export default function DashboardPatrocinadosPage() {
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [countdown, setCountdown] = useState(60);
   const [dateRange, setDateRange] = useState(getDefaultDates);
+  const [selectedItem, setSelectedItem] = useState<SelectedPatrocinado | null>(null);
 
   const { data: stats, isLoading, refetch } = useQuery<PatrocinadosStats>({
     queryKey: ["patrocinados-stats", dateRange.startDate, dateRange.endDate],
@@ -237,6 +239,8 @@ export default function DashboardPatrocinadosPage() {
           isDark={isDark}
           color="blue"
           gradientId="patro"
+          tipo="patrocinado"
+          onBarClick={(nome, total) => setSelectedItem({ nome, tipo: "patrocinado", total })}
         />
 
         <RankingChart
@@ -248,6 +252,8 @@ export default function DashboardPatrocinadosPage() {
           isDark={isDark}
           color="green"
           gradientId="camp"
+          tipo="campanha"
+          onBarClick={(nome, total) => setSelectedItem({ nome, tipo: "campanha", total })}
         />
 
         {(stats?.rankingOutros?.length || 0) > 0 && (
@@ -260,9 +266,17 @@ export default function DashboardPatrocinadosPage() {
             isDark={isDark}
             color="amber"
             gradientId="outros"
+            tipo="outros"
+            onBarClick={(nome, total) => setSelectedItem({ nome, tipo: "outros", total })}
           />
         )}
       </div>
+
+      <PatrocinadosDrawer
+        selected={selectedItem}
+        dateRange={dateRange}
+        onClose={() => setSelectedItem(null)}
+      />
     </Layout>
   );
 }
@@ -318,7 +332,7 @@ function StatCard({ title, value, icon, color, isDark }: {
   );
 }
 
-function RankingChart({ title, subtitle, icon, data, colorOffset, isDark, color, gradientId }: {
+function RankingChart({ title, subtitle, icon, data, colorOffset, isDark, color, gradientId, tipo, onBarClick }: {
   title: string;
   subtitle: string;
   icon: React.ReactNode;
@@ -327,6 +341,8 @@ function RankingChart({ title, subtitle, icon, data, colorOffset, isDark, color,
   isDark: boolean;
   color: "blue" | "green" | "amber";
   gradientId: string;
+  tipo: "patrocinado" | "campanha" | "outros";
+  onBarClick: (nome: string, total: number) => void;
 }) {
   const accentMap = { blue: "blue", green: "green", amber: "orange" } as const;
   const totalSum = data.reduce((acc, d) => acc + d.total, 0);
@@ -393,7 +409,9 @@ function RankingChart({ title, subtitle, icon, data, colorOffset, isDark, color,
             cursor={{ fill: isDark ? 'rgba(0,159,227,0.06)' : 'rgba(0,159,227,0.04)' }}
             content={<PremiumTooltip isDark={isDark} valueLabel="Atendimentos" />}
           />
-          <Bar dataKey="total" radius={[0, 8, 8, 0]} barSize={30} animationDuration={900}>
+          <Bar dataKey="total" radius={[0, 8, 8, 0]} barSize={30} animationDuration={900} style={{ cursor: "pointer" }}
+            onClick={(barData: any) => { if (barData?.nome) onBarClick(barData.nome, barData.total); }}
+          >
             {data.map((_, index) => (
               <Cell
                 key={`cell-${index}`}
