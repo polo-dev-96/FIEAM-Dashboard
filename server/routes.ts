@@ -1581,6 +1581,128 @@ export async function registerRoutes(
   });
 
   /*
+   * GET /api/patrocinados-export-xlsx — Exporta todos os atendimentos de um patrocinado/campanha como XLSX
+   * -------------------------------------------------------
+   * Mesma lógica de filtro de /api/patrocinados-clientes, mas sem paginação.
+   * Retorna um arquivo .xlsx para download.
+   *
+   * Query params: variaveis, tipo, startDate, endDate
+   */
+  app.get("/api/patrocinados-export-xlsx", async (req, res) => {
+    try {
+      const conn = await pool.getConnection();
+      try {
+        const { variaveis, tipo, startDate, endDate } = req.query;
+
+        if (!variaveis) {
+          conn.release();
+          return res.status(400).json({ message: "Parâmetro 'variaveis' é obrigatório" });
+        }
+
+        const baseCondition = `
+          \`data e hora de fim\` IS NOT NULL
+          AND DATE(\`data e hora de fim\`) > '2026-04-12'
+          AND patrocinados IS NOT NULL AND TRIM(patrocinados) != '' AND TRIM(patrocinados) != 'false'
+          AND variaveis IS NOT NULL AND TRIM(variaveis) != '' AND TRIM(variaveis) != 'false'
+        `;
+
+        const params: (string | number)[] = [];
+        let itemCondition = "";
+
+        if (tipo === "outros") {
+          itemCondition = `AND TRIM(patrocinados) = ?
+            AND UPPER(TRIM(variaveis)) NOT LIKE 'PATROCINADO%'
+            AND UPPER(TRIM(variaveis)) NOT LIKE 'CAMPANHA%'`;
+          params.push(String(variaveis));
+        } else {
+          itemCondition = `AND TRIM(variaveis) = ?`;
+          params.push(String(variaveis));
+        }
+
+        let dateFilter = "";
+        const dateParams: string[] = [];
+        if (startDate && endDate) {
+          dateFilter = `AND DATE(\`data e hora de fim\`) >= ? AND DATE(\`data e hora de fim\`) <= ?`;
+          dateParams.push(String(startDate), String(endDate));
+        }
+
+        const allParams = [...params, ...dateParams];
+
+        const [rows] = await conn.query<RowDataPacket[]>(`
+          SELECT
+            t.protocolo,
+            t.contato,
+            t.identificador,
+            t.canal,
+            t.\`data e hora de fim\` AS dataHoraFim
+          FROM \`${TABLE_NAME}\` t
+          INNER JOIN (
+            SELECT MAX(id) AS max_id
+            FROM \`${TABLE_NAME}\`
+            WHERE ${baseCondition}
+              ${itemCondition}
+              ${dateFilter}
+            GROUP BY protocolo
+          ) sub ON t.id = sub.max_id
+          ORDER BY t.\`data e hora de fim\` DESC
+        `, allParams);
+
+        conn.release();
+
+        const nomeClean = String(variaveis).replace(/^(PATROCINADO|CAMPANHA)_/i, "").replace(/[^a-zA-Z0-9_\-]/g, "_");
+
+        const workbook = new ExcelJS.Workbook();
+        workbook.creator = "FIEAM Dashboard";
+        workbook.created = new Date();
+
+        const sheet = workbook.addWorksheet("Atendimentos");
+
+        sheet.columns = [
+          { header: "Contato", key: "contato", width: 28 },
+          { header: "Número", key: "numero", width: 20 },
+          { header: "Protocolo", key: "protocolo", width: 18 },
+          { header: "Canal", key: "canal", width: 22 },
+          { header: "Data/Hora Fim", key: "dataHoraFim", width: 22 },
+        ];
+
+        const headerRow = sheet.getRow(1);
+        headerRow.eachCell((cell) => {
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0077C0" } };
+          cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+          cell.alignment = { vertical: "middle", horizontal: "center" };
+          cell.border = { bottom: { style: "thin", color: { argb: "FF003366" } } };
+        });
+        headerRow.height = 28;
+
+        for (const row of rows) {
+          const nomeContato = row.contato && row.contato !== "false" ? row.contato : "";
+          sheet.addRow({
+            contato: nomeContato || row.identificador || "",
+            numero: row.identificador || "",
+            protocolo: row.protocolo || "",
+            canal: row.canal || "",
+            dataHoraFim: row.dataHoraFim ? new Date(row.dataHoraFim).toLocaleString("pt-BR") : "",
+          });
+        }
+
+        sheet.autoFilter = { from: "A1", to: `E${rows.length + 1}` };
+
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        res.setHeader("Content-Disposition", `attachment; filename="atendimentos_${nomeClean}_${startDate || "all"}_${endDate || "all"}.xlsx"`);
+
+        await workbook.xlsx.write(res);
+        res.end();
+      } catch (queryErr) {
+        conn.release();
+        throw queryErr;
+      }
+    } catch (error) {
+      console.error("Erro ao exportar XLSX patrocinados:", error);
+      res.status(500).json({ message: "Erro ao exportar XLSX" });
+    }
+  });
+
+  /*
    * GET /api/patrocinados-clientes — Atendimentos individuais de um patrocinado/campanha
    * -------------------------------------------------------
    * Retorna os atendimentos (deduplicados por protocolo) de um item específico

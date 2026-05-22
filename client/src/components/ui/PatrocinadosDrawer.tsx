@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { useQuery } from "@tanstack/react-query";
-import { X, Loader2, Users, ChevronLeft, ChevronRight, Megaphone, Tag, MoreHorizontal, Hash } from "lucide-react";
+import { X, Loader2, Users, ChevronLeft, ChevronRight, Megaphone, Tag, MoreHorizontal, Hash, Download } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -122,7 +122,7 @@ export function PatrocinadosDrawer({ selected, dateRange, onClose }: Patrocinado
         {/* Drawer panel */}
         <DialogPrimitive.Content
           className={cn(
-            "fixed right-0 top-0 z-50 h-full w-full max-w-[520px] flex flex-col",
+            "fixed right-0 top-0 z-50 h-full w-full max-w-[640px] flex flex-col",
             "border-l shadow-2xl outline-none",
             "transition-transform duration-300",
             "data-[state=open]:animate-in data-[state=closed]:animate-out",
@@ -161,6 +161,23 @@ export function PatrocinadosDrawer({ selected, dateRange, onClose }: Patrocinado
                 )}
               </p>
             </div>
+            {/* Export XLSX */}
+            {selected && (
+              <a
+                href={`/api/patrocinados-export-xlsx?variaveis=${encodeURIComponent(selected.nome)}&tipo=${selected.tipo}&startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`}
+                download
+                title="Baixar em Excel (.xlsx)"
+                className={cn(
+                  "flex items-center justify-center w-8 h-8 rounded-lg transition-colors shrink-0",
+                  isDark
+                    ? "text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300"
+                    : "text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
+                )}
+              >
+                <Download className="w-4 h-4" />
+              </a>
+            )}
+
             <DialogPrimitive.Close
               className={cn(
                 "flex items-center justify-center w-8 h-8 rounded-lg transition-colors shrink-0",
@@ -203,12 +220,13 @@ export function PatrocinadosDrawer({ selected, dateRange, onClose }: Patrocinado
 
                 {/* Table header */}
                 <div className={cn(
-                  "grid grid-cols-[minmax(0,1fr)_130px_130px_90px] gap-x-3 px-5 py-2.5 text-[10px] font-bold uppercase tracking-wider border-b sticky top-0 z-10 items-center",
+                  "grid grid-cols-[minmax(0,1fr)_120px_130px_120px_88px] gap-x-2 px-5 py-2.5 text-[10px] font-bold uppercase tracking-wider border-b sticky top-0 z-10 items-center",
                   isDark
                     ? "text-gray-500 border-[#1E3A5F]/40 bg-[#061524]"
                     : "text-gray-400 border-slate-100 bg-white"
                 )}>
                   <span>Contato</span>
+                  <span>Número</span>
                   <span>Protocolo</span>
                   <span>Canal</span>
                   <span className="text-right">Data/Hora</span>
@@ -220,7 +238,7 @@ export function PatrocinadosDrawer({ selected, dateRange, onClose }: Patrocinado
                     <div
                       key={`${item.protocolo}-${idx}`}
                       className={cn(
-                        "grid grid-cols-[minmax(0,1fr)_130px_130px_90px] gap-x-3 px-5 py-3 text-[12px] transition-colors items-center",
+                        "grid grid-cols-[minmax(0,1fr)_120px_130px_120px_88px] gap-x-2 px-5 py-3 text-[12px] transition-colors items-center",
                         isDark
                           ? "hover:bg-[#0C2135]/80 border-[#1E3A5F]/20"
                           : "hover:bg-slate-50 border-slate-100"
@@ -229,7 +247,14 @@ export function PatrocinadosDrawer({ selected, dateRange, onClose }: Patrocinado
                       {/* Contato */}
                       <div className="min-w-0">
                         <p className={cn("font-semibold truncate", isDark ? "text-gray-200" : "text-gray-800")}>
-                          {(item.contato && item.contato !== "false" ? item.contato : null) || item.identificador || "—"}
+                          {(item.contato && item.contato !== "false") ? item.contato : "—"}
+                        </p>
+                      </div>
+
+                      {/* Número */}
+                      <div className="min-w-0">
+                        <p className={cn("font-mono text-[11px] truncate", isDark ? "text-gray-400" : "text-gray-500")}>
+                          {item.identificador || "—"}
                         </p>
                       </div>
 
