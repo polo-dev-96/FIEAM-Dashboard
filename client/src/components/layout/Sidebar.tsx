@@ -35,7 +35,7 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { href: "/", label: "Visão Geral", description: "Resumo executivo em tempo real", icon: LayoutDashboard, section: "dashboards" },
+  { href: "/", label: "Visão Geral Entrada Via Contact Center", description: "Resumo executivo em tempo real", icon: LayoutDashboard, section: "dashboards" },
   { href: "/anual", label: "Dashboard SAC", description: "Indicadores consolidados do SAC", icon: CalendarRange, section: "dashboards" },
   { href: "/patrocinados", label: "Patrocinados", description: "Canais e origens patrocinadas", icon: Users, section: "dashboards" },
   { href: "/protocolo", label: "Pesquisar Protocolo", description: "Consulta rápida por protocolo", icon: Search, section: "consultas" },

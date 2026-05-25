@@ -507,7 +507,7 @@ export default function OverviewPage() {
 
   if (isLoading) {
     return (
-      <Layout title="Visão Geral" subtitle="Dashboard de atendimentos em tempo real">
+      <Layout title="Visão Geral Entrada Via Contact Center" subtitle="Dashboard de atendimentos em tempo real">
         <div className="flex items-center justify-center h-[60vh]">
           <div className="flex flex-col items-center gap-3">
             <div className="w-8 h-8 border-[3px] border-[var(--ds-accent)]/20 border-t-[var(--ds-accent)] rounded-full animate-spin" />
@@ -520,7 +520,7 @@ export default function OverviewPage() {
 
   if (!stats) {
     return (
-      <Layout title="Visão Geral" subtitle="Dashboard de atendimentos em tempo real">
+      <Layout title="Visão Geral Entrada Via Contact Center" subtitle="Dashboard de atendimentos em tempo real">
         <div className="flex items-center justify-center h-[60vh]">
           <p className="text-sm text-ds-tertiary">Nenhum dado disponível. Verifique a conexão com o banco de dados.</p>
         </div>
@@ -529,10 +529,10 @@ export default function OverviewPage() {
   }
 
   return (
-      <Layout title="Visão Geral" subtitle="Dashboard de atendimentos em tempo real">
+      <Layout title="Visão Geral Entrada Via Contact Center" subtitle="Dashboard de atendimentos em tempo real">
       {/* Filter Toolbar */}
       <FilterToolbar
-        title="Visão Geral em Tempo Real"
+        title="Visão Geral Entrada Via Contact Center em Tempo Real"
         showLiveIndicator
         statusText={`Atualização: ${format(lastUpdated, "HH:mm:ss", { locale: ptBR })} · Próxima em ${countdown}s`}
         isDark={isDark}
@@ -640,7 +640,7 @@ export default function OverviewPage() {
               <ExportReportDialog
                 selectedCasas={selectedCasas}
                 contentRef={contentRef}
-                pdfTitle="Visão Geral - Dashboard FIEAM"
+                pdfTitle="Visão Geral Entrada Via Contact Center - Dashboard FIEAM"
                 startDate={dateRange.startDate}
                 endDate={dateRange.endDate}
                 pdfSubtitle={
