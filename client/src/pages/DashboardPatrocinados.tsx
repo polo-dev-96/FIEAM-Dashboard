@@ -57,7 +57,7 @@ interface PatrocinadosStats {
   totalCampanhas: number;
   totalOutros: number;
   rankingPatrocinados: Array<{ nome: string; total: number }>;
-  rankingCampanhas: Array<{ nome: string; total: number }>;
+  rankingCampanhas: Array<{ nome: string; total: number; totalDisparadas?: number }>;
   rankingOutros: Array<{ nome: string; total: number }>;
 }
 
@@ -244,7 +244,7 @@ export default function DashboardPatrocinadosPage() {
         />
 
         <RankingChart
-          title="Ranking de Campanhas"
+          title="Ranking de Campanhas/Disparados em Lote"
           subtitle="Por quantidade de atendimentos"
           icon={<Megaphone className="w-5 h-5" />}
           data={stats?.rankingCampanhas || []}
@@ -332,11 +332,40 @@ function StatCard({ title, value, icon, color, isDark }: {
   );
 }
 
+function CampaignProgressTooltip({ active, payload, isDark }: any) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0]?.payload;
+  if (!d) return null;
+  return (
+    <div className={cn(
+      "rounded-xl border px-3 py-2.5 text-xs shadow-xl",
+      isDark ? "border-white/10 bg-[#0d1f35] text-white" : "border-slate-200 bg-white text-slate-800"
+    )}>
+      <p className="font-bold mb-1.5 max-w-[220px] truncate">{cleanNome(d.nome)}</p>
+      <div className="space-y-0.5">
+        <p className={isDark ? "text-white/60" : "text-slate-500"}>
+          Respondidas: <span className="font-bold text-emerald-400">{d.total.toLocaleString("pt-BR")}</span>
+        </p>
+        {d.totalDisparadas > 0 && (
+          <>
+            <p className={isDark ? "text-white/60" : "text-slate-500"}>
+              Disparadas: <span className={cn("font-bold", isDark ? "text-white" : "text-slate-700")}>{d.totalDisparadas.toLocaleString("pt-BR")}</span>
+            </p>
+            <p className={isDark ? "text-white/60" : "text-slate-500"}>
+              Taxa de resposta: <span className="font-bold text-[var(--ds-accent)]">{d.pct}%</span>
+            </p>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function RankingChart({ title, subtitle, icon, data, colorOffset, isDark, color, gradientId, tipo, onBarClick }: {
   title: string;
   subtitle: string;
   icon: React.ReactNode;
-  data: Array<{ nome: string; total: number }>;
+  data: Array<{ nome: string; total: number; totalDisparadas?: number }>;
   colorOffset: number;
   isDark: boolean;
   color: "blue" | "green" | "amber";
@@ -346,6 +375,18 @@ function RankingChart({ title, subtitle, icon, data, colorOffset, isDark, color,
 }) {
   const accentMap = { blue: "blue", green: "green", amber: "orange" } as const;
   const totalSum = data.reduce((acc, d) => acc + d.total, 0);
+
+  // Progress-bar mode: active when tipo=campanha and at least one item has disparadas data
+  const hasDisparadas = tipo === "campanha" && data.some(d => (d.totalDisparadas ?? 0) > 0);
+
+  const chartData = hasDisparadas
+    ? data.map(d => {
+        const disp = d.totalDisparadas ?? 0;
+        const gap = Math.max(0, disp - d.total);
+        const pct = disp > 0 ? Math.round(d.total / disp * 1000) / 10 : null;
+        return { nome: d.nome, total: d.total, totalDisparadas: disp, gap, pct };
+      })
+    : data.map(d => ({ nome: d.nome, total: d.total, totalDisparadas: 0, gap: 0, pct: null }));
 
   if (data.length === 0) {
     return (
@@ -364,6 +405,8 @@ function RankingChart({ title, subtitle, icon, data, colorOffset, isDark, color,
   }
 
   const chartHeight = Math.max(260, data.length * 46 + 60);
+  // Extra right margin when we show the combined "count (pct%)" label
+  const rightMargin = hasDisparadas ? 110 : 70;
 
   return (
     <ChartCard
@@ -373,18 +416,34 @@ function RankingChart({ title, subtitle, icon, data, colorOffset, isDark, color,
       badge={subtitle}
       isDark={isDark}
       actions={
-        <span className="text-[11px] text-ds-tertiary font-medium tabular-nums">
-          {totalSum.toLocaleString("pt-BR")} <span className="text-ds-tertiary/70">total</span>
-        </span>
+        <div className="flex items-center gap-3">
+          {hasDisparadas && (
+            <div className="flex items-center gap-2 text-[10px] font-medium">
+              <span className="flex items-center gap-1">
+                <span className="inline-block h-2 w-2 rounded-sm bg-emerald-500" />
+                <span className={isDark ? "text-white/50" : "text-slate-500"}>Respondidas</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <span className={cn("inline-block h-2 w-2 rounded-sm", isDark ? "bg-emerald-500/25" : "bg-emerald-200")} />
+                <span className={isDark ? "text-white/50" : "text-slate-500"}>Não respondidas</span>
+              </span>
+            </div>
+          )}
+        </div>
       }
       height={chartHeight}
     >
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
-          data={data}
+          data={chartData}
           layout="vertical"
-          margin={{ left: 10, right: 70, top: 8, bottom: 8 }}
+          margin={{ left: 10, right: rightMargin, top: 8, bottom: 8 }}
           barCategoryGap={8}
+          style={{ cursor: "pointer" }}
+          onClick={(chartState: any) => {
+            const payload = chartState?.activePayload?.[0]?.payload;
+            if (payload?.nome) onBarClick(payload.nome, payload.total);
+          }}
         >
           <defs>{barGradientDefs(gradientId)}</defs>
           <CartesianGrid
@@ -392,7 +451,7 @@ function RankingChart({ title, subtitle, icon, data, colorOffset, isDark, color,
             stroke={getGridStroke(isDark)}
             horizontal={false}
           />
-          <XAxis type="number" hide />
+          <XAxis type="number" hide domain={hasDisparadas ? [0, 'dataMax'] : undefined} />
           <YAxis
             type="category"
             dataKey="nome"
@@ -407,27 +466,85 @@ function RankingChart({ title, subtitle, icon, data, colorOffset, isDark, color,
           />
           <RechartsTooltip
             cursor={{ fill: isDark ? 'rgba(0,159,227,0.06)' : 'rgba(0,159,227,0.04)' }}
-            content={<PremiumTooltip isDark={isDark} valueLabel="Atendimentos" />}
+            content={hasDisparadas
+              ? <CampaignProgressTooltip isDark={isDark} />
+              : <PremiumTooltip isDark={isDark} valueLabel="Atendimentos" />}
           />
-          <Bar dataKey="total" radius={[0, 8, 8, 0]} barSize={30} animationDuration={900} style={{ cursor: "pointer" }}
-            onClick={(barData: any) => { if (barData?.nome) onBarClick(barData.nome, barData.total); }}
-          >
-            {data.map((_, index) => (
-              <Cell
-                key={`cell-${index}`}
-                fill={getBarGradient(gradientId, index + colorOffset)}
-              />
-            ))}
-            <LabelList
+
+          {hasDisparadas ? (
+            <>
+              {/* Bar 1: respondidas (bright accent color) */}
+              <Bar
+                dataKey="total"
+                stackId="camp"
+                radius={[0, 0, 0, 0]}
+                barSize={30}
+                animationDuration={700}
+                style={{ cursor: "pointer" }}
+                onClick={(barData: any) => { if (barData?.nome) onBarClick(barData.nome, barData.total); }}
+              >
+                {chartData.map((_, index) => (
+                  <Cell key={`cell-${index}`} fill={getBarGradient(gradientId, index + colorOffset)} />
+                ))}
+              </Bar>
+              {/* Bar 2: gap / not responded (muted background) — right edge of this bar is full bar end */}
+              <Bar
+                dataKey="gap"
+                stackId="camp"
+                radius={[0, 8, 8, 0]}
+                barSize={30}
+                fill={isDark ? "rgba(0,166,80,0.2)" : "rgba(0,166,80,0.15)"}
+                animationDuration={900}
+                style={{ cursor: "pointer" }}
+                onClick={(barData: any) => { if (barData?.nome) onBarClick(barData.nome, barData.total); }}
+              >
+                <LabelList
+                  position="right"
+                  content={(props: any) => {
+                    const { x, y, width, height, index } = props;
+                    const entry = chartData[index];
+                    if (!entry) return null;
+                    const countText = (entry.totalDisparadas > 0 ? entry.totalDisparadas : entry.total).toLocaleString("pt-BR");
+                    const pctText = entry.pct != null ? ` · ${entry.pct}%` : "";
+                    return (
+                      <text
+                        x={x + width + 10}
+                        y={y + height / 2}
+                        dominantBaseline="middle"
+                        fill={isDark ? "#E2E8F0" : "#334155"}
+                        fontSize={12}
+                        fontWeight={700}
+                      >
+                        {countText}{pctText}
+                      </text>
+                    );
+                  }}
+                />
+              </Bar>
+            </>
+          ) : (
+            <Bar
               dataKey="total"
-              position="right"
-              fill={isDark ? "#E2E8F0" : "#334155"}
-              fontSize={12}
-              fontWeight={700}
-              formatter={(v: number) => v.toLocaleString("pt-BR")}
-              offset={10}
-            />
-          </Bar>
+              radius={[0, 8, 8, 0]}
+              barSize={30}
+              animationDuration={900}
+              style={{ cursor: "pointer" }}
+              onClick={(barData: any) => { if (barData?.nome) onBarClick(barData.nome, barData.total); }}
+            >
+              {data.map((_, index) => (
+                <Cell key={`cell-${index}`} fill={getBarGradient(gradientId, index + colorOffset)} />
+              ))}
+              <LabelList
+                dataKey="total"
+                position="right"
+                fill={isDark ? "#E2E8F0" : "#334155"}
+                fontSize={12}
+                fontWeight={700}
+                formatter={(v: number) => v.toLocaleString("pt-BR")}
+                offset={10}
+              />
+            </Bar>
+          )}
         </BarChart>
       </ResponsiveContainer>
     </ChartCard>

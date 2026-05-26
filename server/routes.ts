@@ -300,6 +300,143 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Rotas de Admin: Campanhas Disparadas ────────────────────────────────────
+
+  /*
+   * GET /api/admin/campanhas-nomes — Lista nomes distintos de campanhas do banco principal
+   * Retorna string[] com os valores do campo variaveis que começam com CAMPANHA
+   */
+  app.get("/api/admin/campanhas-nomes", async (req, res) => {
+    if (!isAdminRequest(req.headers.authorization)) {
+      return res.status(403).json({ message: "Acesso negado" });
+    }
+    try {
+      const conn = await pool.getConnection();
+      try {
+        const [rows] = await conn.query<RowDataPacket[]>(`
+          SELECT DISTINCT TRIM(variaveis) AS nome
+          FROM \`${TABLE_NAME}\`
+          WHERE \`data e hora de fim\` IS NOT NULL
+            AND DATE(\`data e hora de fim\`) > '2026-04-12'
+            AND variaveis IS NOT NULL
+            AND TRIM(variaveis) != ''
+            AND TRIM(variaveis) != 'false'
+            AND UPPER(TRIM(variaveis)) LIKE 'CAMPANHA%'
+          ORDER BY nome ASC
+        `);
+        conn.release();
+        return res.json(rows.map((r: RowDataPacket) => String(r.nome)));
+      } catch (err) {
+        conn.release();
+        throw err;
+      }
+    } catch (error) {
+      console.error("Erro ao listar nomes de campanhas:", error);
+      return res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
+  /*
+   * GET /api/admin/campanhas-disparadas — Lista todos os registros de campanhas disparadas
+   */
+  app.get("/api/admin/campanhas-disparadas", async (req, res) => {
+    if (!isAdminRequest(req.headers.authorization)) {
+      return res.status(403).json({ message: "Acesso negado" });
+    }
+    try {
+      const [rows] = await poolOpenAI.query<RowDataPacket[]>(
+        `SELECT id, nome_campanha, DATE_FORMAT(data_disparo, '%Y-%m-%d') AS data_disparo, total_disparadas, created_at
+         FROM campanhas_disparadas
+         ORDER BY data_disparo DESC, nome_campanha ASC`
+      );
+      return res.json(rows);
+    } catch (error) {
+      console.error("Erro ao listar campanhas disparadas:", error);
+      return res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
+  /*
+   * POST /api/admin/campanhas-disparadas — Cria ou atualiza (upsert) por nome_campanha + data_disparo
+   * Body: { nome_campanha, data_disparo, total_disparadas }
+   */
+  app.post("/api/admin/campanhas-disparadas", async (req, res) => {
+    if (!isAdminRequest(req.headers.authorization)) {
+      return res.status(403).json({ message: "Acesso negado" });
+    }
+    const { nome_campanha, data_disparo, total_disparadas } = req.body;
+    if (!nome_campanha || !data_disparo || total_disparadas == null) {
+      return res.status(400).json({ message: "nome_campanha, data_disparo e total_disparadas são obrigatórios" });
+    }
+    try {
+      await poolOpenAI.query(
+        `INSERT INTO campanhas_disparadas (nome_campanha, data_disparo, total_disparadas)
+         VALUES (?, ?, ?)`,
+        [String(nome_campanha).trim(), String(data_disparo), Number(total_disparadas)]
+      );
+      return res.status(201).json({ message: "Registro salvo com sucesso" });
+    } catch (error) {
+      console.error("Erro ao salvar campanha disparada:", error);
+      return res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
+  /*
+   * PATCH /api/admin/campanhas-disparadas/:id — Atualiza um registro por id
+   * Body: { nome_campanha, data_disparo, total_disparadas }
+   */
+  app.patch("/api/admin/campanhas-disparadas/:id", async (req, res) => {
+    if (!isAdminRequest(req.headers.authorization)) {
+      return res.status(403).json({ message: "Acesso negado" });
+    }
+    const { id } = req.params;
+    const { nome_campanha, data_disparo, total_disparadas } = req.body;
+    if (!nome_campanha || !data_disparo || total_disparadas == null) {
+      return res.status(400).json({ message: "nome_campanha, data_disparo e total_disparadas são obrigatórios" });
+    }
+    try {
+      const [result] = await poolOpenAI.query<RowDataPacket[]>(
+        `UPDATE campanhas_disparadas
+         SET nome_campanha = ?, data_disparo = ?, total_disparadas = ?, updated_at = NOW()
+         WHERE id = ?`,
+        [String(nome_campanha).trim(), String(data_disparo), Number(total_disparadas), id]
+      );
+      if ((result as any).affectedRows === 0) {
+        return res.status(404).json({ message: "Registro não encontrado" });
+      }
+      return res.json({ message: "Registro atualizado com sucesso" });
+    } catch (error: any) {
+      if (error?.code === "ER_DUP_ENTRY") {
+        return res.status(409).json({ message: "Já existe um registro com essa campanha e data. Execute ALTER TABLE campanhas_disparadas DROP INDEX uk_campanha_data; no banco para permitir múltiplos registros por dia." });
+      }
+      console.error("Erro ao atualizar campanha disparada:", error);
+      return res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
+  /*
+   * DELETE /api/admin/campanhas-disparadas/:id — Remove registro por id
+   */
+  app.delete("/api/admin/campanhas-disparadas/:id", async (req, res) => {
+    if (!isAdminRequest(req.headers.authorization)) {
+      return res.status(403).json({ message: "Acesso negado" });
+    }
+    const { id } = req.params;
+    try {
+      const [result] = await poolOpenAI.query<RowDataPacket[]>(
+        "DELETE FROM campanhas_disparadas WHERE id = ?",
+        [id]
+      );
+      if ((result as any).affectedRows === 0) {
+        return res.status(404).json({ message: "Registro não encontrado" });
+      }
+      return res.json({ message: "Registro removido com sucesso" });
+    } catch (error) {
+      console.error("Erro ao remover campanha disparada:", error);
+      return res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
   // ─── Fim das Rotas de Administração ─────────────────────────────────────────
 
   /*
@@ -1562,12 +1699,45 @@ export async function registerRoutes(
 
         conn.release();
 
+        // Busca totais disparados por campanha (tabela campanhas_disparadas no senai_pf)
+        // Filtra pelo mesmo período do dashboard; ignora silenciosamente se a tabela não existir
+        const disparadasMap: Record<string, number> = {};
+        try {
+          const dispDateFilter = startDate && endDate
+            ? "WHERE data_disparo >= ? AND data_disparo <= ?"
+            : "";
+          const dispParams = startDate && endDate ? [String(startDate), String(endDate)] : [];
+          const [disparadasRows] = await poolOpenAI.query<RowDataPacket[]>(
+            `SELECT nome_campanha, SUM(total_disparadas) AS totalDisparadas
+             FROM campanhas_disparadas
+             ${dispDateFilter}
+             GROUP BY nome_campanha`,
+            dispParams
+          );
+          for (const row of disparadasRows) {
+            disparadasMap[String(row.nome_campanha)] = Number(row.totalDisparadas);
+          }
+        } catch {
+          // Tabela ainda não criada — não quebra o endpoint
+        }
+
+        const rankingCampanhasResult = (rankingCampanhas as RowDataPacket[])
+          .map(c => ({
+            nome: String(c.nome),
+            total: Number(c.total),
+            totalDisparadas: disparadasMap[String(c.nome)] || 0,
+          }))
+          .sort((a, b) => {
+            if (b.totalDisparadas !== a.totalDisparadas) return b.totalDisparadas - a.totalDisparadas;
+            return b.total - a.total;
+          });
+
         res.json({
           totalPatrocinados: totais[0]?.totalPatrocinados || 0,
           totalCampanhas: totais[0]?.totalCampanhas || 0,
           totalOutros: totais[0]?.totalOutros || 0,
           rankingPatrocinados: rankingPatrocinados || [],
-          rankingCampanhas: rankingCampanhas || [],
+          rankingCampanhas: rankingCampanhasResult || [],
           rankingOutros: rankingOutros || [],
         });
       } catch (queryErr) {
