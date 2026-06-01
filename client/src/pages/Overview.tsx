@@ -37,7 +37,7 @@
 import { Layout } from "@/components/layout/Layout";
 
 // useQuery: hook do TanStack React Query para buscar dados da API com cache
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 
 // apiRequest: função utilitária para fazer fetch à API (queryClient.ts)
 import { apiRequest } from "@/lib/queryClient";
@@ -299,12 +299,14 @@ export default function OverviewPage() {
     queryKey: ["stats", dateRange.startDate, dateRange.endDate, selectedCasas, isGerente],
     queryFn: () => apiRequest(`/api/stats?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}${casaParam}${gerenteParams}`),
     refetchInterval: REFRESH_INTERVAL,
+    placeholderData: keepPreviousData,
   });
 
   const { data: recentes, isLoading: recentesLoading, refetch: refetchRecentes } = useQuery<Atendimento[]>({
     queryKey: ["recentes", dateRange.startDate, dateRange.endDate, selectedCasas],
     queryFn: () => apiRequest(`/api/recentes?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}${casaParam}`),
     refetchInterval: REFRESH_INTERVAL,
+    placeholderData: keepPreviousData,
   });
 
   // Drilldown query for opcaoselecionada
