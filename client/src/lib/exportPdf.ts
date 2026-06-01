@@ -588,6 +588,22 @@ export async function exportElementToPdf(
   // funções de cor modernas (color(), oklch(), lch()) que o html2canvas
   // não consegue parsear, substituindo por valores seguros equivalentes.
   function sanitizeClonedColors(doc: Document, root: HTMLElement) {
+    // ── Step 0: Inject a catch-all CSS rule that removes ALL filters in the clone,
+    // including on pseudo-elements (::before / ::after) which querySelectorAll("*")
+    // cannot select. html2canvas throws InvalidStateError ("canvas element with a
+    // width or height of 0") when it tries to renderBackgroundImage on a 0×0 canvas
+    // produced by filter:blur() on an absolutely-positioned pseudo-element (e.g. the
+    // ChartCard glow decoration). This is the root cause of sections being silently
+    // skipped in the production build (minified CSS activates the filter; dev does not).
+    const safeStyle = doc.createElement("style");
+    safeStyle.textContent =
+      "*, *::before, *::after { " +
+      "filter: none !important; " +
+      "-webkit-filter: none !important; " +
+      "backdrop-filter: none !important; " +
+      "-webkit-backdrop-filter: none !important; }";
+    (doc.head ?? doc.documentElement).appendChild(safeStyle);
+
     // Step 1: Sanitize all <style> tags in the cloned document so html2canvas never
     // encounters color-mix()/oklch() while parsing CSS rules.
     // Uses global regex (not line-by-line) so it works for both dev and minified prod CSS.
