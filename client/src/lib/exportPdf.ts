@@ -590,21 +590,21 @@ export async function exportElementToPdf(
   function sanitizeClonedColors(doc: Document, root: HTMLElement) {
     // Step 1: Sanitize all <style> tags in the cloned document so html2canvas never
     // encounters color-mix()/oklch() while parsing CSS rules.
-    // Uses a safe line-by-line approach to avoid regex catastrophic backtracking
-    // on large Tailwind CSS files.
+    // Uses global regex (not line-by-line) so it works for both dev and minified prod CSS.
     doc.querySelectorAll("style").forEach((styleEl) => {
       if (!styleEl.textContent) return;
       const modernFns = /\b(color-mix|oklch|oklab|lch|lab)\s*\(/i;
-      styleEl.textContent = styleEl.textContent
-        .split("\n")
-        .map((line) => {
-          if (!modernFns.test(line)) return line;
-          // Replace the property value (between : and ; or }) with transparent
-          return line
-            .replace(/:[^;{}]+;/, ": transparent;")
-            .replace(/:[^;{}]+\}/, ": transparent}");
-        })
-        .join("\n");
+      if (!modernFns.test(styleEl.textContent)) return;
+      // In production, Vite minifies CSS into 1-2 long lines — split("\n") would only fix
+      // the first occurrence per line. Use global regex replacements instead so the fix
+      // works for both minified (production) and non-minified (development) CSS.
+      let css = styleEl.textContent;
+      // Pass 1: replace leaf functions (no nested parens) with a safe hex color
+      css = css.replace(/\b(oklch|oklab|lch|lab)\([^)]*\)/gi, "#e2e8f0");
+      // Pass 2: after pass 1 the inner oklch/oklab are gone, color-mix now has no nested
+      // parens so [^;{}]* safely matches the whole value
+      css = css.replace(/color-mix\([^;{}]*\)/gi, "transparent");
+      styleEl.textContent = css;
     });
 
     // Step 2: Fix remaining inline computed values on each element
