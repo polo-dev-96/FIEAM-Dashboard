@@ -86,7 +86,7 @@ function DatePickerField({ value, onChange, label }: { value: string; onChange: 
                         <span className="font-medium">{format(dateValue, "dd/MM/yyyy")}</span>
                     </button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0 bg-white border border-gray-200 shadow-2xl shadow-black/10 rounded-2xl overflow-hidden z-[1100]" align="start" sideOffset={4}>
+                <PopoverContent className="w-auto p-0 bg-white border border-gray-200 shadow-2xl shadow-black/10 rounded-2xl overflow-hidden z-[1100] pointer-events-auto" align="start" sideOffset={4} onInteractOutside={(e) => e.preventDefault()}>
                     <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/50">
                         <button onClick={() => setMonth(m => subMonths(m, 1))} className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all">
                             <ChevronLeft className="w-4 h-4" />
@@ -96,7 +96,7 @@ function DatePickerField({ value, onChange, label }: { value: string; onChange: 
                             <ChevronRight className="w-4 h-4" />
                         </button>
                     </div>
-                    <div className="p-3">
+                    <div className="p-3 pointer-events-auto">
                         <DayPicker
                             mode="single"
                             selected={dateValue}
@@ -145,11 +145,12 @@ interface ExportReportDialogProps {
     pdfSubtitle?: string;                           // subtítulo (entidade/unidade selecionada)
     startDate: string;                              // data inicial (YYYY-MM-DD) da página pai
     endDate: string;                                // data final (YYYY-MM-DD) da página pai
+    onPeriodChange?: (period: { startDate: string; endDate: string }) => void; // sincroniza datas com a página
 }
 
 
 
-export function ExportReportDialog({ selectedCasas, contentRef, pdfTitle = "Relatório FIEAM", pdfSubtitle, startDate, endDate }: ExportReportDialogProps) {
+export function ExportReportDialog({ selectedCasas, contentRef, pdfTitle = "Relatório FIEAM", pdfSubtitle, startDate, endDate, onPeriodChange }: ExportReportDialogProps) {
     const [open, setOpen] = useState(false);
     const [exporting, setExporting] = useState(false);
     const [exportingPdf, setExportingPdf] = useState(false);
@@ -216,7 +217,11 @@ export function ExportReportDialog({ selectedCasas, contentRef, pdfTitle = "Rela
      * Passado pelo componente pai (Overview, DashboardAnual) via prop.
      */
     const handleExportPDF = useCallback(async () => {
-        if (!contentRef?.current) return; // só exporta se o ref estiver válido
+        if (!contentRef?.current) {
+            // Dados ainda carregando após troca de período — aguardar e tentar novamente
+            alert("Os dados ainda estão carregando. Aguarde um momento e tente novamente.");
+            return;
+        }
         setExportingPdf(true);
         try {
             const filename = `relatorio_${periodo.startDate}_${periodo.endDate}`;
@@ -232,7 +237,8 @@ export function ExportReportDialog({ selectedCasas, contentRef, pdfTitle = "Rela
             });
         } catch (err) {
             console.error("Erro ao exportar PDF:", err);
-            alert("Erro ao exportar PDF. Tente novamente.");
+            const msg = err instanceof Error ? err.message : String(err);
+            alert("Erro ao exportar PDF: " + msg);
         } finally {
             setExportingPdf(false);
         }
@@ -295,7 +301,10 @@ export function ExportReportDialog({ selectedCasas, contentRef, pdfTitle = "Rela
                         <div className="flex items-center gap-3">
                             <DatePickerField
                                 value={periodo.startDate}
-                                onChange={(v) => setPeriodo(prev => ({ ...prev, startDate: v }))}
+                                onChange={(v) => {
+                                    setPeriodo(prev => ({ ...prev, startDate: v }));
+                                    if (onPeriodChange) onPeriodChange({ startDate: v, endDate: periodo.endDate });
+                                }}
                                 label="Data Início"
                             />
                             <div className="flex items-center justify-center mt-6">
@@ -303,7 +312,10 @@ export function ExportReportDialog({ selectedCasas, contentRef, pdfTitle = "Rela
                             </div>
                             <DatePickerField
                                 value={periodo.endDate}
-                                onChange={(v) => setPeriodo(prev => ({ ...prev, endDate: v }))}
+                                onChange={(v) => {
+                                    setPeriodo(prev => ({ ...prev, endDate: v }));
+                                    if (onPeriodChange) onPeriodChange({ startDate: periodo.startDate, endDate: v });
+                                }}
                                 label="Data Fim"
                             />
                         </div>

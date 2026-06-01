@@ -83,7 +83,7 @@ import {
 // date-fns: manipulação e formatação de datas
 // differenceInCalendarDays/Months → calcula quantos dias/meses há entre duas datas
 // startOfMonth → primeiro dia do mês atual (data inicial padrão)
-import { format, differenceInCalendarDays, differenceInCalendarMonths, startOfMonth } from "date-fns";
+import { format, differenceInCalendarDays, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 // React hooks
@@ -383,12 +383,10 @@ export default function OverviewPage() {
   // ─── Métricas derivadas para cards ─────────────────────────────────
   const {
     totalPeriodo,
-    mediaPorMes,
     mediaPorDia,
   } = useMemo(() => {
     const total = stats?.totais?.total || 0;
 
-    let mediaMes = 0;
     let mediaDia = 0;
 
     try {
@@ -398,17 +396,12 @@ export default function OverviewPage() {
       const dias = Math.max(differenceInCalendarDays(end, start) + 1, 1);
       mediaDia = dias > 0 ? total / dias : 0;
 
-      const mesesBrutos = Math.max(differenceInCalendarMonths(end, start), 0);
-      const meses = Math.max(mesesBrutos + 1, 1);
-      mediaMes = meses > 0 ? total / meses : 0;
     } catch {
       mediaDia = 0;
-      mediaMes = 0;
     }
 
     return {
       totalPeriodo: total,
-      mediaPorMes: mediaMes,
       mediaPorDia: mediaDia,
     };
   }, [stats?.totais?.total, dateRange.startDate, dateRange.endDate]);
@@ -640,9 +633,10 @@ export default function OverviewPage() {
               <ExportReportDialog
                 selectedCasas={selectedCasas}
                 contentRef={contentRef}
-                pdfTitle="Visão Geral Entrada Via Contact Center - Dashboard FIEAM"
+                pdfTitle="Dashboard FIEAM — Visão Geral"
                 startDate={dateRange.startDate}
                 endDate={dateRange.endDate}
+                onPeriodChange={(p) => setDateRange(p)}
                 pdfSubtitle={
                   selectedEntidades.length > 0
                     ? `Dashboard de atendimentos em tempo real · Entidades: ${selectedEntidades.join(", ")}${isGerente && selectedEquipes.length > 0 ? ` · Equipes: ${selectedEquipes.join(", ")}` : selectedEntidades[0] === "SESI" && unidade ? ` · Unidade: ${unidade}` : ""}`
@@ -663,19 +657,12 @@ export default function OverviewPage() {
 
       <div ref={contentRef} className="space-y-6">
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <KpiCard
           title="Total no Período"
           value={totalPeriodo.toLocaleString("pt-BR")}
           icon={<CalendarDays className="w-4 h-4" />}
           accent="blue"
-          isDark={isDark}
-        />
-        <KpiCard
-          title="Média por Mês"
-          value={Math.round(mediaPorMes).toLocaleString("pt-BR")}
-          icon={<TrendingUp className="w-4 h-4" />}
-          accent="green"
           isDark={isDark}
         />
         <KpiCard

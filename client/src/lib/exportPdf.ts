@@ -172,11 +172,12 @@ async function drawCoverPage(
   pdf.setFillColor(...ACCENT);
   pdf.roundedRect(MX + 8, 55, 3, 60, 1.5, 1.5, "F");
 
-  // ── Title
+  // ── Title — dynamic font size to prevent overflow with long titles
   pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(28);
+  const titleFontSize = title.length > 50 ? 18 : title.length > 35 ? 22 : 28;
+  pdf.setFontSize(titleFontSize);
   pdf.setTextColor(...WHITE);
-  const titleLines = pdf.splitTextToSize(title, PW * 0.5);
+  const titleLines = pdf.splitTextToSize(title, PW * 0.52);
   pdf.text(titleLines, MX + 18, 75);
 
   // ── Period
@@ -440,11 +441,18 @@ function forceLightInlineStyles(root: HTMLElement): () => void {
     if (parsedBg && luminance(parsedBg) < 100) {
       el.style.backgroundColor = "#ffffff";
       touched = true;
+    } else if (!parsedBg && /^(color-mix|oklch|oklab|lch|lab)\s*\(/i.test(cs.backgroundColor)) {
+      // TailwindCSS v4 compila opacity variants como color-mix(in oklab, ...) — parseColor retorna null
+      el.style.backgroundColor = "#ffffff";
+      touched = true;
     }
 
     // Detecta bordas escuras por luminância
     const parsedBorder = parseColor(cs.borderTopColor);
     if (parsedBorder && luminance(parsedBorder) < 100) {
+      el.style.borderColor = "#e2e8f0";
+      touched = true;
+    } else if (!parsedBorder && /^(color-mix|oklch|oklab|lch|lab)\s*\(/i.test(cs.borderTopColor)) {
       el.style.borderColor = "#e2e8f0";
       touched = true;
     }
@@ -453,6 +461,9 @@ function forceLightInlineStyles(root: HTMLElement): () => void {
     // This covers axis labels, table cells with text-white/text-gray-300, etc.
     const parsed = parseColor(cs.color);
     if (parsed && luminance(parsed) >= 170) {
+      el.style.color = PDF_TEXT_DARK;
+      touched = true;
+    } else if (!parsed && /^(color-mix|oklch|oklab|lch|lab)\s*\(/i.test(cs.color)) {
       el.style.color = PDF_TEXT_DARK;
       touched = true;
     }
@@ -577,14 +588,46 @@ export async function exportElementToPdf(
   // funções de cor modernas (color(), oklch(), lch()) que o html2canvas
   // não consegue parsear, substituindo por valores seguros equivalentes.
   function sanitizeClonedColors(doc: Document, root: HTMLElement) {
-    const unsafePattern = /^(color|oklch|lch|lab|display-p3)\s*\(/i;
+    // Step 1: Sanitize all <style> tags in the cloned document so html2canvas never
+    // encounters color-mix()/oklch() while parsing CSS rules.
+    // Uses a safe line-by-line approach to avoid regex catastrophic backtracking
+    // on large Tailwind CSS files.
+    doc.querySelectorAll("style").forEach((styleEl) => {
+      if (!styleEl.textContent) return;
+      const modernFns = /\b(color-mix|oklch|oklab|lch|lab)\s*\(/i;
+      styleEl.textContent = styleEl.textContent
+        .split("\n")
+        .map((line) => {
+          if (!modernFns.test(line)) return line;
+          // Replace the property value (between : and ; or }) with transparent
+          return line
+            .replace(/:[^;{}]+;/, ": transparent;")
+            .replace(/:[^;{}]+\}/, ": transparent}");
+        })
+        .join("\n");
+    });
+
+    // Step 2: Fix remaining inline computed values on each element
+    // color-mix() is used by TailwindCSS v4 opacity variants (e.g. bg-[#009FE3]/10)
+    // html2canvas 1.x cannot parse color-mix(), oklch(), oklab() etc.
+    const unsafePattern = /^(color-mix|oklch|oklab|lch|lab|display-p3|color)\s*\(/i;
     const all = [root, ...Array.from(root.querySelectorAll("*"))] as HTMLElement[];
     for (const el of all) {
       const cs = doc.defaultView?.getComputedStyle(el);
       if (!cs) continue;
-      if (unsafePattern.test(cs.backgroundColor)) el.style.backgroundColor = "transparent";
-      if (unsafePattern.test(cs.color))            el.style.color            = "#0f172a";
-      if (unsafePattern.test(cs.borderTopColor))   el.style.borderColor      = "#e2e8f0";
+      if (unsafePattern.test(cs.backgroundColor))    el.style.backgroundColor = "transparent";
+      if (unsafePattern.test(cs.color))               el.style.color           = "#0f172a";
+      if (unsafePattern.test(cs.borderTopColor))      el.style.borderColor     = "#e2e8f0";
+      if (unsafePattern.test(cs.borderBottomColor))   el.style.borderColor     = "#e2e8f0";
+      if (unsafePattern.test(cs.borderLeftColor))     el.style.borderColor     = "#e2e8f0";
+      if (unsafePattern.test(cs.borderRightColor))    el.style.borderColor     = "#e2e8f0";
+      if (unsafePattern.test(cs.outlineColor))        el.style.outline         = "none";
+      if (cs.boxShadow && unsafePattern.test(cs.boxShadow)) el.style.boxShadow = "none";
+      // Remove filter/backdrop-filter: html2canvas creates a 0x0 canvas for blur()
+      // on absolute elements with negative offsets (e.g. ChartCard glow decoration),
+      // which then throws InvalidStateError on createPattern.
+      if (cs.filter && cs.filter !== "none") el.style.filter = "none";
+      if (cs.backdropFilter && cs.backdropFilter !== "none") (el.style as any).backdropFilter = "none";
       // Prevent text clipping in html2canvas clone
       if (cs.overflow === "hidden" && (el.classList.contains("truncate") || el.closest("[data-fieam-surface]"))) {
         el.style.overflow = "visible";
@@ -594,14 +637,21 @@ export async function exportElementToPdf(
 
   const captures: HTMLCanvasElement[] = [];
   for (const section of sections) {
-    const canvas = await html2canvas(section, {
-      scale: 2.5,
-      useCORS: true,
-      backgroundColor: "#ffffff",
-      logging: false,
-      onclone: (doc, el) => sanitizeClonedColors(doc, el),
-    });
-    captures.push(canvas);
+    try {
+      const canvas = await html2canvas(section, {
+        scale: 2.5,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+        onclone: (doc, el) => sanitizeClonedColors(doc, el),
+      });
+      captures.push(canvas);
+    } catch (e) {
+      console.warn("[exportPdf] html2canvas falhou em seção, ignorando:", e);
+    }
+  }
+  if (captures.length === 0) {
+    throw new Error("Nenhuma seção pôde ser capturada para o PDF");
   }
 
   // ── Restore UI state
