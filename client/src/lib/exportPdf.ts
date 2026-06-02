@@ -597,11 +597,13 @@ export async function exportElementToPdf(
     // skipped in the production build (minified CSS activates the filter; dev does not).
     const safeStyle = doc.createElement("style");
     safeStyle.textContent =
-      "*, *::before, *::after { " +
+      "*, *::before, *::after, *::backdrop { " +
       "filter: none !important; " +
       "-webkit-filter: none !important; " +
       "backdrop-filter: none !important; " +
-      "-webkit-backdrop-filter: none !important; }";
+      "-webkit-backdrop-filter: none !important; " +
+      "box-shadow: none !important; " +
+      "background-image: none !important; }";
     (doc.head ?? doc.documentElement).appendChild(safeStyle);
 
     // Step 1: Sanitize all <style> tags in the cloned document so html2canvas never
@@ -620,6 +622,8 @@ export async function exportElementToPdf(
       // Pass 2: after pass 1 the inner oklch/oklab are gone, color-mix now has no nested
       // parens so [^;{}]* safely matches the whole value
       css = css.replace(/color-mix\([^;{}]*\)/gi, "transparent");
+      // Pass 3: remove linear-gradient/radial-gradient that may contain modern color functions
+      css = css.replace(/\b(linear-gradient|radial-gradient|conic-gradient)\([^)]*\)/gi, "transparent");
       styleEl.textContent = css;
     });
 
@@ -644,6 +648,8 @@ export async function exportElementToPdf(
       // which then throws InvalidStateError on createPattern.
       if (cs.filter && cs.filter !== "none") el.style.filter = "none";
       if (cs.backdropFilter && cs.backdropFilter !== "none") (el.style as any).backdropFilter = "none";
+      // Remove background-image on elements (gradients with modern color spaces)
+      if (cs.backgroundImage && cs.backgroundImage !== "none") el.style.backgroundImage = "none";
       // Prevent text clipping in html2canvas clone
       if (cs.overflow === "hidden" && (el.classList.contains("truncate") || el.closest("[data-fieam-surface]"))) {
         el.style.overflow = "visible";
@@ -651,8 +657,13 @@ export async function exportElementToPdf(
     }
   }
 
-  const captures: HTMLCanvasElement[] = [];
+  interface Capture { canvas: HTMLCanvasElement; scale: number }
+  const captures: Capture[] = [];
   for (const section of sections) {
+    const sectionLabel = section.getAttribute("data-section") || section.className?.slice(0, 60) || "unnamed";
+    let captured = false;
+
+    // Attempt 1: normal capture at scale 2.5
     try {
       const canvas = await html2canvas(section, {
         scale: 2.5,
@@ -661,9 +672,28 @@ export async function exportElementToPdf(
         logging: false,
         onclone: (doc, el) => sanitizeClonedColors(doc, el),
       });
-      captures.push(canvas);
+      captures.push({ canvas, scale: 2.5 });
+      captured = true;
     } catch (e) {
-      console.warn("[exportPdf] html2canvas falhou em seção, ignorando:", e);
+      console.warn(`[exportPdf] html2canvas falhou em "${sectionLabel}" com scale 2.5:`, e);
+    }
+
+    // Attempt 2: fallback with lower scale (less memory, less prone to parse errors)
+    if (!captured) {
+      try {
+        const canvas = await html2canvas(section, {
+          scale: 1,
+          useCORS: true,
+          backgroundColor: "#ffffff",
+          logging: false,
+          onclone: (doc, el) => sanitizeClonedColors(doc, el),
+        });
+        captures.push({ canvas, scale: 1 });
+        captured = true;
+        console.warn(`[exportPdf] Recuperado "${sectionLabel}" com scale 1 (fallback)`);
+      } catch (e) {
+        console.error(`[exportPdf] html2canvas também falhou em "${sectionLabel}" com scale 1:`, e);
+      }
     }
   }
   if (captures.length === 0) {
@@ -688,8 +718,7 @@ export async function exportElementToPdf(
   let curPage = 0;
   let curY = CONTENT_TOP;
 
-  for (const canvas of captures) {
-    const scale = 2.5;
+  for (const { canvas, scale } of captures) {
     const natW = canvas.width / scale;
     const natH = canvas.height / scale;
     const ratio = USABLE_W / natW;
@@ -744,7 +773,7 @@ export async function exportElementToPdf(
     pdf.roundedRect(ox, pl.y, pl.drawW, pl.drawH, 1.5, 1.5, "F");
 
     // Image content
-    const imgData = captures[i].toDataURL("image/png");
+    const imgData = captures[i].canvas.toDataURL("image/png");
     pdf.addImage(imgData, "PNG", ox + 0.5, pl.y + 0.5, pl.drawW - 1, pl.drawH - 1);
 
     // Card border
