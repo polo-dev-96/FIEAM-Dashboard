@@ -107,6 +107,8 @@ function normalizarCanal(canal: string): string {
     if (lower.includes("instagram")) return "Instagram Direct";
     if (lower.includes("messenger")) return "Messenger";
     if (lower.includes("whatsapp"))  return "Whatsapp";
+    if (lower.includes("comercial pf")) return "Whatsapp";
+    if (lower.includes("pf contact center")) return "Whatsapp";
     if (lower.includes("web"))       return "Web";
     if (lower.includes("email"))     return "Email";
     if (lower.includes("sms"))       return "SMS";

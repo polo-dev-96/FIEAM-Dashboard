@@ -437,8 +437,12 @@ function forceLightInlineStyles(root: HTMLElement): () => void {
     const orig = { bg: el.style.backgroundColor, color: el.style.color, borderColor: el.style.borderColor };
 
     // Detecta fundo escuro por luminância (cobre rgb(), rgba() com qualquer alpha e hex)
+    // Ignora backgrounds totalmente transparentes (alpha=0): rgba(0,0,0,0) é parseado
+    // como [0,0,0] com luminância 0, mas pintar branco em elementos SVG/HTML transparentes
+    // sobrepõe gráficos Recharts e os torna invisíveis no PDF.
     const parsedBg = parseColor(cs.backgroundColor);
-    if (parsedBg && luminance(parsedBg) < 100) {
+    const bgFullyTransparent = /rgba\s*\([^,]+,[^,]+,[^,]+,\s*0\s*\)/.test(cs.backgroundColor);
+    if (!bgFullyTransparent && parsedBg && luminance(parsedBg) < 100) {
       el.style.backgroundColor = "#ffffff";
       touched = true;
     } else if (!parsedBg && /^(color-mix|oklch|oklab|lch|lab)\s*\(/i.test(cs.backgroundColor)) {
@@ -598,12 +602,12 @@ export async function exportElementToPdf(
     const safeStyle = doc.createElement("style");
     safeStyle.textContent =
       "*, *::before, *::after, *::backdrop { " +
+      "overflow: visible !important; " +
       "filter: none !important; " +
       "-webkit-filter: none !important; " +
       "backdrop-filter: none !important; " +
       "-webkit-backdrop-filter: none !important; " +
-      "box-shadow: none !important; " +
-      "background-image: none !important; }";
+      "box-shadow: none !important; }";
     (doc.head ?? doc.documentElement).appendChild(safeStyle);
 
     // Step 1: Sanitize all <style> tags in the cloned document so html2canvas never
@@ -648,13 +652,35 @@ export async function exportElementToPdf(
       // which then throws InvalidStateError on createPattern.
       if (cs.filter && cs.filter !== "none") el.style.filter = "none";
       if (cs.backdropFilter && cs.backdropFilter !== "none") (el.style as any).backdropFilter = "none";
-      // Remove background-image on elements (gradients with modern color spaces)
-      if (cs.backgroundImage && cs.backgroundImage !== "none") el.style.backgroundImage = "none";
+      // Remove background-image on elements only if it uses modern color spaces
+      // that html2canvas cannot parse (color-mix, oklch, etc.). Simple gradients
+      // like linear-gradient(90deg, #hex, #hex) are preserved.
+      if (cs.backgroundImage && cs.backgroundImage !== "none" && unsafePattern.test(cs.backgroundImage)) el.style.backgroundImage = "none";
       // Prevent text clipping in html2canvas clone
       if (cs.overflow === "hidden" && (el.classList.contains("truncate") || el.closest("[data-fieam-surface]"))) {
         el.style.overflow = "visible";
       }
     }
+
+    // ── Step 3: Resolve SVG gradient url(#id) fills ─────────────────────────
+    // html2canvas não consegue resolver referências url() de gradientes SVG em
+    // documentos clonados — as barras ficam transparentes, resultando em área
+    // completamente branca no PDF. Substituímos pelo stop-color central do gradiente.
+    root.querySelectorAll("[fill]").forEach((svgEl) => {
+      const fill = svgEl.getAttribute("fill") ?? "";
+      const match = fill.match(/^url\(#([^)]+)\)$/);
+      if (!match) return;
+      const grad = doc.getElementById(match[1]);
+      if (!grad) return;
+      const stops = Array.from(grad.querySelectorAll("stop"));
+      if (!stops.length) return;
+      const mid = stops[Math.floor(stops.length / 2)] || stops[0];
+      const color =
+        mid.getAttribute("stop-color") ||
+        (mid as HTMLElement).style.stopColor ||
+        "#009FE3";
+      svgEl.setAttribute("fill", color);
+    });
   }
 
   interface Capture { canvas: HTMLCanvasElement; scale: number }
