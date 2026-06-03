@@ -437,12 +437,8 @@ function forceLightInlineStyles(root: HTMLElement): () => void {
     const orig = { bg: el.style.backgroundColor, color: el.style.color, borderColor: el.style.borderColor };
 
     // Detecta fundo escuro por luminância (cobre rgb(), rgba() com qualquer alpha e hex)
-    // Ignora backgrounds totalmente transparentes (alpha=0): rgba(0,0,0,0) é parseado
-    // como [0,0,0] com luminância 0, mas pintar branco em elementos SVG/HTML transparentes
-    // sobrepõe gráficos Recharts e os torna invisíveis no PDF.
     const parsedBg = parseColor(cs.backgroundColor);
-    const bgFullyTransparent = /rgba\s*\([^,]+,[^,]+,[^,]+,\s*0\s*\)/.test(cs.backgroundColor);
-    if (!bgFullyTransparent && parsedBg && luminance(parsedBg) < 100) {
+    if (parsedBg && luminance(parsedBg) < 100) {
       el.style.backgroundColor = "#ffffff";
       touched = true;
     } else if (!parsedBg && /^(color-mix|oklch|oklab|lch|lab)\s*\(/i.test(cs.backgroundColor)) {
@@ -584,6 +580,23 @@ export async function exportElementToPdf(
   overflowFixes.push({ el: container, prev: container.style.overflow });
   container.style.overflow = "visible";
 
+  // ── Fix CSS filter elements: html2canvas v1.x throws InvalidStateError
+  // ("createPattern: canvas element with width or height of 0") when it
+  // encounters filter:blur() on absolutely-positioned elements that have 0×0
+  // visible dimensions (e.g. ChartCard glow decoration positioned outside
+  // the card bounds). The sanitizeClonedColors onclone approach is unreliable
+  // because html2canvas may pre-process filters before the callback completes.
+  // Setting filter:none as an inline style on the ORIGINAL DOM is the only
+  // guaranteed way to prevent the issue — html2canvas always respects inline styles.
+  const filterFixes: Array<{ el: HTMLElement; prev: string }> = [];
+  container.querySelectorAll<HTMLElement>("*").forEach((el) => {
+    const cs = getComputedStyle(el);
+    if (cs.filter && cs.filter !== "none") {
+      filterFixes.push({ el, prev: el.style.filter });
+      el.style.filter = "none";
+    }
+  });
+
   // ── Capture DOM sections
   const children = Array.from(container.children) as HTMLElement[];
   const sections = children.filter((el) => !el.hasAttribute("data-pdf-exclude"));
@@ -666,21 +679,25 @@ export async function exportElementToPdf(
     // html2canvas não consegue resolver referências url() de gradientes SVG em
     // documentos clonados — as barras ficam transparentes, resultando em área
     // completamente branca no PDF. Substituímos pelo stop-color central do gradiente.
-    root.querySelectorAll("[fill]").forEach((svgEl) => {
-      const fill = svgEl.getAttribute("fill") ?? "";
-      const match = fill.match(/^url\(#([^)]+)\)$/);
-      if (!match) return;
-      const grad = doc.getElementById(match[1]);
-      if (!grad) return;
-      const stops = Array.from(grad.querySelectorAll("stop"));
-      if (!stops.length) return;
-      const mid = stops[Math.floor(stops.length / 2)] || stops[0];
-      const color =
-        mid.getAttribute("stop-color") ||
-        (mid as HTMLElement).style.stopColor ||
-        "#009FE3";
-      svgEl.setAttribute("fill", color);
-    });
+    try {
+      root.querySelectorAll("[fill]").forEach((svgEl) => {
+        const fill = svgEl.getAttribute("fill") ?? "";
+        const match = fill.match(/^url\(#([^)]+)\)$/);
+        if (!match) return;
+        const grad = doc.getElementById(match[1]);
+        if (!grad) return;
+        const stops = Array.from(grad.querySelectorAll("stop"));
+        if (!stops.length) return;
+        const mid = stops[Math.floor(stops.length / 2)] || stops[0];
+        const color =
+          mid.getAttribute("stop-color") ||
+          (mid as HTMLElement).style.getPropertyValue("stop-color") ||
+          "#009FE3";
+        svgEl.setAttribute("fill", color);
+      });
+    } catch (e) {
+      console.warn("[exportPdf] sanitizeClonedColors Step 3 falhou:", e);
+    }
   }
 
   interface Capture { canvas: HTMLCanvasElement; scale: number }
@@ -730,6 +747,9 @@ export async function exportElementToPdf(
   restoreLight();
   for (const { el, prev } of overflowFixes) {
     el.style.overflow = prev;
+  }
+  for (const { el, prev } of filterFixes) {
+    el.style.filter = prev;
   }
   pdfOnlyEls.forEach((el) => (el.style.display = "none"));
   if (prevTheme) {
