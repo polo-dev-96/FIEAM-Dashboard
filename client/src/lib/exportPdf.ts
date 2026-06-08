@@ -597,6 +597,22 @@ export async function exportElementToPdf(
     }
   });
 
+  // ── Fix background-image with modern color functions on the ORIGINAL DOM.
+  // In production (Vite build), Tailwind v4 compiles gradient utilities using
+  // color-mix()/oklch() INSIDE linear-gradient(). html2canvas cannot parse these
+  // and creates a 0×0 canvas → createPattern throws InvalidStateError.
+  // The onclone sanitizeClonedColors check only catches values that START with
+  // a modern function; this pre-clone pass handles values that CONTAIN them.
+  const modernInAnyBg = /(color-mix|oklch|oklab|lch|lab|display-p3)\s*\(/i;
+  const bgImageFixes: Array<{ el: HTMLElement; prev: string }> = [];
+  container.querySelectorAll<HTMLElement>("*").forEach((el) => {
+    const cs = getComputedStyle(el);
+    if (cs.backgroundImage && cs.backgroundImage !== "none" && modernInAnyBg.test(cs.backgroundImage)) {
+      bgImageFixes.push({ el, prev: el.style.backgroundImage });
+      el.style.backgroundImage = "none";
+    }
+  });
+
   // ── Capture DOM sections
   const children = Array.from(container.children) as HTMLElement[];
   const sections = children.filter((el) => !el.hasAttribute("data-pdf-exclude"));
@@ -639,8 +655,24 @@ export async function exportElementToPdf(
       // Pass 2: after pass 1 the inner oklch/oklab are gone, color-mix now has no nested
       // parens so [^;{}]* safely matches the whole value
       css = css.replace(/color-mix\([^;{}]*\)/gi, "transparent");
-      // Pass 3: remove linear-gradient/radial-gradient that may contain modern color functions
-      css = css.replace(/\b(linear-gradient|radial-gradient|conic-gradient)\([^)]*\)/gi, "transparent");
+      // Pass 3: remove any remaining gradient that still contains a nested call (e.g.
+      // linear-gradient wrapping a color-mix that pass 2 missed due to nested parens).
+      // Strategy: after passes 1+2, any gradient value that still has a '(' inside is unsafe.
+      // We match the gradient name and consume characters until we find the matching ')'
+      // using a simple depth-aware replacement via replace with a callback.
+      css = css.replace(/\b(linear-gradient|radial-gradient|conic-gradient)\(/gi, (match, _fn, offset, str) => {
+        // Find the closing ')' that matches this opening '(' using a depth counter.
+        let depth = 1;
+        let i = offset + match.length;
+        while (i < str.length && depth > 0) {
+          if (str[i] === "(") depth++;
+          else if (str[i] === ")") depth--;
+          i++;
+        }
+        const full = str.slice(offset, i);
+        // Only replace if the gradient still contains a function call (unsafe).
+        return /\(/.test(full.slice(match.length)) ? "transparent" : match;
+      });
       styleEl.textContent = css;
     });
 
@@ -665,10 +697,14 @@ export async function exportElementToPdf(
       // which then throws InvalidStateError on createPattern.
       if (cs.filter && cs.filter !== "none") el.style.filter = "none";
       if (cs.backdropFilter && cs.backdropFilter !== "none") (el.style as any).backdropFilter = "none";
-      // Remove background-image on elements only if it uses modern color spaces
-      // that html2canvas cannot parse (color-mix, oklch, etc.). Simple gradients
-      // like linear-gradient(90deg, #hex, #hex) are preserved.
-      if (cs.backgroundImage && cs.backgroundImage !== "none" && unsafePattern.test(cs.backgroundImage)) el.style.backgroundImage = "none";
+      // Remove background-image on elements if it uses modern color spaces that
+      // html2canvas cannot parse (color-mix, oklch, etc.), either as the top-level
+      // function OR nested inside a gradient like linear-gradient(color-mix(...), ...).
+      const modernAnywhereInBg = /(color-mix|oklch|oklab|lch|lab|display-p3)\s*\(/i;
+      if (cs.backgroundImage && cs.backgroundImage !== "none" &&
+          (unsafePattern.test(cs.backgroundImage) || modernAnywhereInBg.test(cs.backgroundImage))) {
+        el.style.backgroundImage = "none";
+      }
       // Prevent text clipping in html2canvas clone
       if (cs.overflow === "hidden" && (el.classList.contains("truncate") || el.closest("[data-fieam-surface]"))) {
         el.style.overflow = "visible";
@@ -750,6 +786,9 @@ export async function exportElementToPdf(
   }
   for (const { el, prev } of filterFixes) {
     el.style.filter = prev;
+  }
+  for (const { el, prev } of bgImageFixes) {
+    el.style.backgroundImage = prev;
   }
   pdfOnlyEls.forEach((el) => (el.style.display = "none"));
   if (prevTheme) {
