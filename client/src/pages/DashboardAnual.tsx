@@ -132,6 +132,10 @@ function getCanalColor(canal: string): string {
 
 const LINE_COLORS = CHART_COLORS;
 
+// Chrome 94+ ICU changed pt-BR thousands separator from '.' to narrow no-break space (U+202F).
+// fmtBR normalises the output so numbers always display with the traditional period separator.
+const fmtBR = (n: number) => Math.round(n).toLocaleString("pt-BR").replace(/[\u00A0\u202F\u2009]/g, ".");
+
 const ASSUNTO_COLORS = [
     '#009FE3', '#0088CC', '#0077B5', '#00669E', '#005587',
     '#004470', '#003359', '#6bb8e0', '#4da8d4', '#3498c8',
@@ -196,7 +200,7 @@ function EvolucaoTooltip({ active, payload, label, isDark }: any) {
                             </span>
                         </div>
                         <span style={{ fontSize: 13, fontWeight: 700, color: getCanalColor(entry.dataKey), fontVariantNumeric: 'tabular-nums' }}>
-                            {(entry.value || 0).toLocaleString("pt-BR")}
+                            {fmtBR(entry.value || 0)}
                         </span>
                     </div>
                 ))}
@@ -215,7 +219,7 @@ function EvolucaoTooltip({ active, payload, label, isDark }: any) {
                     Total
                 </span>
                 <span style={{ fontSize: 14, fontWeight: 800, color: '#009FE3', fontVariantNumeric: 'tabular-nums' }}>
-                    {total.toLocaleString("pt-BR")}
+                    {fmtBR(total)}
                 </span>
             </div>
         </div>
@@ -688,7 +692,7 @@ export default function DashboardAnualPage() {
                                         content={(props: any) => {
                                             const { x, y, value } = props;
                                             if (!value || value <= 500) return null;
-                                            const text = (value as number).toLocaleString('pt-BR');
+                                            const text = fmtBR(value as number);
                                             const adjustedX = (x as number) < 90 ? (x as number) + 36 : (x as number);
                                             return (
                                                 <text
@@ -747,10 +751,10 @@ export default function DashboardAnualPage() {
                                                 <td className="py-1.5 px-2 text-gray-300 font-medium whitespace-nowrap">{normalizarCanal(canal)}</td>
                                                 {chartData.map((row, mi) => (
                                                     <td key={mi} className="py-1.5 px-1.5 text-gray-400 text-right tabular-nums">
-                                                        {(Number(row[canal]) || 0).toLocaleString("pt-BR")}
+                                                        {fmtBR(Number(row[canal]) || 0)}
                                                     </td>
                                                 ))}
-                                                <td className="py-1.5 px-2 text-white font-bold text-right tabular-nums">{rowTotal.toLocaleString("pt-BR")}</td>
+                                                <td className="py-1.5 px-2 text-white font-bold text-right tabular-nums">{fmtBR(rowTotal)}</td>
                                             </tr>
                                         );
                                     })}
@@ -759,10 +763,10 @@ export default function DashboardAnualPage() {
                                         <td className="py-2 px-2 text-gray-200">TOTAL</td>
                                         {chartData.map((row, mi) => {
                                             const monthTotal = canais.reduce((sum, c) => sum + (Number(row[c]) || 0), 0);
-                                            return <td key={mi} className="py-2 px-1.5 text-white text-right tabular-nums">{monthTotal.toLocaleString("pt-BR")}</td>;
+                                            return <td key={mi} className="py-2 px-1.5 text-white text-right tabular-nums">{fmtBR(monthTotal)}</td>;
                                         })}
                                         <td className="py-2 px-2 text-cyan-400 text-right tabular-nums">
-                                            {canais.reduce((total, c) => total + chartData.reduce((sum, row) => sum + (Number(row[c]) || 0), 0), 0).toLocaleString("pt-BR")}
+                                            {fmtBR(canais.reduce((total, c) => total + chartData.reduce((sum, row) => sum + (Number(row[c]) || 0), 0), 0))}
                                         </td>
                                     </tr>
                                 </tbody>
@@ -799,7 +803,7 @@ export default function DashboardAnualPage() {
                                                         </div>
                                                         <div className="flex items-center gap-3">
                                                             <span className={cn("text-sm font-semibold", isDark ? "text-gray-300" : "text-gray-600")}>
-                                                                {item.total.toLocaleString("pt-BR")}
+                                                                {fmtBR(item.total)}
                                                             </span>
                                                             <span className={cn("text-xl font-bold min-w-[60px] text-right", isDark ? "text-white" : "text-gray-900")}>
                                                                 {item.percent.toFixed(1)}%
@@ -828,7 +832,7 @@ export default function DashboardAnualPage() {
                                                 <div className="flex items-center gap-4">
                                                     <div>
                                                         <p className="text-[10px] text-gray-400 uppercase tracking-wider">Total</p>
-                                                        <p className="text-lg font-bold">{item.total.toLocaleString("pt-BR")}</p>
+                                                        <p className="text-lg font-bold">{fmtBR(item.total)}</p>
                                                     </div>
                                                     <div className="w-px h-8 bg-gray-200" />
                                                     <div>
@@ -873,7 +877,7 @@ export default function DashboardAnualPage() {
                                                 </div>
                                                 <div className="flex items-center gap-3">
                                                     <span className={cn("text-sm font-semibold", isDark ? "text-gray-300" : "text-gray-600")}>
-                                                        {prazoData.dentro.toLocaleString("pt-BR")}
+                                                        {fmtBR(prazoData.dentro)}
                                                     </span>
                                                     <span className="text-2xl font-bold text-emerald-400">
                                                         {prazoData.dentroPct.toFixed(1)}%
@@ -902,7 +906,7 @@ export default function DashboardAnualPage() {
                                         <div className="flex items-center gap-4">
                                             <div>
                                                 <p className="text-[10px] text-gray-400 uppercase tracking-wider">Atendimentos</p>
-                                                <p className="text-lg font-bold">{prazoData.dentro.toLocaleString("pt-BR")}</p>
+                                                <p className="text-lg font-bold">{fmtBR(prazoData.dentro)}</p>
                                             </div>
                                             <div className="w-px h-8 bg-gray-200" />
                                             <div>
@@ -924,7 +928,7 @@ export default function DashboardAnualPage() {
                                                 </div>
                                                 <div className="flex items-center gap-3">
                                                     <span className={cn("text-sm font-semibold", isDark ? "text-gray-300" : "text-gray-600")}>
-                                                        {prazoData.fora.toLocaleString("pt-BR")}
+                                                        {fmtBR(prazoData.fora)}
                                                     </span>
                                                     <span className="text-2xl font-bold text-red-400">
                                                         {prazoData.foraPct.toFixed(1)}%
@@ -953,7 +957,7 @@ export default function DashboardAnualPage() {
                                         <div className="flex items-center gap-4">
                                             <div>
                                                 <p className="text-[10px] text-gray-400 uppercase tracking-wider">Atendimentos</p>
-                                                <p className="text-lg font-bold">{prazoData.fora.toLocaleString("pt-BR")}</p>
+                                                <p className="text-lg font-bold">{fmtBR(prazoData.fora)}</p>
                                             </div>
                                             <div className="w-px h-8 bg-gray-200" />
                                             <div>
@@ -990,7 +994,7 @@ export default function DashboardAnualPage() {
                                         </svg>
                                         <div className="absolute inset-0 flex flex-col items-center justify-center">
                                             <span className={cn("text-2xl font-bold", isDark ? "text-white" : "text-gray-900")}>
-                                                {prazoData.total.toLocaleString("pt-BR")}
+                                                {fmtBR(prazoData.total)}
                                             </span>
                                             <span className={cn("text-[10px] uppercase tracking-wider", isDark ? "text-gray-400" : "text-gray-500")}>Total</span>
                                         </div>
@@ -1061,7 +1065,7 @@ export default function DashboardAnualPage() {
                                     {rankingAssuntos.map((_, index) => (
                                         <Cell key={`assunto-${index}`} fill={getBarGradient("assunto", index, ASSUNTO_COLORS.length)} className="cursor-pointer" />
                                     ))}
-                                    <LabelList dataKey="total" position="right" fill={isDark ? "#E2E8F0" : "#334155"} fontSize={12} fontWeight={700} formatter={(v: number) => v.toLocaleString("pt-BR")} offset={10} />
+                                    <LabelList dataKey="total" position="right" fill={isDark ? "#E2E8F0" : "#334155"} fontSize={12} fontWeight={700} formatter={(v: number) => fmtBR(v)} offset={10} />
                                 </Bar>
                             </BarChart>
                         </ResponsiveContainer>
@@ -1100,7 +1104,7 @@ export default function DashboardAnualPage() {
                                         <div key={i} className={cn("rounded-lg p-3 border", isDark ? "bg-[#081E30] border-[#165A8A]/40" : "bg-slate-50 border-slate-200")}>
                                             <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold">Top {i + 1}</span>
                                             <p className={cn("font-bold text-sm mt-0.5", isDark ? "text-white" : "text-gray-900")}>{item.nome}</p>
-                                            <p className={cn("text-xs", isDark ? "text-gray-400" : "text-gray-500")}>{item.total.toLocaleString("pt-BR")}</p>
+                                            <p className={cn("text-xs", isDark ? "text-gray-400" : "text-gray-500")}>{fmtBR(item.total)}</p>
                                         </div>
                                     ))}
                                     <div className={cn("rounded-lg p-3 border", isDark ? "bg-[#081E30] border-[#165A8A]/40" : "bg-slate-50 border-slate-200")}>
@@ -1113,7 +1117,7 @@ export default function DashboardAnualPage() {
                                     </div>
                                     <div className={cn("rounded-lg p-3 border", isDark ? "bg-[#081E30] border-[#165A8A]/40" : "bg-slate-50 border-slate-200")}>
                                         <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold">Cauda Longa</span>
-                                        <p className={cn("font-bold text-sm mt-0.5", isDark ? "text-white" : "text-gray-900")}>{longTail} assuntos abaixo de {threshold.toLocaleString("pt-BR")}</p>
+                                        <p className={cn("font-bold text-sm mt-0.5", isDark ? "text-white" : "text-gray-900")}>{longTail} assuntos abaixo de {fmtBR(threshold)}</p>
                                     </div>
                                 </CardContent>
                             </Card>
@@ -1133,7 +1137,7 @@ export default function DashboardAnualPage() {
                         </DialogTitle>
                         <DialogDescription className="text-gray-400">
                             Atendimentos filtrados • {selectedYear}
-                            {drilldownData && ` • ${drilldownData.length.toLocaleString('pt-BR')} registros`}
+                            {drilldownData && ` • ${fmtBR(drilldownData.length)} registros`}
                         </DialogDescription>
                     </DialogHeader>
 
@@ -1195,7 +1199,7 @@ export default function DashboardAnualPage() {
                                 {drilldownData.length > ITEMS_PER_PAGE && (
                                     <div className="flex items-center justify-between pt-4 mt-2 border-t border-[#165A8A]">
                                         <span className="text-xs text-gray-400">
-                                            Mostrando {((drilldownPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(drilldownPage * ITEMS_PER_PAGE, drilldownData.length)} de {drilldownData.length.toLocaleString('pt-BR')}
+                                            Mostrando {((drilldownPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(drilldownPage * ITEMS_PER_PAGE, drilldownData.length)} de {fmtBR(drilldownData.length)}
                                         </span>
                                         <div className="flex items-center gap-2">
                                             <button
