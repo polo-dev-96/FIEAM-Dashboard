@@ -411,8 +411,107 @@ function luminance(rgb: [number, number, number]): number {
 // Replacement dark color for any light text on white background during PDF capture.
 const PDF_TEXT_DARK = "#0f172a";
 
+
+// Cor de trilho para barras/progressos no PDF claro.
+const PDF_BAR_TRACK = "#e2e8f0";
+const PDF_BAR_FILL_DEFAULT = "#009FE3";
+
+function cssClassText(el: Element): string {
+  const cls = (el as HTMLElement).className;
+  return typeof cls === "string" ? cls : "";
+}
+
+function hasVisibleGradient(cs: CSSStyleDeclaration): boolean {
+  return Boolean(cs.backgroundImage && cs.backgroundImage !== "none");
+}
+
+function isModernUnsupportedCssColor(value: string): boolean {
+  return /(color-mix|oklch|oklab|lch|lab|display-p3)\s*\(/i.test(value || "");
+}
+
+function isBarLikeElement(el: HTMLElement, cs: CSSStyleDeclaration): boolean {
+  if (el.closest("[data-pdf-no-bar-fix]")) return false;
+
+  const rect = el.getBoundingClientRect();
+  if (!rect.width || !rect.height) return false;
+
+  // Barras horizontais de dashboard costumam ser largas e baixas.
+  const isHorizontalPill = rect.width >= 40 && rect.height >= 4 && rect.height <= 38;
+  if (!isHorizontalPill) return false;
+
+  const cls = cssClassText(el).toLowerCase();
+  const radius = Number.parseFloat(cs.borderRadius || "0") || 0;
+  const hasPillShape =
+    radius >= Math.min(rect.height / 3, 12) ||
+    cls.includes("rounded-full") ||
+    cls.includes("rounded") ||
+    cls.includes("progress") ||
+    el.getAttribute("role") === "progressbar" ||
+    el.hasAttribute("aria-valuenow") ||
+    el.hasAttribute("data-pdf-progress") ||
+    el.hasAttribute("data-pdf-progress-track") ||
+    el.hasAttribute("data-pdf-progress-fill");
+
+  return hasPillShape;
+}
+
+type PdfBarKind = "track" | "fill" | null;
+
+function classifyPdfBarElement(el: HTMLElement, cs: CSSStyleDeclaration): PdfBarKind {
+  if (el.hasAttribute("data-pdf-progress-fill")) return "fill";
+  if (el.hasAttribute("data-pdf-progress-track") || el.hasAttribute("data-pdf-progress")) return "track";
+  if (el.getAttribute("role") === "progressbar" || el.hasAttribute("aria-valuenow")) return "track";
+
+  if (!isBarLikeElement(el, cs)) return null;
+
+  const rect = el.getBoundingClientRect();
+  const parent = el.parentElement;
+  const parentCs = parent ? parent.ownerDocument.defaultView?.getComputedStyle(parent) ?? getComputedStyle(parent) : null;
+  const parentRect = parent ? parent.getBoundingClientRect() : null;
+  const parentLooksLikeTrack = Boolean(
+    parent && parentCs && parentRect && isBarLikeElement(parent, parentCs as CSSStyleDeclaration)
+  );
+
+  const parsedBg = parseColor(cs.backgroundColor);
+  const hasColorfulBg = Boolean(
+    parsedBg &&
+      luminance(parsedBg) > 35 &&
+      Math.max(...parsedBg) - Math.min(...parsedBg) > 35
+  );
+
+  const cls = cssClassText(el).toLowerCase();
+  const hasExplicitWidth =
+    Boolean(el.style.width && el.style.width !== "auto") ||
+    /\bw-\[|\bw-\d|width|basis-/.test(cls);
+
+  // O preenchimento costuma ser filho de um trilho, ter width percentual/dinâmico
+  // e usar cor forte ou gradiente. O trilho costuma ter fundo escuro/cinza.
+  if (parentLooksLikeTrack && (hasVisibleGradient(cs) || hasColorfulBg || hasExplicitWidth || rect.width < parentRect!.width - 2)) {
+    return "fill";
+  }
+
+  return "track";
+}
+
+function fallbackColorForProgressFill(el: HTMLElement, cs: CSSStyleDeclaration): string {
+  const cls = cssClassText(el).toLowerCase();
+
+  if (cls.includes("green") || cls.includes("emerald")) return "#10b981";
+  if (cls.includes("red") || cls.includes("rose")) return "#ef4444";
+  if (cls.includes("orange") || cls.includes("amber")) return "#f59e0b";
+  if (cls.includes("blue") || cls.includes("cyan") || cls.includes("sky")) return "#009FE3";
+  if (cls.includes("teal")) return "#14b8a6";
+
+  const parsed = parseColor(cs.backgroundColor);
+  if (parsed && luminance(parsed) > 35) {
+    return `rgb(${parsed[0]}, ${parsed[1]}, ${parsed[2]})`;
+  }
+
+  return PDF_BAR_FILL_DEFAULT;
+}
+
 function forceLightInlineStyles(root: HTMLElement): () => void {
-  const saved: Array<{ el: HTMLElement; bg: string; color: string; borderColor: string }> = [];
+  const saved: Array<{ el: HTMLElement; bg: string; bgImage: string; color: string; borderColor: string }> = [];
 
   // Also temporarily strip bg-[#071A2E] class from ALL elements in the page
   // so the body:has(div.bg-[#071A2E]) "login always-dark" CSS rule no longer matches
@@ -432,11 +531,28 @@ function forceLightInlineStyles(root: HTMLElement): () => void {
   for (const el of allEls) {
     const cs = getComputedStyle(el);
     let touched = false;
-    const orig = { bg: el.style.backgroundColor, color: el.style.color, borderColor: el.style.borderColor };
+    const orig = { bg: el.style.backgroundColor, bgImage: el.style.backgroundImage, color: el.style.color, borderColor: el.style.borderColor };
 
-    // Detecta fundo escuro por luminância (cobre rgb(), rgba() com qualquer alpha e hex)
+    const barKind = classifyPdfBarElement(el, cs);
+
+    // Detecta fundo escuro por luminância (cobre rgb(), rgba() com qualquer alpha e hex).
+    // Importante: trilhos de barras/progressos NÃO devem virar branco, senão somem no PDF.
     const parsedBg = parseColor(cs.backgroundColor);
-    if (parsedBg && luminance(parsedBg) < 100) {
+    if (barKind === "track" && parsedBg && luminance(parsedBg) < 130) {
+      el.style.backgroundColor = PDF_BAR_TRACK;
+      touched = true;
+    } else if (barKind === "fill") {
+      // Mantém gradientes simples dos preenchimentos. Se o gradiente usa color-mix/oklch,
+      // troca por uma cor sólida segura para o html2canvas.
+      if (hasVisibleGradient(cs) && isModernUnsupportedCssColor(cs.backgroundImage)) {
+        el.style.backgroundImage = "none";
+        el.style.backgroundColor = fallbackColorForProgressFill(el, cs);
+        touched = true;
+      } else if (!hasVisibleGradient(cs) && (!parsedBg || luminance(parsedBg) < 25)) {
+        el.style.backgroundColor = fallbackColorForProgressFill(el, cs);
+        touched = true;
+      }
+    } else if (parsedBg && luminance(parsedBg) < 100) {
       el.style.backgroundColor = "#ffffff";
       touched = true;
     } else if (!parsedBg && /^(color-mix|oklch|oklab|lch|lab)\s*\(/i.test(cs.backgroundColor)) {
@@ -494,8 +610,9 @@ function forceLightInlineStyles(root: HTMLElement): () => void {
   });
 
   return () => {
-    for (const { el, bg, color, borderColor } of saved) {
+    for (const { el, bg, bgImage, color, borderColor } of saved) {
       el.style.backgroundColor = bg;
+      el.style.backgroundImage = bgImage;
       el.style.color = color;
       el.style.borderColor = borderColor;
     }
@@ -660,8 +777,7 @@ export async function exportElementToPdf(
       "-webkit-filter: none !important; " +
       "backdrop-filter: none !important; " +
       "-webkit-backdrop-filter: none !important; " +
-      "box-shadow: none !important; " +
-      "background-image: none !important; } " +
+      "box-shadow: none !important; } " +
       "[data-fieam-surface='true'] { overflow: hidden !important; } " +
       "[class*='blur-3xl'],[class*='blur-2xl'],[class*='blur-xl'] { display: none !important; }";
     (doc.head ?? doc.documentElement).appendChild(safeStyle);
@@ -675,17 +791,6 @@ export async function exportElementToPdf(
       let css = styleEl.textContent;
       css = css.replace(/\b(oklch|oklab|lch|lab)\([^)]*\)/gi, "#e2e8f0");
       css = css.replace(/color-mix\([^;{}]*\)/gi, "transparent");
-      css = css.replace(/\b(linear-gradient|radial-gradient|conic-gradient)\(/gi, (match, _fn, offset, str) => {
-        let depth = 1;
-        let i = offset + match.length;
-        while (i < str.length && depth > 0) {
-          if (str[i] === "(") depth++;
-          else if (str[i] === ")") depth--;
-          i++;
-        }
-        const full = str.slice(offset, i);
-        return /\(/.test(full.slice(match.length)) ? "transparent" : match;
-      });
       styleEl.textContent = css;
     });
 
@@ -706,6 +811,16 @@ export async function exportElementToPdf(
       if (unsafePattern.test(cs.outlineColor)) el.style.outline = "none";
       if (cs.boxShadow && unsafePattern.test(cs.boxShadow)) el.style.boxShadow = "none";
 
+      const barKind = classifyPdfBarElement(el, cs);
+      const parsedBg = parseColor(cs.backgroundColor);
+      if (barKind === "track" && parsedBg && luminance(parsedBg) < 130) {
+        el.style.backgroundColor = PDF_BAR_TRACK;
+      }
+      if (barKind === "fill" && hasVisibleGradient(cs) && isModernUnsupportedCssColor(cs.backgroundImage)) {
+        el.style.backgroundImage = "none";
+        el.style.backgroundColor = fallbackColorForProgressFill(el, cs);
+      }
+
       if (cs.filter && cs.filter !== "none") el.style.filter = "none";
       if (cs.backdropFilter && cs.backdropFilter !== "none") {
         (el.style as CSSStyleDeclaration & { backdropFilter?: string }).backdropFilter = "none";
@@ -716,7 +831,11 @@ export async function exportElementToPdf(
         cs.backgroundImage !== "none" &&
         (unsafePattern.test(cs.backgroundImage) || modernAnywhereInBg.test(cs.backgroundImage))
       ) {
+        const barKindForBg = classifyPdfBarElement(el, cs);
         el.style.backgroundImage = "none";
+        if (barKindForBg === "fill") {
+          el.style.backgroundColor = fallbackColorForProgressFill(el, cs);
+        }
       }
 
       if (cs.overflow === "hidden" && (el.classList.contains("truncate") || el.closest("[data-fieam-surface]"))) {
@@ -766,6 +885,10 @@ export async function exportElementToPdf(
     // Evita cortes de texto causados por truncate/overflow-hidden.
     const allTextEls = container.querySelectorAll<HTMLElement>("[class*='truncate'], [class*='overflow-hidden']");
     for (const el of Array.from(allTextEls)) {
+      const cs = getComputedStyle(el);
+      // Progress bars usam overflow-hidden para manter a borda arredondada.
+      // Não mexer nelas evita perder o layout visual das barras.
+      if (isBarLikeElement(el, cs)) continue;
       saveStyle(el, "overflow", overflowFixes);
       el.style.overflow = "visible";
     }
@@ -782,13 +905,19 @@ export async function exportElementToPdf(
       }
     });
 
-    // Remove background-image com color-mix/oklch/oklab/lch/lab.
+    // Remove apenas background-image com color-mix/oklch/oklab/lch/lab.
+    // Não remove gradientes simples, porque eles desenham as barras do layout.
     const modernInAnyBg = /(color-mix|oklch|oklab|lch|lab|display-p3)\s*\(/i;
     container.querySelectorAll<HTMLElement>("*").forEach((el) => {
       const cs = getComputedStyle(el);
       if (cs.backgroundImage && cs.backgroundImage !== "none" && modernInAnyBg.test(cs.backgroundImage)) {
         saveStyle(el, "backgroundImage", bgImageFixes);
         el.style.backgroundImage = "none";
+
+        if (classifyPdfBarElement(el, cs) === "fill") {
+          saveStyle(el, "backgroundColor", bgImageFixes);
+          el.style.backgroundColor = fallbackColorForProgressFill(el, cs);
+        }
       }
     });
 
