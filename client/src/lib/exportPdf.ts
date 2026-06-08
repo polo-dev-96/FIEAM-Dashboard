@@ -636,7 +636,8 @@ export async function exportElementToPdf(
       "-webkit-filter: none !important; " +
       "backdrop-filter: none !important; " +
       "-webkit-backdrop-filter: none !important; " +
-      "box-shadow: none !important; }";
+      "box-shadow: none !important; " +
+      "background-image: none !important; }";
     (doc.head ?? doc.documentElement).appendChild(safeStyle);
 
     // Step 1: Sanitize all <style> tags in the cloned document so html2canvas never
