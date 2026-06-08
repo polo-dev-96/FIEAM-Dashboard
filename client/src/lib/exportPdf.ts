@@ -425,10 +425,6 @@ function hasVisibleGradient(cs: CSSStyleDeclaration): boolean {
   return Boolean(cs.backgroundImage && cs.backgroundImage !== "none");
 }
 
-function isModernUnsupportedCssColor(value: string): boolean {
-  return /(color-mix|oklch|oklab|lch|lab|display-p3)\s*\(/i.test(value || "");
-}
-
 function isBarLikeElement(el: HTMLElement, cs: CSSStyleDeclaration): boolean {
   if (el.closest("[data-pdf-no-bar-fix]")) return false;
 
@@ -538,17 +534,22 @@ function forceLightInlineStyles(root: HTMLElement): () => void {
     // Detecta fundo escuro por luminância (cobre rgb(), rgba() com qualquer alpha e hex).
     // Importante: trilhos de barras/progressos NÃO devem virar branco, senão somem no PDF.
     const parsedBg = parseColor(cs.backgroundColor);
-    if (barKind === "track" && parsedBg && luminance(parsedBg) < 130) {
-      el.style.backgroundColor = PDF_BAR_TRACK;
+    // Regra importante:
+    // html2canvas pode quebrar com background-image/gradientes em produção
+    // (erro createPattern com canvas 0x0). Por isso removemos background-image
+    // de qualquer elemento e transformamos barras/progressos em cores sólidas.
+    if (hasVisibleGradient(cs)) {
+      el.style.backgroundImage = "none";
       touched = true;
-    } else if (barKind === "fill") {
-      // Mantém gradientes simples dos preenchimentos. Se o gradiente usa color-mix/oklch,
-      // troca por uma cor sólida segura para o html2canvas.
-      if (hasVisibleGradient(cs) && isModernUnsupportedCssColor(cs.backgroundImage)) {
-        el.style.backgroundImage = "none";
-        el.style.backgroundColor = fallbackColorForProgressFill(el, cs);
+    }
+
+    if (barKind === "track") {
+      if ((parsedBg && luminance(parsedBg) < 180) || hasVisibleGradient(cs)) {
+        el.style.backgroundColor = PDF_BAR_TRACK;
         touched = true;
-      } else if (!hasVisibleGradient(cs) && (!parsedBg || luminance(parsedBg) < 25)) {
+      }
+    } else if (barKind === "fill") {
+      if (hasVisibleGradient(cs) || !parsedBg || luminance(parsedBg) < 25) {
         el.style.backgroundColor = fallbackColorForProgressFill(el, cs);
         touched = true;
       }
@@ -716,6 +717,37 @@ function getPdfSections(container: HTMLElement, selector = "[data-pdf-section]")
   });
 }
 
+function getPdfChildFallbackSections(section: HTMLElement): HTMLElement[] {
+  const directChildren = (Array.from(section.children) as HTMLElement[]).filter((el) => {
+    if (el.hasAttribute("data-pdf-exclude") || el.closest("[data-pdf-exclude]")) return false;
+    if (!isRenderablePdfSection(el)) return false;
+
+    const rect = el.getBoundingClientRect();
+    return rect.width >= 80 && rect.height >= 40;
+  });
+
+  if (directChildren.length > 0) return directChildren;
+
+  const cardSelectors = [
+    "[data-pdf-card]",
+    "[data-fieam-surface]",
+    "article",
+    "section",
+    "[role='region']",
+  ].join(",");
+
+  const cards = Array.from(section.querySelectorAll<HTMLElement>(cardSelectors)).filter((el) => {
+    if (el === section) return false;
+    if (el.hasAttribute("data-pdf-exclude") || el.closest("[data-pdf-exclude]")) return false;
+    if (!isRenderablePdfSection(el)) return false;
+
+    const rect = el.getBoundingClientRect();
+    return rect.width >= 80 && rect.height >= 40;
+  });
+
+  return cards.filter((el) => !cards.some((other) => other !== el && other.contains(el)));
+}
+
 function wait(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
@@ -777,7 +809,8 @@ export async function exportElementToPdf(
       "-webkit-filter: none !important; " +
       "backdrop-filter: none !important; " +
       "-webkit-backdrop-filter: none !important; " +
-      "box-shadow: none !important; } " +
+      "box-shadow: none !important; " +
+      "background-image: none !important; } " +
       "[data-fieam-surface='true'] { overflow: hidden !important; } " +
       "[class*='blur-3xl'],[class*='blur-2xl'],[class*='blur-xl'] { display: none !important; }";
     (doc.head ?? doc.documentElement).appendChild(safeStyle);
@@ -795,7 +828,6 @@ export async function exportElementToPdf(
     });
 
     const unsafePattern = /^(color-mix|oklch|oklab|lch|lab|display-p3|color)\s*\(/i;
-    const modernAnywhereInBg = /(color-mix|oklch|oklab|lch|lab|display-p3)\s*\(/i;
     const all = [root, ...Array.from(root.querySelectorAll("*"))] as HTMLElement[];
 
     for (const el of all) {
@@ -813,12 +845,17 @@ export async function exportElementToPdf(
 
       const barKind = classifyPdfBarElement(el, cs);
       const parsedBg = parseColor(cs.backgroundColor);
-      if (barKind === "track" && parsedBg && luminance(parsedBg) < 130) {
-        el.style.backgroundColor = PDF_BAR_TRACK;
+      if (barKind === "track") {
+        if ((parsedBg && luminance(parsedBg) < 180) || hasVisibleGradient(cs)) {
+          el.style.backgroundImage = "none";
+          el.style.backgroundColor = PDF_BAR_TRACK;
+        }
       }
-      if (barKind === "fill" && hasVisibleGradient(cs) && isModernUnsupportedCssColor(cs.backgroundImage)) {
-        el.style.backgroundImage = "none";
-        el.style.backgroundColor = fallbackColorForProgressFill(el, cs);
+      if (barKind === "fill") {
+        if (hasVisibleGradient(cs) || !parsedBg || luminance(parsedBg) < 25) {
+          el.style.backgroundImage = "none";
+          el.style.backgroundColor = fallbackColorForProgressFill(el, cs);
+        }
       }
 
       if (cs.filter && cs.filter !== "none") el.style.filter = "none";
@@ -826,15 +863,13 @@ export async function exportElementToPdf(
         (el.style as CSSStyleDeclaration & { backdropFilter?: string }).backdropFilter = "none";
       }
 
-      if (
-        cs.backgroundImage &&
-        cs.backgroundImage !== "none" &&
-        (unsafePattern.test(cs.backgroundImage) || modernAnywhereInBg.test(cs.backgroundImage))
-      ) {
+      if (cs.backgroundImage && cs.backgroundImage !== "none") {
         const barKindForBg = classifyPdfBarElement(el, cs);
         el.style.backgroundImage = "none";
         if (barKindForBg === "fill") {
           el.style.backgroundColor = fallbackColorForProgressFill(el, cs);
+        } else if (barKindForBg === "track") {
+          el.style.backgroundColor = PDF_BAR_TRACK;
         }
       }
 
@@ -905,19 +940,23 @@ export async function exportElementToPdf(
       }
     });
 
-    // Remove apenas background-image com color-mix/oklch/oklab/lch/lab.
-    // Não remove gradientes simples, porque eles desenham as barras do layout.
-    const modernInAnyBg = /(color-mix|oklch|oklab|lch|lab|display-p3)\s*\(/i;
+    // Remove TODOS os background-image antes do html2canvas.
+    // Motivo: em produção, alguns gradientes/backgrounds geram createPattern com canvas 0x0.
+    // Para não perder as barras, os progressos recebem background-color sólido equivalente.
     container.querySelectorAll<HTMLElement>("*").forEach((el) => {
       const cs = getComputedStyle(el);
-      if (cs.backgroundImage && cs.backgroundImage !== "none" && modernInAnyBg.test(cs.backgroundImage)) {
-        saveStyle(el, "backgroundImage", bgImageFixes);
-        el.style.backgroundImage = "none";
+      if (!cs.backgroundImage || cs.backgroundImage === "none") return;
 
-        if (classifyPdfBarElement(el, cs) === "fill") {
-          saveStyle(el, "backgroundColor", bgImageFixes);
-          el.style.backgroundColor = fallbackColorForProgressFill(el, cs);
-        }
+      const barKind = classifyPdfBarElement(el, cs);
+      saveStyle(el, "backgroundImage", bgImageFixes);
+      el.style.backgroundImage = "none";
+
+      if (barKind === "fill") {
+        saveStyle(el, "backgroundColor", bgImageFixes);
+        el.style.backgroundColor = fallbackColorForProgressFill(el, cs);
+      } else if (barKind === "track") {
+        saveStyle(el, "backgroundColor", bgImageFixes);
+        el.style.backgroundColor = PDF_BAR_TRACK;
       }
     });
 
@@ -1001,6 +1040,46 @@ export async function exportElementToPdf(
         } catch (e) {
           console.error(`[exportPdf] html2canvas também falhou em "${sectionLabel}" com scale 1:`, e);
         }
+      }
+
+      // Último fallback: quando a seção é uma grid/container grande e o html2canvas
+      // quebra nela, tenta capturar os cards/filhos separadamente.
+      if (!captured) {
+        const childFallbackSections = getPdfChildFallbackSections(section);
+        let childCapturedAny = false;
+
+        for (const child of childFallbackSections) {
+          const childLabel =
+            child.getAttribute("data-pdf-title") ||
+            child.getAttribute("data-section") ||
+            child.getAttribute("data-pdf-card") ||
+            child.className?.toString().slice(0, 60) ||
+            "child";
+
+          const childScale = Math.min(mainScale, 2);
+
+          try {
+            const canvas = await html2canvas(child, {
+              scale: childScale,
+              useCORS: true,
+              backgroundColor: "#ffffff",
+              logging: false,
+              onclone: (doc, el) => sanitizeClonedColors(doc, el),
+            });
+
+            if (!canvas.width || !canvas.height) {
+              throw new Error("Canvas vazio no fallback por filho");
+            }
+
+            captures.push({ canvas, scale: childScale, section: child });
+            childCapturedAny = true;
+            console.warn(`[exportPdf] Recuperado filho "${childLabel}" da seção "${sectionLabel}"`);
+          } catch (e) {
+            console.error(`[exportPdf] fallback por filho também falhou em "${childLabel}":`, e);
+          }
+        }
+
+        captured = childCapturedAny;
       }
     }
 
