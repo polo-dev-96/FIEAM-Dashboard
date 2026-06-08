@@ -554,430 +554,535 @@ export async function exportElementToPdf(
   title: string,
   options?: PdfExportOptions
 ) {
-  // ── Carrega as bibliotecas dinamicamente (evita document.write() no load)
   const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
     import("html2canvas"),
     import("jspdf"),
   ]);
 
-  // ── Salva o tema atual e força tema claro para captura
+  type Capture = { canvas: HTMLCanvasElement; scale: number; label: string };
+
   const prevTheme = document.documentElement.getAttribute("data-theme");
-  document.documentElement.setAttribute("data-theme", "light");
+  const pdfOnlyEls = Array.from(container.querySelectorAll<HTMLElement>("[data-pdf-only]"));
+  const pdfOnlyPrevious = pdfOnlyEls.map((el) => ({ el, display: el.style.display }));
+  let stagingRoot: HTMLDivElement | null = null;
 
-  // ── Reveal PDF-only elements
-  const pdfOnlyEls = container.querySelectorAll("[data-pdf-only]") as NodeListOf<HTMLElement>;
-  pdfOnlyEls.forEach((el) => (el.style.display = ""));
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  await new Promise((r) => setTimeout(r, 1500));
+  const cssModernColor = /(color-mix|oklch|oklab|lch|lab|display-p3|color\()/i;
 
-  // ── Force light inline styles (bypasses CSS specificity issues)
-  const restoreLight = forceLightInlineStyles(container);
-
-  // ── Fix overflow clipping: html2canvas struggles with overflow:hidden on text
-  const overflowFixes: Array<{ el: HTMLElement; prev: string }> = [];
-  const allTextEls = container.querySelectorAll("[class*='truncate'], [class*='overflow-hidden']") as NodeListOf<HTMLElement>;
-  for (const el of Array.from(allTextEls)) {
-    overflowFixes.push({ el, prev: el.style.overflow });
-    el.style.overflow = "visible";
-  }
-  // Also fix the container itself if it clips children
-  overflowFixes.push({ el: container, prev: container.style.overflow });
-  container.style.overflow = "visible";
-
-  // ── Fix CSS filter elements: html2canvas v1.x throws InvalidStateError
-  // ("createPattern: canvas element with width or height of 0") when it
-  // encounters filter:blur() on absolutely-positioned elements that have 0×0
-  // visible dimensions (e.g. ChartCard glow decoration positioned outside
-  // the card bounds). The sanitizeClonedColors onclone approach is unreliable
-  // because html2canvas may pre-process filters before the callback completes.
-  // Setting filter:none as an inline style on the ORIGINAL DOM is the only
-  // guaranteed way to prevent the issue — html2canvas always respects inline styles.
-  const filterFixes: Array<{ el: HTMLElement; prev: string }> = [];
-  container.querySelectorAll<HTMLElement>("*").forEach((el) => {
-    const cs = getComputedStyle(el);
-    if (cs.filter && cs.filter !== "none") {
-      filterFixes.push({ el, prev: el.style.filter });
-      el.style.filter = "none";
-    }
-  });
-
-  // ── Fix background-image with modern color functions on the ORIGINAL DOM.
-  // In production (Vite build), Tailwind v4 compiles gradient utilities using
-  // color-mix()/oklch() INSIDE linear-gradient(). html2canvas cannot parse these
-  // and creates a 0×0 canvas → createPattern throws InvalidStateError.
-  // The onclone sanitizeClonedColors check only catches values that START with
-  // a modern function; this pre-clone pass handles values that CONTAIN them.
-  const modernInAnyBg = /(color-mix|oklch|oklab|lch|lab|display-p3)\s*\(/i;
-  const bgImageFixes: Array<{ el: HTMLElement; prev: string }> = [];
-  container.querySelectorAll<HTMLElement>("*").forEach((el) => {
-    const cs = getComputedStyle(el);
-    if (cs.backgroundImage && cs.backgroundImage !== "none" && modernInAnyBg.test(cs.backgroundImage)) {
-      bgImageFixes.push({ el, prev: el.style.backgroundImage });
-      el.style.backgroundImage = "none";
-    }
-  });
-
-  // ── Pre-clone: resolve SVG url(#id) gradient fills to solid colors on original DOM
-  // so html2canvas doesn't need to resolve them in the clone (more reliable)
-  const svgFillFixes: Array<{ el: SVGElement; prev: string }> = [];
-  container.querySelectorAll<SVGElement>("[fill]").forEach((el) => {
-    const fill = el.getAttribute("fill") ?? "";
-    const match = fill.match(/^url\(#([^)]+)\)$/);
-    if (!match) return;
-    const grad = document.getElementById(match[1]);
-    if (!grad) return;
-    const stops = Array.from(grad.querySelectorAll("stop"));
-    if (!stops.length) return;
-    const mid = stops[Math.floor(stops.length / 2)] || stops[0];
-    const color = mid.getAttribute("stop-color") ?? "#009FE3";
-    svgFillFixes.push({ el, prev: fill });
-    el.setAttribute("fill", color);
-  });
-
-  // ── Capture DOM sections
-  // Preferência: capture apenas blocos marcados com data-pdf-section.
-  // Fallback: mantém o comportamento antigo, capturando filhos diretos.
-  const markedSections = Array.from(container.querySelectorAll<HTMLElement>("[data-pdf-section]"))
-    .filter((el) => !el.hasAttribute("data-pdf-exclude") && !el.closest("[data-pdf-exclude]"));
-
-  const children = Array.from(container.children) as HTMLElement[];
-  const sections = markedSections.length > 0
-    ? markedSections
-    : children.filter((el) => !el.hasAttribute("data-pdf-exclude") && !el.closest("[data-pdf-exclude]"));
-
-  // Helper: sanitiza o documento clonado do html2canvas para remover
-  // funções de cor modernas (color(), oklch(), lch()) que o html2canvas
-  // não consegue parsear, substituindo por valores seguros equivalentes.
-  function sanitizeClonedColors(doc: Document, root: HTMLElement) {
-    // ── Step 0: Inject a catch-all CSS rule that removes ALL filters in the clone,
-    // including on pseudo-elements (::before / ::after) which querySelectorAll("*")
-    // cannot select. html2canvas throws InvalidStateError ("canvas element with a
-    // width or height of 0") when it tries to renderBackgroundImage on a 0×0 canvas
-    // produced by filter:blur() on an absolutely-positioned pseudo-element (e.g. the
-    // ChartCard glow decoration). This is the root cause of sections being silently
-    // skipped in the production build (minified CSS activates the filter; dev does not).
-    const safeStyle = doc.createElement("style");
-    safeStyle.textContent =
-      "*, *::before, *::after, *::backdrop { " +
-      "overflow: visible !important; " +
-      "filter: none !important; " +
-      "-webkit-filter: none !important; " +
-      "backdrop-filter: none !important; " +
-      "-webkit-backdrop-filter: none !important; " +
-      "box-shadow: none !important; } " +
-      "*::before, *::after, *::backdrop { background-image: none !important; } " +
-      // Keep ChartCard overflow:hidden so absolute glow elements stay clipped
-      "[data-fieam-surface='true'] { overflow: hidden !important; } " +
-      // Hide purely decorative blur/glow elements that extend outside card bounds
-      "[class*='blur-3xl'],[class*='blur-2xl'],[class*='blur-xl'] { display: none !important; }";
-    (doc.head ?? doc.documentElement).appendChild(safeStyle);
-
-    // Step 1: Sanitize all <style> tags in the cloned document so html2canvas never
-    // encounters color-mix()/oklch() while parsing CSS rules.
-    // Uses global regex (not line-by-line) so it works for both dev and minified prod CSS.
-    doc.querySelectorAll("style").forEach((styleEl) => {
-      if (!styleEl.textContent) return;
-      const modernFns = /\b(color-mix|oklch|oklab|lch|lab)\s*\(/i;
-      if (!modernFns.test(styleEl.textContent)) return;
-      // In production, Vite minifies CSS into 1-2 long lines — split("\n") would only fix
-      // the first occurrence per line. Use global regex replacements instead so the fix
-      // works for both minified (production) and non-minified (development) CSS.
-      let css = styleEl.textContent;
-      // Pass 1: replace leaf functions (no nested parens) with a safe hex color
-      css = css.replace(/\b(oklch|oklab|lch|lab)\([^)]*\)/gi, "#e2e8f0");
-      // Pass 2: after pass 1 the inner oklch/oklab are gone, color-mix now has no nested
-      // parens so [^;{}]* safely matches the whole value
-      css = css.replace(/color-mix\([^;{}]*\)/gi, "#e2e8f0");
-      // Pass 3: remove any remaining gradient that still contains a nested call (e.g.
-      // linear-gradient wrapping a color-mix that pass 2 missed due to nested parens).
-      // Strategy: after passes 1+2, any gradient value that still has a '(' inside is unsafe.
-      // We match the gradient name and consume characters until we find the matching ')'
-      // using a simple depth-aware replacement via replace with a callback.
-      css = css.replace(/\b(linear-gradient|radial-gradient|conic-gradient)\(/gi, (match, _fn, offset, str) => {
-        // Find the closing ')' that matches this opening '(' using a depth counter.
-        let depth = 1;
-        let i = offset + match.length;
-        while (i < str.length && depth > 0) {
-          if (str[i] === "(") depth++;
-          else if (str[i] === ")") depth--;
-          i++;
-        }
-        const full = str.slice(offset, i);
-        // Only replace if the gradient still contains a function call (unsafe).
-        return /\(/.test(full.slice(match.length)) ? "#e2e8f0" : match;
-      });
-      styleEl.textContent = css;
-    });
-
-    // Step 2: Fix remaining inline computed values on each element
-    // color-mix() is used by TailwindCSS v4 opacity variants (e.g. bg-[#009FE3]/10)
-    // html2canvas 1.x cannot parse color-mix(), oklch(), oklab() etc.
-    const unsafePattern = /^(color-mix|oklch|oklab|lch|lab|display-p3|color)\s*\(/i;
-    const all = [root, ...Array.from(root.querySelectorAll("*"))] as HTMLElement[];
-    for (const el of all) {
-      const cs = doc.defaultView?.getComputedStyle(el);
-      if (!cs) continue;
-      if (unsafePattern.test(cs.backgroundColor))    el.style.backgroundColor = "transparent";
-      if (unsafePattern.test(cs.color))               el.style.color           = "#0f172a";
-      if (unsafePattern.test(cs.borderTopColor))      el.style.borderColor     = "#e2e8f0";
-      if (unsafePattern.test(cs.borderBottomColor))   el.style.borderColor     = "#e2e8f0";
-      if (unsafePattern.test(cs.borderLeftColor))     el.style.borderColor     = "#e2e8f0";
-      if (unsafePattern.test(cs.borderRightColor))    el.style.borderColor     = "#e2e8f0";
-      if (unsafePattern.test(cs.outlineColor))        el.style.outline         = "none";
-      if (cs.boxShadow && unsafePattern.test(cs.boxShadow)) el.style.boxShadow = "none";
-      // Remove filter/backdrop-filter: html2canvas creates a 0x0 canvas for blur()
-      // on absolute elements with negative offsets (e.g. ChartCard glow decoration),
-      // which then throws InvalidStateError on createPattern.
-      if (cs.filter && cs.filter !== "none") el.style.filter = "none";
-      if (cs.backdropFilter && cs.backdropFilter !== "none") (el.style as any).backdropFilter = "none";
-      // Remove background-image on elements if it uses modern color spaces that
-      // html2canvas cannot parse (color-mix, oklch, etc.), either as the top-level
-      // function OR nested inside a gradient like linear-gradient(color-mix(...), ...).
-      const modernAnywhereInBg = /(color-mix|oklch|oklab|lch|lab|display-p3)\s*\(/i;
-      if (cs.backgroundImage && cs.backgroundImage !== "none" &&
-          (unsafePattern.test(cs.backgroundImage) || modernAnywhereInBg.test(cs.backgroundImage))) {
-        el.style.backgroundImage = "none";
-      }
-      // Prevent text clipping in html2canvas clone
-      if (cs.overflow === "hidden" && (el.classList.contains("truncate") || el.closest("[data-fieam-surface]"))) {
-        el.style.overflow = "visible";
-      }
-    }
-
-    // ── Step 3: Resolve SVG gradient url(#id) fills ─────────────────────────
-    // html2canvas não consegue resolver referências url() de gradientes SVG em
-    // documentos clonados — as barras ficam transparentes, resultando em área
-    // completamente branca no PDF. Substituímos pelo stop-color central do gradiente.
-    try {
-      root.querySelectorAll("[fill]").forEach((svgEl) => {
-        const fill = svgEl.getAttribute("fill") ?? "";
-        const match = fill.match(/^url\(#([^)]+)\)$/);
-        if (!match) return;
-        const grad = doc.getElementById(match[1]);
-        if (!grad) return;
-        const stops = Array.from(grad.querySelectorAll("stop"));
-        if (!stops.length) return;
-        const mid = stops[Math.floor(stops.length / 2)] || stops[0];
-        const color =
-          mid.getAttribute("stop-color") ||
-          (mid as unknown as HTMLElement).style.getPropertyValue("stop-color") ||
-          "#009FE3";
-        svgEl.setAttribute("fill", color);
-      });
-    } catch (e) {
-      console.warn("[exportPdf] sanitizeClonedColors Step 3 falhou:", e);
-    }
+  function rectOf(el: Element) {
+    return el.getBoundingClientRect();
   }
 
-  interface Capture { canvas: HTMLCanvasElement; scale: number }
-  const captures: Capture[] = [];
+  function rgbToCss(rgb: [number, number, number]) {
+    return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+  }
 
-  function sectionLabel(section: HTMLElement) {
+  function firstRgbFromCss(value: string): [number, number, number] | null {
+    if (!value) return null;
+    const matches = value.match(/rgba?\([^)]*\)/gi);
+    if (!matches?.length) return null;
+    for (const m of matches) {
+      const parsed = parseColor(m);
+      if (parsed) return parsed;
+    }
+    return null;
+  }
+
+  function classText(el: Element) {
+    return typeof (el as HTMLElement).className === "string" ? (el as HTMLElement).className : "";
+  }
+
+  function hasMeaningfulContent(el: HTMLElement) {
+    const rect = rectOf(el);
+    if (rect.width < 20 || rect.height < 12) return false;
+    const text = (el.innerText || el.textContent || "").replace(/\s+/g, "").trim();
+    if (text.length >= 2) return true;
+    return Boolean(el.querySelector("svg, canvas, img, table, [role='img'], .recharts-wrapper"));
+  }
+
+  function isDecorative(el: Element) {
+    const win = el.ownerDocument.defaultView ?? window;
+    const cs = win.getComputedStyle(el);
+    if (cs.opacity === "0" || cs.visibility === "hidden" || cs.display === "none") return true;
+
+    // Não descarte elementos internos de SVG só porque o boundingClientRect é 0.
+    // Paths, defs, stops, clipPaths e textos de gráficos podem aparecer assim e
+    // ainda serem essenciais para o Recharts.
+    if (el instanceof SVGElement) return false;
+
+    const cls = classText(el);
+    if (/blur-(3xl|2xl|xl)|animate-|motion-|pulse|ping|spin|skeleton/i.test(cls)) return true;
+    const rect = rectOf(el);
+    if (rect.width === 0 || rect.height === 0) return true;
+    return false;
+  }
+
+  function isBarLike(el: Element, cs: CSSStyleDeclaration) {
+    const rect = rectOf(el);
+    const cls = classText(el);
+    const radius = parseFloat(cs.borderTopLeftRadius || "0");
+    const role = el.getAttribute("role") || "";
     return (
-      section.getAttribute("data-pdf-title") ||
-      section.getAttribute("data-section") ||
-      section.getAttribute("data-pdf-section") ||
-      section.className?.toString().slice(0, 80) ||
-      "unnamed"
+      rect.width >= 35 &&
+      rect.height >= 4 &&
+      rect.height <= 42 &&
+      (radius >= rect.height / 3 || /progress|bar|rounded-full|h-\d|h-\[|bg-ds-accent|bg-\[|from-|to-/i.test(cls) || role === "progressbar")
     );
   }
 
-  function sectionProbablyHasContent(section: HTMLElement): boolean {
-    const text = (section.innerText || section.textContent || "").replace(/\s+/g, "").trim();
-    if (text.length >= 3) return true;
-    return Boolean(section.querySelector("svg, canvas, img, table, [role='img'], [data-pdf-progress], [data-pdf-progress-track], [data-pdf-progress-fill]"));
+  function inferBrandColor(el: Element, cs: CSSStyleDeclaration) {
+    const cls = classText(el).toLowerCase();
+    const bgImageRgb = firstRgbFromCss(cs.backgroundImage || "");
+    if (bgImageRgb && luminance(bgImageRgb) > 25) return rgbToCss(bgImageRgb);
+    if (/green|emerald|success|dentro|prazo|from-success|to-success/.test(cls)) return "#10b981";
+    if (/red|rose|danger|destructive|fora|error|from-red|to-red/.test(cls)) return "#ef4444";
+    if (/orange|amber|warning|instagram/.test(cls)) return "#f97316";
+    if (/messenger|blue|accent|cyan|sky|009fe3|from-ds-accent|to-ds-accent/.test(cls)) return "#009FE3";
+    return "#009FE3";
   }
 
-  function canvasHasMeaningfulContent(canvas: HTMLCanvasElement): boolean {
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!ctx || !canvas.width || !canvas.height) return false;
+  function safeColor(value: string, fallback: string) {
+    if (!value || value === "transparent" || value === "rgba(0, 0, 0, 0)" || cssModernColor.test(value)) return fallback;
+    return value;
+  }
 
-    const w = canvas.width;
-    const h = canvas.height;
-    const maxSamples = 60000;
-    const step = Math.max(1, Math.floor(Math.sqrt((w * h) / maxSamples)));
+  function safeTextColor(value: string) {
+    const parsed = parseColor(value);
+    if (!parsed) return PDF_TEXT_DARK;
+    return luminance(parsed) >= 170 ? PDF_TEXT_DARK : value;
+  }
 
+  function safeBackgroundColor(source: Element, cs: CSSStyleDeclaration) {
+    const parsed = parseColor(cs.backgroundColor);
+    const hasBgImage = Boolean(cs.backgroundImage && cs.backgroundImage !== "none");
+
+    if (isBarLike(source, cs)) {
+      const parent = source.parentElement;
+      const parentRect = parent ? rectOf(parent) : null;
+      const ownRect = rectOf(source);
+      const looksLikeFill = Boolean(parentRect && parentRect.width > 0 && ownRect.width < parentRect.width * 0.96);
+      if (looksLikeFill || hasBgImage) return inferBrandColor(source, cs);
+      if (parsed && luminance(parsed) < 120) return "#e2e8f0";
+      return safeColor(cs.backgroundColor, "#e2e8f0");
+    }
+
+    if (parsed && luminance(parsed) < 100) return "#ffffff";
+    if (!parsed && cssModernColor.test(cs.backgroundColor)) return "#ffffff";
+    return safeColor(cs.backgroundColor, "transparent");
+  }
+
+  function collectSections() {
+    const explicit = Array.from(container.querySelectorAll<HTMLElement>("[data-pdf-section]"))
+      .filter((el) => !el.hasAttribute("data-pdf-exclude") && hasMeaningfulContent(el));
+
+    if (explicit.length > 0) return explicit;
+
+    const direct = Array.from(container.children) as HTMLElement[];
+    const result: HTMLElement[] = [];
+
+    for (const el of direct) {
+      if (el.hasAttribute("data-pdf-exclude") || !hasMeaningfulContent(el)) continue;
+
+      const cls = classText(el);
+      const shouldSplitGrid = /grid-cols-\[1fr_300px\]|grid-cols-\[minmax|ranking|assuntos/i.test(cls);
+      if (shouldSplitGrid) {
+        const children = Array.from(el.children) as HTMLElement[];
+        const useful = children.filter((child) => !child.hasAttribute("data-pdf-exclude") && hasMeaningfulContent(child));
+        if (useful.length) {
+          result.push(...useful);
+          continue;
+        }
+      }
+
+      result.push(el);
+    }
+
+    return result;
+  }
+
+  function copyCanvasContent(sourceRoot: HTMLElement, cloneRoot: HTMLElement) {
+    const sourceCanvases = Array.from(sourceRoot.querySelectorAll("canvas"));
+    const cloneCanvases = Array.from(cloneRoot.querySelectorAll("canvas"));
+
+    sourceCanvases.forEach((sourceCanvas, index) => {
+      const cloneCanvas = cloneCanvases[index];
+      if (!cloneCanvas) return;
+      try {
+        const img = document.createElement("img");
+        img.src = sourceCanvas.toDataURL("image/png");
+        img.width = sourceCanvas.width;
+        img.height = sourceCanvas.height;
+        img.style.width = `${sourceCanvas.getBoundingClientRect().width}px`;
+        img.style.height = `${sourceCanvas.getBoundingClientRect().height}px`;
+        cloneCanvas.replaceWith(img);
+      } catch {
+        try {
+          cloneCanvas.width = sourceCanvas.width;
+          cloneCanvas.height = sourceCanvas.height;
+          cloneCanvas.getContext("2d")?.drawImage(sourceCanvas, 0, 0);
+        } catch {
+          // Canvas com CORS/tainted: apenas ignora.
+        }
+      }
+    });
+  }
+
+  function resolveSvgGradientRefs(root: Element, doc: Document) {
+    root.querySelectorAll<SVGElement>("[fill], [stroke]").forEach((svgEl) => {
+      (["fill", "stroke"] as const).forEach((attr) => {
+        const value = svgEl.getAttribute(attr) ?? "";
+        const match = value.match(/^url\(#([^)]+)\)$/);
+        if (!match) return;
+        const grad = doc.getElementById(match[1]);
+        const stops = grad ? Array.from(grad.querySelectorAll("stop")) : [];
+        const mid = stops[Math.floor(stops.length / 2)] || stops[0];
+        const color =
+          mid?.getAttribute("stop-color") ||
+          (mid as unknown as HTMLElement | undefined)?.style?.getPropertyValue("stop-color") ||
+          "#009FE3";
+        svgEl.setAttribute(attr, color);
+      });
+    });
+  }
+
+  function inlineSnapshotStyles(sourceRoot: HTMLElement, cloneRoot: HTMLElement) {
+    const sourceEls = [sourceRoot, ...Array.from(sourceRoot.querySelectorAll("*"))] as Element[];
+    const cloneEls = [cloneRoot, ...Array.from(cloneRoot.querySelectorAll("*"))] as Element[];
+
+    const layoutProps = [
+      "display",
+      "position",
+      "left",
+      "top",
+      "right",
+      "bottom",
+      "zIndex",
+      "boxSizing",
+      "flexDirection",
+      "flexWrap",
+      "alignItems",
+      "alignContent",
+      "justifyContent",
+      "gap",
+      "rowGap",
+      "columnGap",
+      "gridTemplateColumns",
+      "gridTemplateRows",
+      "gridAutoColumns",
+      "gridAutoRows",
+      "gridColumn",
+      "gridRow",
+      "flex",
+      "flexGrow",
+      "flexShrink",
+      "flexBasis",
+      "order",
+      "paddingTop",
+      "paddingRight",
+      "paddingBottom",
+      "paddingLeft",
+      "marginTop",
+      "marginRight",
+      "marginBottom",
+      "marginLeft",
+      "fontFamily",
+      "fontSize",
+      "fontWeight",
+      "fontStyle",
+      "lineHeight",
+      "letterSpacing",
+      "textAlign",
+      "textTransform",
+      "whiteSpace",
+      "wordBreak",
+      "borderTopWidth",
+      "borderRightWidth",
+      "borderBottomWidth",
+      "borderLeftWidth",
+      "borderTopStyle",
+      "borderRightStyle",
+      "borderBottomStyle",
+      "borderLeftStyle",
+      "borderTopLeftRadius",
+      "borderTopRightRadius",
+      "borderBottomRightRadius",
+      "borderBottomLeftRadius",
+      "objectFit",
+      "objectPosition",
+      "verticalAlign",
+      "opacity",
+      "transform",
+      "transformOrigin",
+    ];
+
+    for (let i = 0; i < sourceEls.length; i++) {
+      const source = sourceEls[i] as HTMLElement | SVGElement;
+      const clone = cloneEls[i] as HTMLElement | SVGElement | undefined;
+      if (!clone) continue;
+
+      const sourceHtml = source as HTMLElement;
+      const cloneHtml = clone as HTMLElement;
+      const cs = getComputedStyle(sourceHtml);
+      const rect = rectOf(sourceHtml);
+      const style = cloneHtml.style;
+      const isSvgShape = source instanceof SVGElement && !(source instanceof SVGSVGElement);
+
+      if (!isSvgShape) {
+        for (const prop of layoutProps) {
+          const value = cs.getPropertyValue(prop);
+          if (value) style.setProperty(prop, value, "important");
+        }
+
+        style.setProperty("width", `${Math.max(1, rect.width)}px`, "important");
+        style.setProperty("min-width", `${Math.max(1, rect.width)}px`, "important");
+        style.setProperty("max-width", `${Math.max(1, rect.width)}px`, "important");
+
+        if (rect.height > 0) {
+          style.setProperty("min-height", `${rect.height}px`, "important");
+        }
+      }
+
+      style.setProperty("color", safeTextColor(cs.color), "important");
+      style.setProperty("background-color", safeBackgroundColor(sourceHtml, cs), "important");
+      style.setProperty("background-image", "none", "important");
+      style.setProperty("box-shadow", "none", "important");
+      style.setProperty("filter", "none", "important");
+      style.setProperty("-webkit-filter", "none", "important");
+      style.setProperty("backdrop-filter", "none", "important");
+      style.setProperty("-webkit-backdrop-filter", "none", "important");
+      style.setProperty("border-color", safeColor(cs.borderTopColor, "#e2e8f0"), "important");
+
+      if (/truncate/i.test(classText(sourceHtml))) {
+        style.setProperty("overflow", "visible", "important");
+        style.setProperty("text-overflow", "clip", "important");
+      } else if (isBarLike(sourceHtml, cs)) {
+        style.setProperty("overflow", "hidden", "important");
+      } else {
+        style.setProperty("overflow", cs.overflow === "clip" ? "hidden" : cs.overflow, "important");
+      }
+
+      if (clone instanceof SVGElement) {
+        const fill = source.getAttribute("fill") || cs.fill || "";
+        const stroke = source.getAttribute("stroke") || cs.stroke || "";
+        if (fill && fill !== "none" && !fill.startsWith("url(")) {
+          const parsed = parseColor(fill);
+          clone.setAttribute("fill", parsed && luminance(parsed) >= 170 ? PDF_TEXT_DARK : safeColor(fill, PDF_TEXT_DARK));
+        }
+        if (stroke && stroke !== "none" && !stroke.startsWith("url(")) {
+          clone.setAttribute("stroke", safeColor(stroke, "#009FE3"));
+        }
+      }
+
+      // Remove classes after inlining. This prevents Tailwind/shadcn pseudo-elements,
+      // color-mix gradients and blur glows from being re-applied inside html2canvas.
+      clone.removeAttribute("class");
+    }
+
+    resolveSvgGradientRefs(cloneRoot, document);
+  }
+
+  async function waitForImages(root: HTMLElement) {
+    const imgs = Array.from(root.querySelectorAll("img"));
+    await Promise.all(
+      imgs.map((img) => {
+        if (img.complete) return Promise.resolve();
+        return new Promise<void>((resolve) => {
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+        });
+      })
+    );
+  }
+
+  async function createSnapshot(section: HTMLElement) {
+    if (!stagingRoot) {
+      stagingRoot = document.createElement("div");
+      stagingRoot.setAttribute("data-pdf-staging", "true");
+      stagingRoot.style.cssText = [
+        "position: fixed",
+        "left: -100000px",
+        "top: 0",
+        "z-index: -1",
+        "pointer-events: none",
+        "background: #ffffff",
+        "overflow: visible",
+      ].join(";");
+      document.body.appendChild(stagingRoot);
+    }
+
+    const rect = rectOf(section);
+    const wrapper = document.createElement("div");
+    wrapper.style.cssText = [
+      `width: ${Math.ceil(Math.max(1, rect.width))}px`,
+      `min-height: ${Math.ceil(Math.max(1, rect.height))}px`,
+      "background: #ffffff",
+      "overflow: visible",
+      "contain: layout style paint",
+    ].join(";");
+
+    const clone = section.cloneNode(true) as HTMLElement;
+    clone.style.setProperty("margin", "0", "important");
+    clone.style.setProperty("background-image", "none", "important");
+    clone.style.setProperty("filter", "none", "important");
+    clone.style.setProperty("box-shadow", "none", "important");
+    wrapper.appendChild(clone);
+    stagingRoot.appendChild(wrapper);
+
+    copyCanvasContent(section, clone);
+    inlineSnapshotStyles(section, clone);
+    await waitForImages(wrapper);
+    await sleep(80);
+
+    return { wrapper, clone };
+  }
+
+  function isCanvasBlank(canvas: HTMLCanvasElement) {
+    const width = canvas.width;
+    const height = canvas.height;
+    if (width < 4 || height < 4) return true;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return false;
+
+    const sampleW = Math.min(width, 220);
+    const sampleH = Math.min(height, 140);
+    const stepX = Math.max(1, Math.floor(width / sampleW));
+    const stepY = Math.max(1, Math.floor(height / sampleH));
     let total = 0;
-    let meaningful = 0;
+    let nonWhite = 0;
 
     try {
-      const data = ctx.getImageData(0, 0, w, h).data;
-      for (let y = 0; y < h; y += step) {
-        for (let x = 0; x < w; x += step) {
-          const i = (y * w + x) * 4;
-          const a = data[i + 3];
-          if (a < 16) continue;
-
-          const r = data[i];
-          const g = data[i + 1];
-          const b = data[i + 2];
-          const maxC = Math.max(r, g, b);
-          const minC = Math.min(r, g, b);
-          const chroma = maxC - minC;
-          const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-
+      const data = ctx.getImageData(0, 0, width, height).data;
+      for (let y = 0; y < height; y += stepY) {
+        for (let x = 0; x < width; x += stepX) {
+          const idx = (y * width + x) * 4;
+          const r = data[idx];
+          const g = data[idx + 1];
+          const b = data[idx + 2];
+          const a = data[idx + 3];
           total++;
-
-          // Conteúdo real: texto escuro, eixos, linhas e barras coloridas.
-          // Borda cinza clara do card não conta, evitando aceitar uma página "branca".
-          if (lum < 215 || (chroma > 35 && lum < 248)) {
-            meaningful++;
-          }
+          if (a > 20 && !(r > 246 && g > 246 && b > 246)) nonWhite++;
         }
       }
     } catch {
-      // Se o browser bloquear leitura de pixels por CORS, não marca como vazio.
-      return true;
+      return false;
     }
 
-    if (total === 0) return false;
-    return meaningful / total >= 0.0035;
+    return total > 0 && nonWhite / total < 0.003;
   }
 
-  function assertCanvasUseful(canvas: HTMLCanvasElement, section: HTMLElement, label: string) {
-    if (!canvas.width || !canvas.height) {
-      throw new Error("Canvas vazio gerado pelo html2canvas");
-    }
+  async function captureElement(section: HTMLElement, label: string): Promise<Capture | null> {
+    const scales = [2.2, 1.4, 1];
 
-    // Correção da página 5:
-    // às vezes o html2canvas captura só o card branco/borda e não o conteúdo interno.
-    // Nesse caso, força fallback para capturar o card/filho real.
-    if (sectionProbablyHasContent(section) && !canvasHasMeaningfulContent(canvas)) {
-      throw new Error(`Captura sem conteúdo visível: ${label}`);
-    }
-  }
-
-  function fallbackSections(section: HTMLElement): HTMLElement[] {
-    const isValid = (el: HTMLElement) => {
-      if (el === section) return false;
-      if (el.hasAttribute("data-pdf-exclude") || el.closest("[data-pdf-exclude]")) return false;
-
-      const cs = getComputedStyle(el);
-      if (cs.display === "none" || cs.visibility === "hidden") return false;
-
-      const rect = el.getBoundingClientRect();
-      if (rect.width < 80 || rect.height < 40) return false;
-
-      const text = (el.innerText || el.textContent || "").replace(/\s+/g, "").trim();
-      const hasVisual = Boolean(el.querySelector("svg, canvas, img, table, [role='img'], [data-pdf-progress], [data-pdf-progress-track], [data-pdf-progress-fill]"));
-      return text.length >= 3 || hasVisual;
-    };
-
-    const selectors = [
-      "[data-pdf-card]",
-      "[data-fieam-surface]",
-      "[data-fieam-surface='true']",
-      "article",
-      "section",
-      "[role='region']",
-      ".recharts-wrapper",
-      "[class*='rounded']",
-      "[class*='border']",
-    ].join(",");
-
-    const direct = Array.from(section.children) as HTMLElement[];
-    const nested = Array.from(section.querySelectorAll<HTMLElement>(selectors));
-
-    const seen = new Set<HTMLElement>();
-    const all = [...nested, ...direct].filter((el) => {
-      if (seen.has(el)) return false;
-      seen.add(el);
-      return isValid(el);
-    });
-
-    return all.sort((a, b) => {
-      const ar = a.getBoundingClientRect();
-      const br = b.getBoundingClientRect();
-      const areaA = ar.width * ar.height;
-      const areaB = br.width * br.height;
-      const textA = (a.innerText || a.textContent || "").trim().length;
-      const textB = (b.innerText || b.textContent || "").trim().length;
-      const visualA = a.querySelectorAll("svg, canvas, img, table").length;
-      const visualB = b.querySelectorAll("svg, canvas, img, table").length;
-      const scoreA = textA + visualA * 80 - areaA / 100000;
-      const scoreB = textB + visualB * 80 - areaB / 100000;
-      return scoreB - scoreA;
-    });
-  }
-
-  async function captureSection(section: HTMLElement, scale: number, label: string): Promise<HTMLCanvasElement> {
-    const canvas = await html2canvas(section, {
-      scale,
-      useCORS: true,
-      backgroundColor: "#ffffff",
-      logging: false,
-      onclone: (doc, el) => sanitizeClonedColors(doc, el),
-    });
-
-    assertCanvasUseful(canvas, section, label);
-    return canvas;
-  }
-
-  for (const section of sections) {
-    const label = sectionLabel(section);
-    let captured = false;
-
-    try {
-      const canvas = await captureSection(section, 2.5, label);
-      captures.push({ canvas, scale: 2.5 });
-      captured = true;
-    } catch (e) {
-      console.warn(`[exportPdf] html2canvas falhou ou capturou vazio em "${label}" com scale 2.5:`, e);
-    }
-
-    if (!captured) {
+    for (const scale of scales) {
+      let snapshot: { wrapper: HTMLElement; clone: HTMLElement } | null = null;
       try {
-        const canvas = await captureSection(section, 1, label);
-        captures.push({ canvas, scale: 1 });
-        captured = true;
-        console.warn(`[exportPdf] Recuperado "${label}" com scale 1 fallback`);
-      } catch (e) {
-        console.error(`[exportPdf] html2canvas também falhou em "${label}" com scale 1:`, e);
-      }
-    }
+        snapshot = await createSnapshot(section);
+        const rect = rectOf(snapshot.clone);
+        const width = Math.max(1, Math.ceil(rect.width));
+        const height = Math.max(1, Math.ceil(rect.height));
 
-    // Último fallback: se a grid/card saiu branco, captura cards internos separadamente.
-    if (!captured) {
-      const childs = fallbackSections(section);
-      for (const child of childs) {
-        const childLabel = sectionLabel(child);
-        try {
-          const canvas = await captureSection(child, 2, childLabel);
-          captures.push({ canvas, scale: 2 });
-          captured = true;
-          console.warn(`[exportPdf] Recuperado filho "${childLabel}" da seção "${label}"`);
-        } catch (e) {
-          console.warn(`[exportPdf] fallback por filho falhou em "${childLabel}":`, e);
+        const canvas = await html2canvas(snapshot.clone, {
+          scale,
+          width,
+          height,
+          windowWidth: width,
+          windowHeight: height,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: "#ffffff",
+          logging: false,
+          removeContainer: true,
+          ignoreElements: (el) => {
+            if (!(el instanceof HTMLElement || el instanceof SVGElement)) return false;
+            return isDecorative(el) || el.hasAttribute("data-pdf-exclude");
+          },
+          onclone: (doc) => {
+            // O snapshot já tem estilos inline. Remover CSS global evita que o html2canvas
+            // leia color-mix()/oklch()/gradientes do bundle minificado do Vite/Tailwind.
+            doc.querySelectorAll("style, link[rel='stylesheet']").forEach((node) => node.remove());
+            const safeStyle = doc.createElement("style");
+            safeStyle.textContent =
+              "*,*::before,*::after{background-image:none!important;filter:none!important;-webkit-filter:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:none!important;}";
+            doc.head.appendChild(safeStyle);
+          },
+        });
+
+        if (!isCanvasBlank(canvas)) {
+          return { canvas, scale, label };
         }
+
+        console.warn(`[exportPdf] captura vazia em "${label}" com scale ${scale}; tentando fallback...`);
+      } catch (e) {
+        console.warn(`[exportPdf] html2canvas falhou em "${label}" com scale ${scale}:`, e);
+      } finally {
+        snapshot?.wrapper.remove();
       }
     }
-  }
-  if (captures.length === 0) {
-    throw new Error("Nenhuma seção pôde ser capturada para o PDF");
+
+    return null;
   }
 
-  // ── Restore UI state
-  restoreLight();
-  for (const { el, prev } of overflowFixes) {
-    el.style.overflow = prev;
-  }
-  for (const { el, prev } of filterFixes) {
-    el.style.filter = prev;
-  }
-  for (const { el, prev } of bgImageFixes) {
-    el.style.backgroundImage = prev;
-  }
-  for (const { el, prev } of svgFillFixes) {
-    el.setAttribute("fill", prev);
-  }
-  pdfOnlyEls.forEach((el) => (el.style.display = "none"));
-  if (prevTheme) {
-    document.documentElement.setAttribute("data-theme", prevTheme);
-  } else {
-    document.documentElement.removeAttribute("data-theme");
+  async function captureWithFallback(section: HTMLElement) {
+    const label = section.getAttribute("data-pdf-title") || section.getAttribute("data-section") || classText(section).slice(0, 80) || "seção";
+    const main = await captureElement(section, label);
+    if (main) return [main];
+
+    const childCandidates = Array.from(section.children) as HTMLElement[];
+    const usefulChildren = childCandidates.filter((child) => !child.hasAttribute("data-pdf-exclude") && hasMeaningfulContent(child));
+    const recovered: Capture[] = [];
+
+    for (const child of usefulChildren) {
+      const childLabel = child.getAttribute("data-pdf-title") || classText(child).slice(0, 80) || "filho";
+      const childCapture = await captureElement(child, childLabel);
+      if (childCapture) {
+        recovered.push(childCapture);
+        console.warn(`[exportPdf] Recuperado filho "${childLabel}" da seção "${label}"`);
+      }
+    }
+
+    return recovered;
   }
 
-  // ── Layout planning ──────────────────────────────────────────────
+  let captures: Capture[] = [];
+
+  try {
+    document.documentElement.setAttribute("data-theme", "light");
+    pdfOnlyEls.forEach((el) => (el.style.display = ""));
+
+    // Aguarda Recharts/Tailwind recalcularem no tema claro.
+    await sleep(900);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+
+    const sections = collectSections();
+    if (sections.length === 0) {
+      throw new Error("Nenhuma seção encontrada para exportar. Marque os cards com data-pdf-section ou verifique o container enviado.");
+    }
+
+    for (const section of sections) {
+      const recovered = await captureWithFallback(section);
+      captures.push(...recovered);
+    }
+
+    // Remove capturas duplicadas/vazias acidentais.
+    captures = captures.filter((item) => item.canvas.width > 0 && item.canvas.height > 0 && !isCanvasBlank(item.canvas));
+
+    if (captures.length === 0) {
+      throw new Error("Nenhuma seção pôde ser capturada para o PDF");
+    }
+  } finally {
+    stagingRoot?.remove();
+    for (const { el, display } of pdfOnlyPrevious) {
+      el.style.display = display;
+    }
+    if (prevTheme) {
+      document.documentElement.setAttribute("data-theme", prevTheme);
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+    }
+  }
+
   interface Placement { page: number; y: number; drawW: number; drawH: number }
   const placements: Placement[] = [];
   let curPage = 0;
@@ -1007,17 +1112,12 @@ export async function exportElementToPdf(
   }
 
   const contentPages = curPage + 1;
-  const totalPages = contentPages + 1; // +1 cover
-
-  // ── Build PDF ────────────────────────────────────────────────────
+  const totalPages = contentPages + 1;
   const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
 
-  // Page 1 — Cover
   await drawCoverPage(pdf, title, options);
 
-  // Content pages
   let lastPage = -1;
-
   for (let i = 0; i < captures.length; i++) {
     const pl = placements[i];
 
@@ -1029,19 +1129,15 @@ export async function exportElementToPdf(
 
     const ox = pl.drawW < USABLE_W ? MX + (USABLE_W - pl.drawW) / 2 : MX;
 
-    // Subtle card shadow
     pdf.setFillColor(218, 222, 228);
     pdf.roundedRect(ox + 0.6, pl.y + 0.6, pl.drawW, pl.drawH, 1.5, 1.5, "F");
 
-    // White card background
     pdf.setFillColor(...WHITE);
     pdf.roundedRect(ox, pl.y, pl.drawW, pl.drawH, 1.5, 1.5, "F");
 
-    // Image content
     const imgData = captures[i].canvas.toDataURL("image/png");
     pdf.addImage(imgData, "PNG", ox + 0.5, pl.y + 0.5, pl.drawW - 1, pl.drawH - 1);
 
-    // Card border
     pdf.setDrawColor(...BORDER);
     pdf.setLineWidth(0.15);
     pdf.roundedRect(ox, pl.y, pl.drawW, pl.drawH, 1.5, 1.5, "S");
