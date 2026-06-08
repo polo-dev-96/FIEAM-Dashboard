@@ -613,6 +613,23 @@ export async function exportElementToPdf(
     }
   });
 
+  // ── Pre-clone: resolve SVG url(#id) gradient fills to solid colors on original DOM
+  // so html2canvas doesn't need to resolve them in the clone (more reliable)
+  const svgFillFixes: Array<{ el: SVGElement; prev: string }> = [];
+  container.querySelectorAll<SVGElement>("[fill]").forEach((el) => {
+    const fill = el.getAttribute("fill") ?? "";
+    const match = fill.match(/^url\(#([^)]+)\)$/);
+    if (!match) return;
+    const grad = document.getElementById(match[1]);
+    if (!grad) return;
+    const stops = Array.from(grad.querySelectorAll("stop"));
+    if (!stops.length) return;
+    const mid = stops[Math.floor(stops.length / 2)] || stops[0];
+    const color = mid.getAttribute("stop-color") ?? "#009FE3";
+    svgFillFixes.push({ el, prev: fill });
+    el.setAttribute("fill", color);
+  });
+
   // ── Capture DOM sections
   const children = Array.from(container.children) as HTMLElement[];
   const sections = children.filter((el) => !el.hasAttribute("data-pdf-exclude"));
@@ -637,7 +654,11 @@ export async function exportElementToPdf(
       "backdrop-filter: none !important; " +
       "-webkit-backdrop-filter: none !important; " +
       "box-shadow: none !important; " +
-      "background-image: none !important; }";
+      "background-image: none !important; } " +
+      // Keep ChartCard overflow:hidden so absolute glow elements stay clipped
+      "[data-fieam-surface='true'] { overflow: hidden !important; } " +
+      // Hide purely decorative blur/glow elements that extend outside card bounds
+      "[class*='blur-3xl'],[class*='blur-2xl'],[class*='blur-xl'] { display: none !important; }";
     (doc.head ?? doc.documentElement).appendChild(safeStyle);
 
     // Step 1: Sanitize all <style> tags in the cloned document so html2canvas never
@@ -728,7 +749,7 @@ export async function exportElementToPdf(
         const mid = stops[Math.floor(stops.length / 2)] || stops[0];
         const color =
           mid.getAttribute("stop-color") ||
-          (mid as HTMLElement).style.getPropertyValue("stop-color") ||
+          (mid as unknown as HTMLElement).style.getPropertyValue("stop-color") ||
           "#009FE3";
         svgEl.setAttribute("fill", color);
       });
@@ -790,6 +811,9 @@ export async function exportElementToPdf(
   }
   for (const { el, prev } of bgImageFixes) {
     el.style.backgroundImage = prev;
+  }
+  for (const { el, prev } of svgFillFixes) {
+    el.setAttribute("fill", prev);
   }
   pdfOnlyEls.forEach((el) => (el.style.display = "none"));
   if (prevTheme) {
