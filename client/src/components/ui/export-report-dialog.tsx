@@ -54,8 +54,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 // DayPicker: componente de calendário interativo (react-day-picker)
 import { DayPicker } from "react-day-picker";
 
-// exportElementToPdf: função de exportação PDF (lib/exportPdf.ts)
-import { exportElementToPdf } from "@/lib/exportPdf";
+// exportElementToPdf: exportação PDF por captura de imagem (fallback)
+// exportReportToPdf: exportação PDF nativa/vetorial (caminho preferido)
+import { exportElementToPdf, exportReportToPdf } from "@/lib/exportPdf";
+import type { PdfReport } from "@/lib/pdfReport";
 
 /*
  * DatePickerField — Campo de data com calendário popover
@@ -140,17 +142,20 @@ function DatePickerField({ value, onChange, label }: { value: string; onChange: 
  */
 interface ExportReportDialogProps {
     selectedCasas: string[];                        // casas selecionadas no filtro (para Excel)
-    contentRef?: RefObject<HTMLDivElement | null>;  // ref do elemento DOM para PDF
+    contentRef?: RefObject<HTMLDivElement | null>;  // ref do elemento DOM (fallback de PDF por imagem)
     pdfTitle?: string;                              // título da capa do PDF
     pdfSubtitle?: string;                           // subtítulo (entidade/unidade selecionada)
     startDate: string;                              // data inicial (YYYY-MM-DD) da página pai
     endDate: string;                                // data final (YYYY-MM-DD) da página pai
     onPeriodChange?: (period: { startDate: string; endDate: string }) => void; // sincroniza datas com a página
+    // buildPdfReport: monta o relatório nativo (vetorial) a partir dos dados da página.
+    // Quando presente, o PDF é gerado nativamente (preferido); senão, cai no fallback por imagem.
+    buildPdfReport?: () => PdfReport;
 }
 
 
 
-export function ExportReportDialog({ selectedCasas, contentRef, pdfTitle = "Relatório FIEAM", pdfSubtitle, startDate, endDate, onPeriodChange }: ExportReportDialogProps) {
+export function ExportReportDialog({ selectedCasas, contentRef, pdfTitle = "Relatório FIEAM", pdfSubtitle, startDate, endDate, onPeriodChange, buildPdfReport }: ExportReportDialogProps) {
     const [open, setOpen] = useState(false);
     const [exporting, setExporting] = useState(false);
     const [exportingPdf, setExportingPdf] = useState(false);
@@ -208,33 +213,34 @@ export function ExportReportDialog({ selectedCasas, contentRef, pdfTitle = "Rela
 
 
     /*
-     * handleExportPDF — Exporta o dashboard como PDF
+     * handleExportPdf — Exporta o dashboard como PDF
      * -------------------------------------------------------
-     * Usa exportElementToPdf() (lib/exportPdf.ts) que por sua vez usa
-     * html2canvas (captura o DOM como imagem) e jsPDF (cria o PDF).
-     *
-     * contentRef.current é o elemento DOM que será capturado.
-     * Passado pelo componente pai (Overview, DashboardAnual) via prop.
+     * Caminho preferido (buildPdfReport): renderização nativa/vetorial via
+     * exportReportToPdf() — texto nítido, tabelas alinhadas e gráficos limpos.
+     * Fallback (contentRef): captura de imagem via exportElementToPdf().
      */
-    const handleExportPDF = useCallback(async () => {
-        if (!contentRef?.current) {
-            // Dados ainda carregando após troca de período — aguardar e tentar novamente
+    const handleExportPdf = useCallback(async () => {
+        if (!buildPdfReport && !contentRef?.current) {
             alert("Os dados ainda estão carregando. Aguarde um momento e tente novamente.");
             return;
         }
         setExportingPdf(true);
         try {
             const filename = `relatorio_${periodo.startDate}_${periodo.endDate}`;
-            // fmtDate: formata "YYYY-MM-DD" como "dd/MM/yyyy" para exibir no PDF
             const fmtDate = (d: string) => {
                 try { return format(new Date(d + "T12:00:00"), "dd/MM/yyyy"); } catch { return d; }
             };
             const periodStr = `Período: ${fmtDate(periodo.startDate)} a ${fmtDate(periodo.endDate)}`;
-            // Chama a função de exportação em exportPdf.ts com título e período
-            await exportElementToPdf(contentRef.current, filename, pdfTitle, {
+            const opts = {
                 period: periodStr,
                 subtitle: pdfSubtitle || "Todas as Entidades",
-            });
+            };
+            if (buildPdfReport) {
+                const report = buildPdfReport();
+                await exportReportToPdf(report, filename, pdfTitle, opts);
+            } else if (contentRef?.current) {
+                await exportElementToPdf(contentRef.current, filename, pdfTitle, opts);
+            }
         } catch (err) {
             console.error("Erro ao exportar PDF:", err);
             const msg = err instanceof Error ? err.message : String(err);
@@ -242,7 +248,7 @@ export function ExportReportDialog({ selectedCasas, contentRef, pdfTitle = "Rela
         } finally {
             setExportingPdf(false);
         }
-    }, [contentRef, periodo.startDate, periodo.endDate, pdfTitle, pdfSubtitle, selectedCasas]);
+    }, [buildPdfReport, contentRef, periodo.startDate, periodo.endDate, pdfTitle, pdfSubtitle, selectedCasas]);
 
 
 
@@ -407,7 +413,7 @@ export function ExportReportDialog({ selectedCasas, contentRef, pdfTitle = "Rela
 
                                 <button
 
-                                    onClick={handleExportPDF}
+                                    onClick={handleExportPdf}
 
                                     disabled={exportingPdf || !contentRef?.current}
 

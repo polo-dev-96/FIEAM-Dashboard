@@ -72,6 +72,7 @@ import { FilterToolbar } from "@/components/ui/filter-toolbar";
 
 // Utilitários de gráfico: cores, estilos de tooltip, gradientes, etc.
 import { CHART_COLORS, getTooltipStyle, getGridStroke, getAxisColor, getAxisTickFill, barGradientDefs, getBarGradient, PremiumTooltip } from "@/lib/chart-utils";
+import type { PdfReport } from "@/lib/pdfReport";
 
 // Ícones Lucide
 import {
@@ -500,6 +501,87 @@ export default function OverviewPage() {
     return agruparAssuntos((stats?.porResumo || []) as AssuntoAggregado[]).slice(0, 20);
   }, [stats?.porResumo]);
 
+  // ─── Monta o relatório PDF nativo (vetorial) a partir dos dados ──
+  const buildPdfReport = useCallback((): PdfReport => {
+    const sections: PdfReport["sections"] = [];
+    const fmtInt = (n: number) => Math.round(n).toLocaleString("pt-BR").replace(/[\u00A0\u202F\u2009]/g, ".");
+    const barsFrom = (arr: Array<{ nome: string; total: number }>, offset = 0) =>
+      arr.map((it, i) => ({
+        label: it.nome,
+        value: it.total,
+        valueText: fmtInt(it.total),
+        color: COLORS[(i + offset) % COLORS.length],
+      }));
+
+    sections.push({
+      kind: "kpis",
+      title: "Indicadores do Período",
+      items: [
+        { label: "Total no Período", value: totalPeriodo.toLocaleString("pt-BR"), accent: "#009FE3" },
+        { label: "Média por Dia", value: mediaPorDia.toFixed(1).replace(".", ","), accent: "#F59E0B" },
+      ],
+    });
+
+    const timeline = stats?.timeline || [];
+    if (timeline.length > 0) {
+      sections.push({
+        kind: "area",
+        title: "Volume de Atendimentos",
+        categories: timeline.map((t) => { try { return format(new Date(t.data), "dd/MM"); } catch { return String(t.data); } }),
+        values: timeline.map((t) => Number(t.total) || 0),
+        color: "#009FE3",
+      });
+    }
+
+    if (stats?.porCanal?.length) {
+      sections.push({
+        kind: "hbars",
+        title: "Atendimentos por Meio de Comunicação",
+        bars: barsFrom([...stats.porCanal].sort((a, b) => b.total - a.total)),
+      });
+    }
+    if (atendimentosPorUnidade.length) {
+      sections.push({
+        kind: "hbars",
+        title: isGerente ? "Atendimentos por Equipe" : "Atendimentos por Unidade",
+        bars: barsFrom(atendimentosPorUnidade, 4),
+      });
+    }
+    if (atendimentosPorEntidade.length) {
+      sections.push({
+        kind: "hbars",
+        title: "Atendimentos por Entidade",
+        bars: barsFrom(atendimentosPorEntidade, 1),
+      });
+    }
+    if (topAssuntosAggregados.length) {
+      sections.push({
+        kind: "hbars",
+        title: "Ranking de Assuntos",
+        bars: barsFrom(topAssuntosAggregados as Array<{ nome: string; total: number }>, 2),
+      });
+    }
+    if ((isArianaUser() || user?.nivel_acesso === "master") && pfPjData.some((d) => d.total > 0)) {
+      sections.push({
+        kind: "hbars",
+        title: "Atendimentos por PF e PJ",
+        bars: [
+          { label: "Para Você (PF)", value: pfPjData[0].total, valueText: fmtInt(pfPjData[0].total), color: "#0077CC" },
+          { label: "Para Empresa (PJ)", value: pfPjData[1].total, valueText: fmtInt(pfPjData[1].total), color: "#D95E15" },
+        ],
+      });
+    }
+    if (opcoesSelecionadasCompletas.length) {
+      sections.push({
+        kind: "hbars",
+        title: "Qtd de Opções Selecionadas",
+        bars: barsFrom(opcoesSelecionadasCompletas, 7),
+      });
+    }
+
+    return { sections };
+  }, [totalPeriodo, mediaPorDia, stats?.timeline, stats?.porCanal, atendimentosPorUnidade, atendimentosPorEntidade, topAssuntosAggregados, pfPjData, opcoesSelecionadasCompletas, isGerente, user]);
+
   if (isLoading) {
     return (
       <Layout title="Visão Geral Entrada Via Contact Center" subtitle="Dashboard de atendimentos em tempo real">
@@ -635,6 +717,7 @@ export default function OverviewPage() {
               <ExportReportDialog
                 selectedCasas={selectedCasas}
                 contentRef={contentRef}
+                buildPdfReport={buildPdfReport}
                 pdfTitle="Dashboard FIEAM — Visão Geral"
                 startDate={dateRange.startDate}
                 endDate={dateRange.endDate}

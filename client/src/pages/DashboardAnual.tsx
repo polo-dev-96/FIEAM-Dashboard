@@ -49,6 +49,7 @@ import { MonthPicker } from "@/components/ui/month-picker";
 import { SelectCustom } from "@/components/ui/select-custom";
 import { SelectMulti } from "@/components/ui/select-multi";
 import { ExportReportDialog } from "@/components/ui/export-report-dialog";
+import type { PdfReport } from "@/lib/pdfReport";
 import { ChartCard } from "@/components/ui/chart-card";
 import { FilterToolbar } from "@/components/ui/filter-toolbar";
 import { CHART_COLORS, getTooltipStyle, getGridStroke, getAxisColor, getAxisTickFill, barGradientDefs, getBarGradient, PremiumTooltip } from "@/lib/chart-utils";
@@ -418,6 +419,100 @@ export default function DashboardAnualPage() {
         return agruparAssuntos(stats.porAssunto as any).slice(0, 20);
     }, [stats?.porAssunto]);
 
+    // ─── Monta o relatório PDF nativo (vetorial) a partir dos dados ──
+    const buildPdfReport = useCallback((): PdfReport => {
+        const sections: PdfReport["sections"] = [];
+
+        // 1. Evolução dos Atendimentos — gráfico de linhas multi-série
+        if (chartData.length > 0 && canais.length > 0) {
+            sections.push({
+                kind: "line",
+                title: `Evolução dos Atendimentos — ${selectedYear}`,
+                categories: chartData.map((row) => String(row.mes)),
+                series: canais.map((canal) => ({
+                    name: normalizarCanal(canal),
+                    color: getCanalColor(canal),
+                    points: chartData.map((row) => Number(row[canal]) || 0),
+                })),
+            });
+
+            // 2. Resumo Mensal por Canal — tabela
+            const grandTotal = canais.reduce(
+                (tot, c) => tot + chartData.reduce((sum, row) => sum + (Number(row[c]) || 0), 0),
+                0,
+            );
+            sections.push({
+                kind: "table",
+                title: `Resumo Mensal por Canal — ${selectedYear}`,
+                columns: [
+                    { header: "Canal", align: "left", width: 2.4 },
+                    ...MONTH_NAMES.map((m) => ({ header: m, align: "right" as const, width: 1 })),
+                    { header: "Total", align: "right" as const, width: 1.4 },
+                ],
+                rows: canais.map((canal) => {
+                    const rowTotal = chartData.reduce((sum, row) => sum + (Number(row[canal]) || 0), 0);
+                    return [
+                        normalizarCanal(canal),
+                        ...chartData.map((row) => fmtBR(Number(row[canal]) || 0)),
+                        fmtBR(rowTotal),
+                    ];
+                }),
+                totalsRow: [
+                    "TOTAL",
+                    ...chartData.map((row) => fmtBR(canais.reduce((sum, c) => sum + (Number(row[c]) || 0), 0))),
+                    fmtBR(grandTotal),
+                ],
+            });
+        }
+
+        // 3. Atendimentos por Origem — barras horizontais com %
+        if (origemData.length > 0) {
+            sections.push({
+                kind: "hbars",
+                title: "Atendimentos por Origem",
+                showPercent: true,
+                bars: origemData.map((item, idx) => ({
+                    label: item.nome,
+                    value: item.total,
+                    valueText: fmtBR(item.total),
+                    percent: item.percent,
+                    color: LINE_COLORS[idx % LINE_COLORS.length],
+                })),
+            });
+        }
+
+        // 4. Dentro e Fora do Prazo — barras + rosca
+        if (prazoData.total > 0) {
+            sections.push({
+                kind: "donutPair",
+                title: "Atendimentos Dentro e Fora do Prazo",
+                subtitle: "Prazo: até 24 horas entre início e fim",
+                centerValue: fmtBR(prazoData.total),
+                centerLabel: "Total",
+                bars: [
+                    { label: "Dentro do prazo", value: prazoData.dentro, valueText: fmtBR(prazoData.dentro), percent: prazoData.dentroPct, color: "#00A650" },
+                    { label: "Fora do prazo", value: prazoData.fora, valueText: fmtBR(prazoData.fora), percent: prazoData.foraPct, color: "#ED1C24" },
+                ],
+            });
+        }
+
+        // 5. Ranking de Assuntos — barras horizontais
+        if (rankingAssuntos.length > 0) {
+            sections.push({
+                kind: "hbars",
+                title: "Ranking de Assuntos",
+                bars: rankingAssuntos.map((item: any, idx: number) => ({
+                    label: item.nome,
+                    value: item.total,
+                    valueText: fmtBR(item.total),
+                    color: ASSUNTO_COLORS[idx % ASSUNTO_COLORS.length],
+                })),
+            });
+        }
+
+        return { sections };
+    }, [chartData, canais, origemData, prazoData, rankingAssuntos, selectedYear]);
+
     if (isLoading) {
         return (
             <Layout title="Dashboard - SAC" subtitle="Visão anual de atendimentos">
@@ -544,6 +639,7 @@ export default function DashboardAnualPage() {
                                 <ExportReportDialog
                                     selectedCasas={selectedCasas}
                                     contentRef={contentRef}
+                                    buildPdfReport={buildPdfReport}
                                     pdfTitle="Dashboard - SAC"
                                     startDate={exportDateRange.startDate}
                                     endDate={exportDateRange.endDate}
@@ -606,6 +702,7 @@ export default function DashboardAnualPage() {
 
             <div ref={contentRef} className="space-y-4">
             {/* 1. Evolução dos Atendimentos — Line Chart */}
+            <div data-pdf-section data-pdf-title="Evolução dos Atendimentos">
             <ChartCard
                 title="Evolução dos Atendimentos"
                 icon={<TrendingUp className="w-4 h-4" />}
@@ -721,9 +818,10 @@ export default function DashboardAnualPage() {
                     </div>
                 )}
             </ChartCard>
+            </div>
 
             {/* PDF-only: Evolução — Tabela Resumo Mensal por Canal */}
-            <div data-pdf-only style={{ display: "none" }}>
+            <div data-pdf-only data-pdf-section data-pdf-title="Resumo Mensal por Canal" style={{ display: "none" }}>
                 <Card className={cn("shadow-lg", isDark ? "bg-[#0C2135] border-[#165A8A]" : "bg-white border-slate-200")}>
                     <CardHeader className="pb-2">
                         <CardTitle className={cn("text-base flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
@@ -732,7 +830,7 @@ export default function DashboardAnualPage() {
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="overflow-x-auto">
+                        <div>
                             <table className="w-full text-xs">
                                 <thead>
                                     <tr className="border-b border-[#165A8A]">
@@ -777,7 +875,7 @@ export default function DashboardAnualPage() {
             </div>
 
             {/* 2 + 4: Origem + Prazo side by side */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <div data-pdf-section data-pdf-title="Atendimentos por Origem e Prazo" className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
                 {/* 2. Atendimentos por Origem */}
                 <ChartCard
@@ -815,7 +913,7 @@ export default function DashboardAnualPage() {
                                                             className="absolute inset-y-0 left-0 rounded-full transition-all duration-700 ease-out"
                                                             style={{
                                                                 width: `${Math.max(item.percent, 2)}%`,
-                                                                background: `linear-gradient(90deg, ${barColor}99, ${barColor})`,
+                                                                backgroundColor: barColor,
                                                             }}
                                                         />
                                                     </div>
@@ -889,7 +987,7 @@ export default function DashboardAnualPage() {
                                                     className="absolute inset-y-0 left-0 rounded-full transition-all duration-1000 ease-out"
                                                     style={{
                                                         width: `${prazoData.dentroPct}%`,
-                                                        background: 'linear-gradient(90deg, #00A65099, #00A650)',
+                                                        backgroundColor: '#00A650',
                                                     }}
                                                 />
                                             </div>
@@ -940,7 +1038,7 @@ export default function DashboardAnualPage() {
                                                     className="absolute inset-y-0 left-0 rounded-full transition-all duration-1000 ease-out"
                                                     style={{
                                                         width: `${Math.max(prazoData.foraPct, 2)}%`,
-                                                        background: 'linear-gradient(90deg, #ED1C2499, #ED1C24)',
+                                                        backgroundColor: '#ED1C24',
                                                     }}
                                                 />
                                             </div>
@@ -1013,6 +1111,7 @@ export default function DashboardAnualPage() {
 
             {/* 3. Atendimentos por Assunto — Bar Chart + Insights */}
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5">
+                <div data-pdf-section data-pdf-title="Ranking de Assuntos">
                 <ChartCard
                     title="Ranking de Assuntos"
                     icon={<FileText className="w-4 h-4" />}
@@ -1075,6 +1174,7 @@ export default function DashboardAnualPage() {
                         </div>
                     )}
                 </ChartCard>
+                </div>
 
                 {/* Insights Panel */}
                 {rankingAssuntos.length ? (() => {
@@ -1088,35 +1188,35 @@ export default function DashboardAnualPage() {
                     const longTail = sorted.filter(i => i.total < threshold).length;
 
                     return (
-                        <div className="space-y-3">
+                        <div data-pdf-exclude className="space-y-3">
                             <Card className={cn(
                                 "shadow-lg rounded-2xl overflow-hidden",
                                 isDark ? "bg-[#0C2135]/90 border-[#1E3A5F]/60 backdrop-blur-xl" : "bg-white/90 border-slate-200/80 backdrop-blur-xl"
                             )}>
                                 <CardHeader className="pb-2 pt-5 px-5">
                                     <CardTitle className={cn("text-sm font-bold flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
-                                        <div className="w-1 h-4 rounded-full bg-gradient-to-b from-[#009FE3] to-[#0077CC]" />
+                                        <div className="w-1 h-4 rounded-full" style={{ backgroundColor: '#009FE3' }} />
                                         Insights
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-3 px-5 pb-5">
                                     {sorted.slice(0, 3).map((item, i) => (
-                                        <div key={i} className={cn("rounded-lg p-3 border", isDark ? "bg-[#081E30] border-[#165A8A]/40" : "bg-slate-50 border-slate-200")}>
-                                            <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold">Top {i + 1}</span>
+                                        <div key={i} className={cn("rounded-lg p-3 border", isDark ? "bg-[#081E30] border-[#165A8A]/40" : "bg-slate-50 border-slate-200")} style={{ borderColor: '#cbd5e1' }}>
+                                            <span className="text-[10px] uppercase tracking-wider font-bold" style={{ color: '#009FE3' }}>Top {i + 1}</span>
                                             <p className={cn("font-bold text-sm mt-0.5", isDark ? "text-white" : "text-gray-900")}>{item.nome}</p>
                                             <p className={cn("text-xs", isDark ? "text-gray-400" : "text-gray-500")}>{fmtBR(item.total)}</p>
                                         </div>
                                     ))}
-                                    <div className={cn("rounded-lg p-3 border", isDark ? "bg-[#081E30] border-[#165A8A]/40" : "bg-slate-50 border-slate-200")}>
-                                        <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold">Top 3 no Total</span>
+                                    <div className={cn("rounded-lg p-3 border", isDark ? "bg-[#081E30] border-[#165A8A]/40" : "bg-slate-50 border-slate-200")} style={{ borderColor: '#cbd5e1' }}>
+                                        <span className="text-[10px] uppercase tracking-wider font-bold" style={{ color: '#009FE3' }}>Top 3 no Total</span>
                                         <p className={cn("font-bold text-lg mt-0.5", isDark ? "text-white" : "text-gray-900")}>{top3Pct}%</p>
                                     </div>
-                                    <div className={cn("rounded-lg p-3 border", isDark ? "bg-[#081E30] border-[#165A8A]/40" : "bg-slate-50 border-slate-200")}>
-                                        <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold">Top 5 no Total</span>
+                                    <div className={cn("rounded-lg p-3 border", isDark ? "bg-[#081E30] border-[#165A8A]/40" : "bg-slate-50 border-slate-200")} style={{ borderColor: '#cbd5e1' }}>
+                                        <span className="text-[10px] uppercase tracking-wider font-bold" style={{ color: '#009FE3' }}>Top 5 no Total</span>
                                         <p className={cn("font-bold text-lg mt-0.5", isDark ? "text-white" : "text-gray-900")}>{top5Pct}%</p>
                                     </div>
-                                    <div className={cn("rounded-lg p-3 border", isDark ? "bg-[#081E30] border-[#165A8A]/40" : "bg-slate-50 border-slate-200")}>
-                                        <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-bold">Cauda Longa</span>
+                                    <div className={cn("rounded-lg p-3 border", isDark ? "bg-[#081E30] border-[#165A8A]/40" : "bg-slate-50 border-slate-200")} style={{ borderColor: '#cbd5e1' }}>
+                                        <span className="text-[10px] uppercase tracking-wider font-bold" style={{ color: '#009FE3' }}>Cauda Longa</span>
                                         <p className={cn("font-bold text-sm mt-0.5", isDark ? "text-white" : "text-gray-900")}>{longTail} assuntos abaixo de {fmtBR(threshold)}</p>
                                     </div>
                                 </CardContent>

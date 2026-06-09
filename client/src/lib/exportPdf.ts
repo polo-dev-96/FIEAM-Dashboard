@@ -31,6 +31,15 @@
 // para evitar inicialização antecipada — o jsPDF emite document.write() ao
 // carregar fontes na inicialização estática, gerando avisos no console do browser.
 
+import type {
+  PdfReport,
+  PdfSection,
+  PdfKpi,
+  PdfTableColumn,
+  PdfBar,
+  PdfLineSeries,
+} from "./pdfReport";
+
 /*
  * ─── Constantes do tamanho da página A4 Paisagem (em milímetros) ───
  *
@@ -61,6 +70,9 @@ const TEXT_LIGHT = [148, 163, 184]  as const; // texto claro (rodapés)   (#94a3
 const BORDER     = [226, 232, 240]  as const; // cor de borda suave      (#e2e8f0)
 const BG_PAGE    = [245, 247, 250]  as const; // fundo cinza claro       (#f5f7fa)
 const WHITE      = [255, 255, 255]  as const; // branco puro
+
+// Tipo usado apenas nas assinaturas. A biblioteca continua sendo carregada dinamicamente.
+type JsPDFInstance = import("jspdf").jsPDF;
 
 /*
  * Dimensões calculadas da área de conteúdo (em mm)
@@ -127,6 +139,31 @@ async function loadImageAsDataUrl(src: string): Promise<string | null> {
 }
 
 /*
+ * loadImage(src) — Igual a loadImageAsDataUrl, mas também retorna as
+ * dimensões naturais (w, h). Necessário para alinhar os logos da capa
+ * preservando a proporção real de cada arquivo.
+ */
+async function loadImage(src: string): Promise<{ dataUrl: string; w: number; h: number } | null> {
+  try {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject();
+      img.src = src;
+    });
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext("2d")!;
+    ctx.drawImage(img, 0, 0);
+    return { dataUrl: canvas.toDataURL("image/png"), w: img.naturalWidth || 1, h: img.naturalHeight || 1 };
+  } catch {
+    return null;
+  }
+}
+
+/*
  * ═══════════════════════════════════════════════════════════════════════
  * drawCoverPage(pdf, title, opts?) — Desenha a página de capa do PDF
  * ═══════════════════════════════════════════════════════════════════════
@@ -147,7 +184,7 @@ async function loadImageAsDataUrl(src: string): Promise<string | null> {
 //  COVER PAGE — elegant, dark, corporate with logos
 // ═══════════════════════════════════════════════════════════════════════
 async function drawCoverPage(
-  pdf: jsPDF,
+  pdf: JsPDFInstance,
   title: string,
   opts?: { subtitle?: string; period?: string }
 ) {
@@ -200,24 +237,37 @@ async function drawCoverPage(
   pdf.setTextColor(100, 120, 145);
   pdf.text(timestamp(), MX + 18, 115);
 
-  // ── Logos — 4 institution logos at top + Polo centered-right
-  const [logoFIEAM, logoSESI, logoSENAI, logoIEL] = await Promise.all([
-    loadImageAsDataUrl("/anexo/FIEAM-removebg-preview.png"),
-    loadImageAsDataUrl("/anexo/SESI-removebg-preview.png"),
-    loadImageAsDataUrl("/anexo/SENAI-removebg-preview.png"),
-    loadImageAsDataUrl("/anexo/IEL-removebg-preview.png"),
+  // ── Logos — 4 institution logos aligned on a common baseline
+  const loaded = await Promise.all([
+    loadImage("/anexo/FIEAM-removebg-preview.png"),
+    loadImage("/anexo/SESI-removebg-preview.png"),
+    loadImage("/anexo/SENAI-removebg-preview.png"),
+    loadImage("/anexo/IEL-removebg-preview.png"),
   ]);
 
-  // Institution logos row — very top of page, stretched and spaced
-  const logos = [logoFIEAM, logoSESI, logoSENAI, logoIEL].filter(Boolean) as string[];
+  // Normalise every logo to the SAME height and center them on a shared
+  // midline. Equal height + same midline guarantees the tops line up,
+  // regardless of each PNG's intrinsic aspect ratio.
+  const logos = loaded.filter(Boolean) as { dataUrl: string; w: number; h: number }[];
   if (logos.length > 0) {
-    const logoW = 42;
-    const logoH = 14;
-    const logoGap = 18;
-    const totalW = logos.length * logoW + (logos.length - 1) * logoGap;
-    const startX = (PW - totalW) / 2;
-    logos.forEach((src, i) => {
-      pdf.addImage(src, "PNG", startX + i * (logoW + logoGap), 8, logoW, logoH);
+    const targetH = 13;          // common visual height (mm)
+    const bandTop = 9;           // top of the logo band (mm)
+    const logoGap = 16;          // gap between logos (mm)
+    const maxRowW = PW - 44;     // keep margins on both sides
+
+    // Width derived from each logo's real aspect ratio at the common height.
+    const widths = logos.map((l) => targetH * (l.w / l.h));
+    let rowW = widths.reduce((a, w) => a + w, 0) + logoGap * (logos.length - 1);
+    const scale = rowW > maxRowW ? maxRowW / rowW : 1;
+    rowW *= scale;
+
+    const midline = bandTop + (targetH * scale) / 2;
+    let x = (PW - rowW) / 2;
+    logos.forEach((l, i) => {
+      const w = widths[i] * scale;
+      const h = targetH * scale;
+      pdf.addImage(l.dataUrl, "PNG", x, midline - h / 2, w, h);
+      x += w + logoGap * scale;
     });
   }
 
@@ -263,7 +313,7 @@ async function drawCoverPage(
 // ═══════════════════════════════════════════════════════════════════════
 //  CONTENT PAGE CHROME — header, footer, background
 // ═══════════════════════════════════════════════════════════════════════
-function drawPageChrome(pdf: jsPDF, title: string, pageNum: number, totalPages: number) {
+function drawPageChrome(pdf: JsPDFInstance, title: string, pageNum: number, totalPages: number) {
   // ── Page background
   pdf.setFillColor(...BG_PAGE);
   pdf.rect(0, 0, PW, PH, "F");
@@ -317,6 +367,629 @@ function drawPageChrome(pdf: jsPDF, title: string, pageNum: number, totalPages: 
   pdf.setFontSize(7);
   pdf.setTextColor(...TEXT_MID);
   pdf.text(`${pageNum}`, MX + USABLE_W, fy - 3.5, { align: "right" });
+}
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════
+ *  NATIVE REPORT RENDERING — desenho vetorial (sem html2canvas)
+ * ═══════════════════════════════════════════════════════════════════════
+ * Cada seção do PdfReport é desenhada com primitivas do jsPDF, produzindo
+ * texto nítido/selecionável, tabelas alinhadas e gráficos limpos.
+ */
+
+type RGB = [number, number, number];
+
+// Layout interno das "cartas" de seção (mm)
+const CARD_HEADER_H = 15;   // faixa do título dentro da carta
+const CARD_PAD_X = 7;       // recuo horizontal do conteúdo
+const CARD_PAD_BOTTOM = 7;  // recuo inferior do conteúdo
+const PAGE_CONTENT_H = CONTENT_BOT - CONTENT_TOP; // altura útil por página
+const HB_ROW = 12.5;        // altura de cada barra horizontal
+const T_HEADER = 8.5;       // altura do cabeçalho da tabela
+const T_ROW = 7.4;          // altura de cada linha da tabela
+
+/** Converte hex → [r,g,b], com fallback ciano FIEAM. */
+function pdfColor(hex?: string): RGB {
+  const p = hex ? parseColor(hex) : null;
+  return (p ?? [0, 159, 227]) as RGB;
+}
+
+/** Arredonda um valor para um "teto bonito" (1, 2, 2.5, 5, 10 × 10ⁿ). */
+function niceCeil(v: number): number {
+  if (v <= 0) return 1;
+  const exp = Math.floor(Math.log10(v));
+  const base = Math.pow(10, exp);
+  const f = v / base;
+  let nice: number;
+  if (f <= 1) nice = 1;
+  else if (f <= 2) nice = 2;
+  else if (f <= 2.5) nice = 2.5;
+  else if (f <= 5) nice = 5;
+  else nice = 10;
+  return nice * base;
+}
+
+/** Formata números de eixo de forma compacta (1.2k, 3M). */
+function fmtCompact(n: number): string {
+  const v = Math.round(n);
+  if (Math.abs(v) >= 1_000_000) return (v / 1_000_000).toFixed(v % 1_000_000 === 0 ? 0 : 1) + "M";
+  if (Math.abs(v) >= 1_000) return (v / 1_000).toFixed(v % 1_000 === 0 ? 0 : 1) + "k";
+  return String(v);
+}
+
+/** Trunca o texto com reticências para caber em maxW (mm), na fonte atual. */
+function truncateToWidth(pdf: JsPDFInstance, text: string, maxW: number): string {
+  if (pdf.getTextWidth(text) <= maxW) return text;
+  let t = text;
+  while (t.length > 1 && pdf.getTextWidth(t + "…") > maxW) t = t.slice(0, -1);
+  return t + "…";
+}
+
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  if (arr.length === 0) return [[]];
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+/** Carta branca arredondada com sombra suave, faixa accent e título. */
+function drawSectionCard(pdf: JsPDFInstance, x: number, y: number, w: number, h: number, title: string) {
+  pdf.setFillColor(219, 223, 229);
+  pdf.roundedRect(x + 0.7, y + 0.9, w, h, 2.6, 2.6, "F");
+  pdf.setFillColor(255, 255, 255);
+  pdf.roundedRect(x, y, w, h, 2.6, 2.6, "F");
+  pdf.setDrawColor(...BORDER);
+  pdf.setLineWidth(0.2);
+  pdf.roundedRect(x, y, w, h, 2.6, 2.6, "S");
+  pdf.setFillColor(...ACCENT);
+  pdf.roundedRect(x + 6, y + 5.4, 1.8, 7.2, 0.9, 0.9, "F");
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(11.5);
+  pdf.setTextColor(...NAVY);
+  pdf.text(truncateToWidth(pdf, title, w - 18), x + 11, y + 10.6);
+  pdf.setDrawColor(...BORDER);
+  pdf.setLineWidth(0.2);
+  pdf.line(x + 6, y + CARD_HEADER_H - 1.5, x + w - 6, y + CARD_HEADER_H - 1.5);
+}
+
+function drawKpisContent(pdf: JsPDFInstance, cx: number, cy: number, cw: number, items: PdfKpi[]) {
+  const perRow = Math.min(items.length, 4) || 1;
+  const gap = 5;
+  const cardW = (cw - (perRow - 1) * gap) / perRow;
+  const cardH = 24;
+  items.forEach((k, i) => {
+    const r = Math.floor(i / perRow);
+    const c = i % perRow;
+    const x = cx + c * (cardW + gap);
+    const y = cy + r * (cardH + gap);
+    pdf.setFillColor(247, 249, 251);
+    pdf.roundedRect(x, y, cardW, cardH, 2, 2, "F");
+    pdf.setDrawColor(...BORDER);
+    pdf.setLineWidth(0.15);
+    pdf.roundedRect(x, y, cardW, cardH, 2, 2, "S");
+    const acc = pdfColor(k.accent);
+    pdf.setFillColor(acc[0], acc[1], acc[2]);
+    pdf.rect(x, y + 1.5, 1.6, cardH - 3, "F");
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(7.2);
+    pdf.setTextColor(...TEXT_MID);
+    pdf.text(truncateToWidth(pdf, k.label.toUpperCase(), cardW - 8), x + 5, y + 6.6);
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(15);
+    pdf.setTextColor(...NAVY);
+    pdf.text(truncateToWidth(pdf, k.value, cardW - 8), x + 5, y + 15);
+    if (k.sub) {
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(7);
+      pdf.setTextColor(...TEXT_LIGHT);
+      pdf.text(truncateToWidth(pdf, k.sub, cardW - 8), x + 5, y + 20.5);
+    }
+  });
+}
+
+function drawTableContent(
+  pdf: JsPDFInstance,
+  cx: number,
+  cy: number,
+  cw: number,
+  columns: PdfTableColumn[],
+  rows: string[][],
+  totalsRow?: string[]
+) {
+  const weights = columns.map((c) => c.width ?? (c.align === "right" ? 1 : 2));
+  const tw = weights.reduce((a, b) => a + b, 0) || 1;
+  const colW = weights.map((w) => (cw * w) / tw);
+  const colX: number[] = [];
+  let ax = cx;
+  for (const w of colW) { colX.push(ax); ax += w; }
+  const pad = 2.5;
+
+  pdf.setFillColor(...NAVY);
+  pdf.roundedRect(cx, cy, cw, T_HEADER, 1.2, 1.2, "F");
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(7.8);
+  pdf.setTextColor(255, 255, 255);
+  columns.forEach((c, i) => {
+    if (c.align === "right") pdf.text(c.header, colX[i] + colW[i] - pad, cy + 5.7, { align: "right" });
+    else pdf.text(truncateToWidth(pdf, c.header, colW[i] - pad * 2), colX[i] + pad, cy + 5.7);
+  });
+
+  let yy = cy + T_HEADER;
+  rows.forEach((row, ri) => {
+    if (ri % 2 === 1) {
+      pdf.setFillColor(244, 247, 250);
+      pdf.rect(cx, yy, cw, T_ROW, "F");
+    }
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8);
+    pdf.setTextColor(...TEXT_DARK);
+    columns.forEach((c, ci) => {
+      const txt = row[ci] ?? "";
+      if (c.align === "right") pdf.text(txt, colX[ci] + colW[ci] - pad, yy + 5, { align: "right" });
+      else pdf.text(truncateToWidth(pdf, txt, colW[ci] - pad * 2), colX[ci] + pad, yy + 5);
+    });
+    yy += T_ROW;
+  });
+
+  if (totalsRow) {
+    pdf.setDrawColor(...ACCENT);
+    pdf.setLineWidth(0.4);
+    pdf.line(cx, yy + 0.2, cx + cw, yy + 0.2);
+    pdf.setFillColor(235, 243, 249);
+    pdf.rect(cx, yy + 0.4, cw, T_ROW + 1, "F");
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(8);
+    pdf.setTextColor(...NAVY);
+    columns.forEach((c, ci) => {
+      const txt = totalsRow[ci] ?? "";
+      if (c.align === "right") pdf.text(txt, colX[ci] + colW[ci] - pad, yy + 5.6, { align: "right" });
+      else pdf.text(txt, colX[ci] + pad, yy + 5.6);
+    });
+  }
+}
+
+function drawHBarsContent(
+  pdf: JsPDFInstance,
+  cx: number,
+  cy: number,
+  cw: number,
+  bars: PdfBar[],
+  showPercent?: boolean,
+  subtitle?: string
+) {
+  let y = cy;
+  if (subtitle) {
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8);
+    pdf.setTextColor(...TEXT_MID);
+    pdf.text(subtitle, cx, y + 3.2);
+    y += 6;
+  }
+  const max = Math.max(...bars.map((b) => b.value), 1);
+  const trackH = 6.8;
+  bars.forEach((b) => {
+    const rightEdge = cx + cw;
+    const labelMaxW = cw * 0.6;
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(9);
+    pdf.setTextColor(...NAVY);
+    if (showPercent && b.percent != null) {
+      const pct = `${b.percent.toFixed(1)}%`;
+      pdf.text(pct, rightEdge, y + 3.2, { align: "right" });
+      const pctW = pdf.getTextWidth(pct);
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(8);
+      pdf.setTextColor(...TEXT_MID);
+      pdf.text(b.valueText, rightEdge - pctW - 3, y + 3.2, { align: "right" });
+    } else {
+      pdf.text(b.valueText, rightEdge, y + 3.2, { align: "right" });
+    }
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(8.5);
+    pdf.setTextColor(...TEXT_DARK);
+    pdf.text(truncateToWidth(pdf, b.label, labelMaxW), cx, y + 3.2);
+
+    const trackY = y + 5;
+    pdf.setFillColor(237, 240, 244);
+    pdf.roundedRect(cx, trackY, cw, trackH, trackH / 2, trackH / 2, "F");
+    const ratio = b.percent != null ? b.percent / 100 : b.value / max;
+    const fw = Math.max(cw * Math.min(Math.max(ratio, 0), 1), trackH);
+    const c = pdfColor(b.color);
+    pdf.setFillColor(c[0], c[1], c[2]);
+    pdf.roundedRect(cx, trackY, fw, trackH, trackH / 2, trackH / 2, "F");
+    y += HB_ROW;
+  });
+}
+
+function drawLineContent(
+  pdf: JsPDFInstance,
+  cx: number,
+  cy: number,
+  cw: number,
+  ch: number,
+  categories: string[],
+  series: PdfLineSeries[]
+) {
+  const legendH = 9;
+  const axisLeftW = 16;
+  const xLabelH = 6;
+  const plotX = cx + axisLeftW;
+  const plotY = cy + 3;
+  const plotW = cw - axisLeftW - 3;
+  const plotH = ch - legendH - xLabelH - 3;
+
+  let maxV = 0;
+  series.forEach((s) => s.points.forEach((v) => { if (v > maxV) maxV = v; }));
+  const niceMax = niceCeil(maxV);
+  const yOf = (v: number) => plotY + plotH - plotH * (niceMax > 0 ? v / niceMax : 0);
+
+  const gl = 5;
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(7);
+  for (let i = 0; i <= gl; i++) {
+    const gy = plotY + plotH - (plotH * i) / gl;
+    pdf.setDrawColor(...BORDER);
+    pdf.setLineWidth(0.12);
+    pdf.line(plotX, gy, plotX + plotW, gy);
+    pdf.setTextColor(...TEXT_MID);
+    pdf.text(fmtCompact((niceMax * i) / gl), plotX - 2.2, gy + 1.1, { align: "right" });
+  }
+
+  const n = categories.length;
+  const stepX = n > 1 ? plotW / (n - 1) : 0;
+  pdf.setTextColor(...TEXT_MID);
+  pdf.setFontSize(7.4);
+  categories.forEach((cat, i) => {
+    pdf.text(cat, plotX + stepX * i, plotY + plotH + 4, { align: "center" });
+  });
+
+  let domIdx = 0;
+  let domSum = -1;
+  series.forEach((s, i) => {
+    const sum = s.points.reduce((a, b) => a + b, 0);
+    if (sum > domSum) { domSum = sum; domIdx = i; }
+  });
+
+  series.forEach((s) => {
+    const c = pdfColor(s.color);
+    pdf.setDrawColor(c[0], c[1], c[2]);
+    pdf.setLineWidth(0.9);
+    for (let i = 0; i < s.points.length - 1; i++) {
+      pdf.line(plotX + stepX * i, yOf(s.points[i]), plotX + stepX * (i + 1), yOf(s.points[i + 1]));
+    }
+    pdf.setFillColor(c[0], c[1], c[2]);
+    s.points.forEach((v, i) => { pdf.circle(plotX + stepX * i, yOf(v), 1.0, "F"); });
+  });
+
+  const dom = series[domIdx];
+  if (dom) {
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(7);
+    pdf.setTextColor(...NAVY);
+    dom.points.forEach((v, i) => {
+      if (v <= 0) return;
+      pdf.text(fmtCompact(v), plotX + stepX * i, yOf(v) - 2.4, { align: "center" });
+    });
+  }
+
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(7.6);
+  const widths = series.map((s) => pdf.getTextWidth(s.name) + 6);
+  const totalLeg = widths.reduce((a, b) => a + b, 0) + 4 * Math.max(0, series.length - 1);
+  let lx = cx + (cw - totalLeg) / 2;
+  const ly = cy + ch - 2;
+  series.forEach((s, i) => {
+    const c = pdfColor(s.color);
+    pdf.setFillColor(c[0], c[1], c[2]);
+    pdf.circle(lx + 1.6, ly - 1, 1.3, "F");
+    pdf.setTextColor(...TEXT_DARK);
+    pdf.text(s.name, lx + 4.2, ly);
+    lx += widths[i] + 4;
+  });
+}
+
+function drawAreaContent(
+  pdf: JsPDFInstance,
+  cx: number,
+  cy: number,
+  cw: number,
+  ch: number,
+  categories: string[],
+  values: number[],
+  color?: string,
+  valueFmt?: (n: number) => string
+) {
+  const axisLeftW = 18;
+  const xLabelH = 6;
+  const plotX = cx + axisLeftW;
+  const plotY = cy + 3;
+  const plotW = cw - axisLeftW - 3;
+  const plotH = ch - xLabelH - 3;
+  const maxV = niceCeil(Math.max(...values, 0));
+  const base = pdfColor(color ?? "#009FE3");
+  const light: RGB = [
+    Math.round(base[0] + (255 - base[0]) * 0.82),
+    Math.round(base[1] + (255 - base[1]) * 0.82),
+    Math.round(base[2] + (255 - base[2]) * 0.82),
+  ];
+  const yOf = (v: number) => plotY + plotH - plotH * (maxV > 0 ? v / maxV : 0);
+  const baseline = plotY + plotH;
+
+  const gl = 4;
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(7);
+  for (let i = 0; i <= gl; i++) {
+    const gy = plotY + plotH - (plotH * i) / gl;
+    pdf.setDrawColor(...BORDER);
+    pdf.setLineWidth(0.12);
+    pdf.line(plotX, gy, plotX + plotW, gy);
+    pdf.setTextColor(...TEXT_MID);
+    const v = (maxV * i) / gl;
+    pdf.text(valueFmt ? valueFmt(v) : fmtCompact(v), plotX - 2.2, gy + 1.1, { align: "right" });
+  }
+
+  const n = values.length;
+  const stepX = n > 1 ? plotW / (n - 1) : 0;
+
+  pdf.setFillColor(light[0], light[1], light[2]);
+  for (let i = 0; i < n - 1; i++) {
+    const x1 = plotX + stepX * i;
+    const y1 = yOf(values[i]);
+    const x2 = plotX + stepX * (i + 1);
+    const y2 = yOf(values[i + 1]);
+    pdf.triangle(x1, y1, x2, y2, x1, baseline, "F");
+    pdf.triangle(x2, y2, x2, baseline, x1, baseline, "F");
+  }
+
+  pdf.setDrawColor(base[0], base[1], base[2]);
+  pdf.setLineWidth(1);
+  for (let i = 0; i < n - 1; i++) {
+    pdf.line(plotX + stepX * i, yOf(values[i]), plotX + stepX * (i + 1), yOf(values[i + 1]));
+  }
+  if (n === 1) {
+    pdf.setFillColor(base[0], base[1], base[2]);
+    pdf.circle(plotX, yOf(values[0]), 1.2, "F");
+  }
+
+  pdf.setTextColor(...TEXT_MID);
+  pdf.setFontSize(7);
+  const skip = Math.max(1, Math.ceil(n / 10));
+  categories.forEach((cat, i) => {
+    if (i % skip !== 0 && i !== n - 1) return;
+    pdf.text(cat, plotX + stepX * i, baseline + 4, { align: "center" });
+  });
+}
+
+function fillPie(pdf: JsPDFInstance, cx: number, cy: number, r: number, a0: number, a1: number, c: RGB) {
+  const steps = Math.max(2, Math.ceil(Math.abs(a1 - a0) / 6));
+  pdf.setFillColor(c[0], c[1], c[2]);
+  for (let i = 0; i < steps; i++) {
+    const t0 = ((a0 + ((a1 - a0) * i) / steps) * Math.PI) / 180;
+    const t1 = ((a0 + ((a1 - a0) * (i + 1)) / steps) * Math.PI) / 180;
+    pdf.triangle(
+      cx, cy,
+      cx + r * Math.cos(t0), cy + r * Math.sin(t0),
+      cx + r * Math.cos(t1), cy + r * Math.sin(t1),
+      "F"
+    );
+  }
+}
+
+function drawDonutPairContent(
+  pdf: JsPDFInstance,
+  cx: number,
+  cy: number,
+  cw: number,
+  ch: number,
+  bars: PdfBar[],
+  centerValue: string,
+  centerLabel: string,
+  subtitle?: string
+) {
+  let top = cy;
+  if (subtitle) {
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8);
+    pdf.setTextColor(...TEXT_MID);
+    pdf.text(subtitle, cx, top + 3.2);
+    top += 7;
+  }
+  const leftW = cw * 0.56;
+  const rowH = 18;
+  const barsH = bars.length * rowH;
+  let by = top + Math.max(0, (cy + ch - top - barsH) / 2);
+  const trackH = 8;
+  bars.forEach((b) => {
+    const c = pdfColor(b.color);
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(8.5);
+    pdf.setTextColor(...TEXT_DARK);
+    pdf.text(truncateToWidth(pdf, b.label, leftW * 0.6), cx, by + 3.2);
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(11);
+    pdf.setTextColor(c[0], c[1], c[2]);
+    const pct = b.percent != null ? `${b.percent.toFixed(1)}%` : b.valueText;
+    pdf.text(pct, cx + leftW - 4, by + 3.6, { align: "right" });
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(7.6);
+    pdf.setTextColor(...TEXT_MID);
+    pdf.text(b.valueText, cx, by + 7.6);
+    const trackY = by + 9.6;
+    pdf.setFillColor(237, 240, 244);
+    pdf.roundedRect(cx, trackY, leftW - 4, trackH, trackH / 2, trackH / 2, "F");
+    const ratio = b.percent != null ? b.percent / 100 : 0;
+    pdf.setFillColor(c[0], c[1], c[2]);
+    pdf.roundedRect(cx, trackY, Math.max((leftW - 4) * ratio, trackH), trackH, trackH / 2, trackH / 2, "F");
+    by += rowH;
+  });
+
+  const donutAreaW = cw - leftW;
+  const cxd = cx + leftW + donutAreaW / 2;
+  const cyd = cy + ch / 2;
+  const rOuter = Math.max(8, Math.min(donutAreaW / 2 - 4, ch / 2 - 2));
+  const rInner = rOuter * 0.62;
+  const total = bars.reduce((a, b) => a + b.value, 0) || 1;
+  let ang = -90;
+  bars.forEach((b) => {
+    const sweep = (360 * b.value) / total;
+    fillPie(pdf, cxd, cyd, rOuter, ang, ang + sweep, pdfColor(b.color));
+    ang += sweep;
+  });
+  pdf.setFillColor(255, 255, 255);
+  pdf.circle(cxd, cyd, rInner, "F");
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(13);
+  pdf.setTextColor(...NAVY);
+  pdf.text(centerValue, cxd, cyd + 0.5, { align: "center" });
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(7);
+  pdf.setTextColor(...TEXT_MID);
+  pdf.text(centerLabel.toUpperCase(), cxd, cyd + 5, { align: "center" });
+}
+
+interface ReportRenderable {
+  height: number;
+  draw: (pdf: JsPDFInstance, x: number, y: number, w: number) => void;
+}
+
+/** Converte uma seção em um ou mais "renderáveis" (quebra hbars/table altos). */
+function sectionRenderables(section: PdfSection): ReportRenderable[] {
+  switch (section.kind) {
+    case "kpis": {
+      const items = section.items;
+      const perRow = Math.min(items.length, 4) || 1;
+      const rows = Math.ceil(items.length / perRow);
+      const height = CARD_HEADER_H + rows * 24 + (rows - 1) * 5 + CARD_PAD_BOTTOM;
+      return [{
+        height,
+        draw: (pdf, x, y, w) => {
+          drawSectionCard(pdf, x, y, w, height, section.title);
+          drawKpisContent(pdf, x + CARD_PAD_X, y + CARD_HEADER_H, w - 2 * CARD_PAD_X, items);
+        },
+      }];
+    }
+    case "hbars": {
+      const sub = section.subtitle;
+      const subH = sub ? 6 : 0;
+      const maxBars = Math.max(1, Math.floor((PAGE_CONTENT_H - CARD_HEADER_H - subH - CARD_PAD_BOTTOM) / HB_ROW));
+      const chunks = chunkArray(section.bars, maxBars);
+      return chunks.map((bars, ci) => {
+        const thisSub = ci === 0 ? sub : undefined;
+        const thisSubH = thisSub ? 6 : 0;
+        const height = CARD_HEADER_H + thisSubH + bars.length * HB_ROW + CARD_PAD_BOTTOM;
+        const title = chunks.length > 1 ? `${section.title} (${ci + 1}/${chunks.length})` : section.title;
+        return {
+          height,
+          draw: (pdf, x, y, w) => {
+            drawSectionCard(pdf, x, y, w, height, title);
+            drawHBarsContent(pdf, x + CARD_PAD_X, y + CARD_HEADER_H, w - 2 * CARD_PAD_X, bars, section.showPercent, thisSub);
+          },
+        };
+      });
+    }
+    case "table": {
+      const hasTotals = !!section.totalsRow;
+      const totalsH = hasTotals ? T_ROW + 1.5 : 0;
+      const maxRows = Math.max(1, Math.floor((PAGE_CONTENT_H - CARD_HEADER_H - CARD_PAD_BOTTOM - T_HEADER - totalsH) / T_ROW));
+      const chunks = chunkArray(section.rows, maxRows);
+      return chunks.map((rows, ci) => {
+        const isLast = ci === chunks.length - 1;
+        const totals = isLast ? section.totalsRow : undefined;
+        const tH = isLast ? totalsH : 0;
+        const height = CARD_HEADER_H + T_HEADER + rows.length * T_ROW + tH + CARD_PAD_BOTTOM;
+        const title = chunks.length > 1 ? `${section.title} (${ci + 1}/${chunks.length})` : section.title;
+        return {
+          height,
+          draw: (pdf, x, y, w) => {
+            drawSectionCard(pdf, x, y, w, height, title);
+            drawTableContent(pdf, x + CARD_PAD_X, y + CARD_HEADER_H, w - 2 * CARD_PAD_X, section.columns, rows, totals);
+          },
+        };
+      });
+    }
+    case "line": {
+      const contentH = 118;
+      const height = CARD_HEADER_H + contentH + CARD_PAD_BOTTOM;
+      return [{
+        height,
+        draw: (pdf, x, y, w) => {
+          drawSectionCard(pdf, x, y, w, height, section.title);
+          drawLineContent(pdf, x + CARD_PAD_X, y + CARD_HEADER_H, w - 2 * CARD_PAD_X, contentH, section.categories, section.series);
+        },
+      }];
+    }
+    case "area": {
+      const contentH = 96;
+      const height = CARD_HEADER_H + contentH + CARD_PAD_BOTTOM;
+      return [{
+        height,
+        draw: (pdf, x, y, w) => {
+          drawSectionCard(pdf, x, y, w, height, section.title);
+          drawAreaContent(pdf, x + CARD_PAD_X, y + CARD_HEADER_H, w - 2 * CARD_PAD_X, contentH, section.categories, section.values, section.color, section.valueFmt);
+        },
+      }];
+    }
+    case "donutPair": {
+      const contentH = 92;
+      const height = CARD_HEADER_H + contentH + CARD_PAD_BOTTOM;
+      return [{
+        height,
+        draw: (pdf, x, y, w) => {
+          drawSectionCard(pdf, x, y, w, height, section.title);
+          drawDonutPairContent(pdf, x + CARD_PAD_X, y + CARD_HEADER_H, w - 2 * CARD_PAD_X, contentH, section.bars, section.centerValue, section.centerLabel, section.subtitle);
+        },
+      }];
+    }
+    default:
+      return [];
+  }
+}
+
+/*
+ * exportReportToPdf(report, filename, title, options?)
+ * -------------------------------------------------------
+ * Renderiza um relatório declarativo (PdfReport) em PDF A4 paisagem,
+ * 100% vetorial. Não usa html2canvas — robusto e nítido.
+ */
+export async function exportReportToPdf(
+  report: PdfReport,
+  filename: string,
+  title: string,
+  options?: PdfExportOptions
+) {
+  const { jsPDF } = await import("jspdf");
+
+  const renderables: ReportRenderable[] = [];
+  for (const s of report.sections) renderables.push(...sectionRenderables(s));
+
+  interface Placed { page: number; y: number; r: ReportRenderable }
+  const placed: Placed[] = [];
+  let page = 0;
+  let y = CONTENT_TOP;
+  for (const r of renderables) {
+    if (y + r.height > CONTENT_BOT && y > CONTENT_TOP) {
+      page++;
+      y = CONTENT_TOP;
+    }
+    placed.push({ page, y, r });
+    y += r.height + GAP;
+  }
+  const totalPages = page + 1 + 1; // capa + páginas de conteúdo
+
+  const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  await drawCoverPage(pdf, title, options);
+
+  let lastPage = -1;
+  for (const pl of placed) {
+    while (lastPage < pl.page) {
+      pdf.addPage();
+      lastPage++;
+      drawPageChrome(pdf, title, lastPage + 2, totalPages);
+    }
+    pl.r.draw(pdf, MX, pl.y, USABLE_W);
+  }
+
+  pdf.save(`${filename}.pdf`);
 }
 
 /*
@@ -678,27 +1351,8 @@ export async function exportElementToPdf(
 
     if (explicit.length > 0) return explicit;
 
-    const direct = Array.from(container.children) as HTMLElement[];
-    const result: HTMLElement[] = [];
-
-    for (const el of direct) {
-      if (el.hasAttribute("data-pdf-exclude") || !hasMeaningfulContent(el)) continue;
-
-      const cls = classText(el);
-      const shouldSplitGrid = /grid-cols-\[1fr_300px\]|grid-cols-\[minmax|ranking|assuntos/i.test(cls);
-      if (shouldSplitGrid) {
-        const children = Array.from(el.children) as HTMLElement[];
-        const useful = children.filter((child) => !child.hasAttribute("data-pdf-exclude") && hasMeaningfulContent(child));
-        if (useful.length) {
-          result.push(...useful);
-          continue;
-        }
-      }
-
-      result.push(el);
-    }
-
-    return result;
+    return (Array.from(container.children) as HTMLElement[])
+      .filter((el) => !el.hasAttribute("data-pdf-exclude") && hasMeaningfulContent(el));
   }
 
   function copyCanvasContent(sourceRoot: HTMLElement, cloneRoot: HTMLElement) {
@@ -869,7 +1523,14 @@ export async function exportElementToPdf(
           const parsed = parseColor(fill);
           clone.setAttribute("fill", parsed && luminance(parsed) >= 170 ? PDF_TEXT_DARK : safeColor(fill, PDF_TEXT_DARK));
         }
-        if (stroke && stroke !== "none" && !stroke.startsWith("url(")) {
+        const isTextNode = clone.tagName === "text" || clone.tagName === "tspan";
+        if (isTextNode) {
+          // Remove dark-mode text halos: stroke on text elements causes doubled/bold
+          // glyphs on white PDF background (paintOrder="stroke" bakes in dark outlines).
+          clone.setAttribute("stroke", "none");
+          clone.setAttribute("stroke-width", "0");
+          clone.style?.removeProperty?.("paint-order");
+        } else if (stroke && stroke !== "none" && !stroke.startsWith("url(")) {
           clone.setAttribute("stroke", safeColor(stroke, "#009FE3"));
         }
       }
@@ -999,13 +1660,26 @@ export async function exportElementToPdf(
             return isDecorative(el) || el.hasAttribute("data-pdf-exclude");
           },
           onclone: (doc) => {
-            // O snapshot já tem estilos inline. Remover CSS global evita que o html2canvas
-            // leia color-mix()/oklch()/gradientes do bundle minificado do Vite/Tailwind.
-            doc.querySelectorAll("style, link[rel='stylesheet']").forEach((node) => node.remove());
-            const safeStyle = doc.createElement("style");
-            safeStyle.textContent =
-              "*,*::before,*::after{background-image:none!important;filter:none!important;-webkit-filter:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:none!important;}";
-            doc.head.appendChild(safeStyle);
+            try {
+              // O snapshot já tem estilos inline. Remover CSS global evita que o html2canvas
+              // leia color-mix()/oklch()/gradientes do bundle minificado do Vite/Tailwind.
+              // Em alguns clones do html2canvas, doc.head pode vir null; por isso tudo aqui
+              // precisa ser defensivo para não quebrar a exportação inteira.
+              try {
+                doc.querySelectorAll("style, link[rel='stylesheet']").forEach((node) => node.remove());
+              } catch {
+                // Se o clone não permitir query/removal, segue com os estilos inline do snapshot.
+              }
+
+              const safeStyle = doc.createElement("style");
+              safeStyle.textContent =
+                "*,*::before,*::after{background-image:none!important;filter:none!important;-webkit-filter:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:none!important;}";
+
+              const styleTarget = doc.head || doc.getElementsByTagName("head")[0] || doc.documentElement;
+              styleTarget?.appendChild?.(safeStyle);
+            } catch {
+              // Falhas no onclone não devem quebrar o html2canvas.
+            }
           },
         });
 
@@ -1024,25 +1698,14 @@ export async function exportElementToPdf(
     return null;
   }
 
-  async function captureWithFallback(section: HTMLElement) {
+  async function captureSection(section: HTMLElement) {
     const label = section.getAttribute("data-pdf-title") || section.getAttribute("data-section") || classText(section).slice(0, 80) || "seção";
-    const main = await captureElement(section, label);
-    if (main) return [main];
-
-    const childCandidates = Array.from(section.children) as HTMLElement[];
-    const usefulChildren = childCandidates.filter((child) => !child.hasAttribute("data-pdf-exclude") && hasMeaningfulContent(child));
-    const recovered: Capture[] = [];
-
-    for (const child of usefulChildren) {
-      const childLabel = child.getAttribute("data-pdf-title") || classText(child).slice(0, 80) || "filho";
-      const childCapture = await captureElement(child, childLabel);
-      if (childCapture) {
-        recovered.push(childCapture);
-        console.warn(`[exportPdf] Recuperado filho "${childLabel}" da seção "${label}"`);
-      }
+    const captured = await captureElement(section, label);
+    if (!captured) {
+      console.warn(`[exportPdf] seção ignorada porque não pôde ser capturada: "${label}"`);
+      return [];
     }
-
-    return recovered;
+    return [captured];
   }
 
   let captures: Capture[] = [];
@@ -1061,7 +1724,7 @@ export async function exportElementToPdf(
     }
 
     for (const section of sections) {
-      const recovered = await captureWithFallback(section);
+      const recovered = await captureSection(section);
       captures.push(...recovered);
     }
 
@@ -1072,7 +1735,8 @@ export async function exportElementToPdf(
       throw new Error("Nenhuma seção pôde ser capturada para o PDF");
     }
   } finally {
-    stagingRoot?.remove();
+    const rootToRemove = stagingRoot as HTMLDivElement | null;
+    rootToRemove?.remove();
     for (const { el, display } of pdfOnlyPrevious) {
       el.style.display = display;
     }

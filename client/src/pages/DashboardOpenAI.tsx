@@ -47,7 +47,7 @@ import { SelectCustom } from "@/components/ui/select-custom";
 import {
   RefreshCw, TrendingUp, DollarSign, Building2,
   CalendarRange, Settings2, Brain,
-  FileSpreadsheet, Loader2
+  FileSpreadsheet, FileText, Loader2
 } from "lucide-react";
 
 // subMonths: usada para calcular a data inicial padrão (3 meses atrás)
@@ -59,6 +59,8 @@ import { ChartCard } from "@/components/ui/chart-card";
 import { FilterToolbar } from "@/components/ui/filter-toolbar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { CHART_COLORS, getTooltipStyle, getGridStroke, getAxisColor, getAxisTickFill, barGradientDefs, getBarGradient, PremiumTooltip } from "@/lib/chart-utils";
+import { exportReportToPdf } from "@/lib/exportPdf";
+import type { PdfReport } from "@/lib/pdfReport";
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -97,6 +99,7 @@ export default function DashboardOpenAIPage() {
   const [taxaCambio, setTaxaCambio] = useState<number | null>(null);
   const [loadingCambio, setLoadingCambio] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   // Fetch exchange rate when BRL is selected
   useEffect(() => {
@@ -234,6 +237,68 @@ export default function DashboardOpenAIPage() {
     return val.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
   };
 
+  // Export PDF handler — relatório nativo (vetorial)
+  const handleExportPdf = useCallback(async () => {
+    setExportingPdf(true);
+    try {
+      const fmtDate = (d: string) => { try { return format(new Date(d + "T12:00:00"), "dd/MM/yyyy"); } catch { return d; } };
+      const fmtMoneyAxis = (v: number) => `${simbolo}${v >= 1000 ? (v / 1000).toFixed(1) + "k" : v.toFixed(0)}`;
+      const dias = timelineConverted.length || 1;
+      const mediaDia = totalValueConverted / dias;
+
+      const sections: PdfReport["sections"] = [];
+
+      sections.push({
+        kind: "kpis",
+        title: "Indicadores de Custo",
+        items: [
+          { label: "Valor Total no Período", value: `${simbolo} ${fmtValue(totalValueConverted)}`, accent: "#009FE3" },
+          { label: "Unidades", value: String(porProjetoConverted.length), accent: "#10B981" },
+          { label: "Média por Dia", value: `${simbolo} ${fmtValue(mediaDia)}`, accent: "#F59E0B" },
+        ],
+      });
+
+      if (timelineConverted.length > 0) {
+        sections.push({
+          kind: "area",
+          title: "Volume de Gastos por Dia",
+          categories: timelineConverted.map((t) => { try { return format(new Date(t.data + "T12:00:00"), "dd/MM"); } catch { return String(t.data); } }),
+          values: timelineConverted.map((t) => Number(t.total) || 0),
+          color: "#009FE3",
+          valueFmt: fmtMoneyAxis,
+        });
+      }
+
+      if (porProjetoConverted.length > 0) {
+        sections.push({
+          kind: "hbars",
+          title: "Valores por Unidade",
+          bars: [...porProjetoConverted]
+            .sort((a, b) => b.total - a.total)
+            .map((item, idx) => ({
+              label: item.nome,
+              value: item.total,
+              valueText: `${simbolo} ${fmtValue(item.total)}`,
+              color: COLORS[idx % COLORS.length],
+            })),
+        });
+      }
+
+      const report: PdfReport = { sections };
+      const filename = `relatorio_openai_${dateRange.startDate}_${dateRange.endDate}`;
+      await exportReportToPdf(report, filename, "Dashboard - OpenAI", {
+        period: `Período: ${fmtDate(dateRange.startDate)} a ${fmtDate(dateRange.endDate)}`,
+        subtitle: `Monitoramento de custos OpenAI · Moeda: ${moeda}${selectedProjects.length > 0 ? ` · Unidades: ${selectedProjects.join(", ")}` : ""}`,
+      });
+    } catch (err) {
+      console.error("Erro ao exportar PDF:", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      alert("Erro ao exportar PDF: " + msg);
+    } finally {
+      setExportingPdf(false);
+    }
+  }, [simbolo, moeda, totalValueConverted, timelineConverted, porProjetoConverted, dateRange.startDate, dateRange.endDate, selectedProjects]);
+
   if (isLoading || loadingCambio) {
     return (
       <Layout title="Dashboard - OpenAI" subtitle="Monitoramento de custos OpenAI">
@@ -357,7 +422,21 @@ export default function DashboardOpenAIPage() {
                   title="Exportar Excel"
                 >
                   {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
-                  <span>Exportar</span>
+                  <span>Excel</span>
+                </button>
+                <button
+                  onClick={handleExportPdf}
+                  disabled={exportingPdf}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2.5 text-xs font-bold border rounded-xl transition-all duration-300 disabled:opacity-50",
+                    isDark
+                      ? "bg-[#060e1a]/80 border-[#1a3a5c]/80 text-gray-300 hover:border-[#009FE3]/40 hover:text-white"
+                      : "bg-white border-gray-200 text-gray-700 hover:border-[#009FE3]/40 hover:text-[#009FE3]"
+                  )}
+                  title="Exportar PDF"
+                >
+                  {exportingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+                  <span>PDF</span>
                 </button>
                 <button
                   onClick={handleManualRefresh}

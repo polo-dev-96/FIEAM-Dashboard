@@ -88,9 +88,9 @@ export function ChartCard({
         className
       )}
     >
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent opacity-60" />
-      <div className="pointer-events-none absolute -right-24 -top-24 h-56 w-56 rounded-full bg-[var(--ds-accent)]/[0.045] blur-3xl transition-opacity group-hover:opacity-90" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_0%,rgba(255,255,255,0.045),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.025),transparent_46%)]" />
+      <div data-pdf-exclude className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent opacity-60" />
+      <div data-pdf-exclude className="pointer-events-none absolute -right-24 -top-24 h-56 w-56 rounded-full bg-[var(--ds-accent)]/[0.045] blur-3xl transition-opacity group-hover:opacity-90" />
+      <div data-pdf-exclude className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_0%,rgba(255,255,255,0.045),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.025),transparent_46%)]" />
 
       <div className="relative flex items-center gap-3 border-b border-ds-subtle px-5 py-4">
         {icon && (
@@ -103,7 +103,7 @@ export function ChartCard({
           {subtitle && <p className="mt-0.5 truncate text-[11px] font-medium text-ds-tertiary">{subtitle}</p>}
         </div>
         {badge && (
-          <span className="shrink-0 rounded-full border border-[var(--ds-accent)]/20 bg-[var(--ds-accent-muted)] px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--ds-accent)]">
+          <span data-pdf-exclude className="shrink-0 rounded-full border border-[var(--ds-accent)]/20 bg-[var(--ds-accent-muted)] px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--ds-accent)]">
             {badge}
           </span>
         )}
