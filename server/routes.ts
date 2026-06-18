@@ -1804,7 +1804,8 @@ export async function registerRoutes(
             t.contato,
             t.identificador,
             t.canal,
-            t.\`data e hora de fim\` AS dataHoraFim
+            t.\`data e hora de fim\` AS dataHoraFim,
+            t.\`resumo da conversa\` AS resumoConversa
           FROM \`${TABLE_NAME}\` t
           INNER JOIN (
             SELECT MAX(id) AS max_id
@@ -1832,6 +1833,7 @@ export async function registerRoutes(
           { header: "Número", key: "numero", width: 20 },
           { header: "Protocolo", key: "protocolo", width: 18 },
           { header: "Canal", key: "canal", width: 22 },
+          { header: "Resumo da Conversa", key: "resumoConversa", width: 35 },
           { header: "Data/Hora Fim", key: "dataHoraFim", width: 22 },
         ];
 
@@ -1851,11 +1853,12 @@ export async function registerRoutes(
             numero: row.identificador || "",
             protocolo: row.protocolo || "",
             canal: row.canal || "",
+            resumoConversa: row.resumoConversa || "",
             dataHoraFim: row.dataHoraFim ? new Date(row.dataHoraFim).toLocaleString("pt-BR") : "",
           });
         }
 
-        sheet.autoFilter = { from: "A1", to: `E${rows.length + 1}` };
+        sheet.autoFilter = { from: "A1", to: `F${rows.length + 1}` };
 
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         res.setHeader("Content-Disposition", `attachment; filename="atendimentos_${nomeClean}_${startDate || "all"}_${endDate || "all"}.xlsx"`);
@@ -1948,7 +1951,8 @@ export async function registerRoutes(
             t.contato,
             t.identificador,
             t.canal,
-            t.\`data e hora de fim\` AS dataHoraFim
+            t.\`data e hora de fim\` AS dataHoraFim,
+            t.\`resumo da conversa\` AS resumoConversa
           FROM \`${TABLE_NAME}\` t
           INNER JOIN (
             SELECT MAX(id) AS max_id

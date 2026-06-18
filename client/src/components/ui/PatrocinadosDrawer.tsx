@@ -20,6 +20,7 @@ interface ClienteItem {
   identificador: string | null;
   canal: string | null;
   dataHoraFim: string | null;
+  resumoConversa: string | null;
 }
 
 interface ClientesResponse {
@@ -220,7 +221,7 @@ export function PatrocinadosDrawer({ selected, dateRange, onClose }: Patrocinado
 
                 {/* Table header */}
                 <div className={cn(
-                  "grid grid-cols-[minmax(0,1fr)_120px_130px_120px_88px] gap-x-2 px-5 py-2.5 text-[10px] font-bold uppercase tracking-wider border-b sticky top-0 z-10 items-center",
+                  "grid grid-cols-[minmax(0,1fr)_120px_130px_120px_140px_88px] gap-x-2 px-5 py-2.5 text-[10px] font-bold uppercase tracking-wider border-b sticky top-0 z-10 items-center",
                   isDark
                     ? "text-gray-500 border-[#1E3A5F]/40 bg-[#061524]"
                     : "text-gray-400 border-slate-100 bg-white"
@@ -229,6 +230,7 @@ export function PatrocinadosDrawer({ selected, dateRange, onClose }: Patrocinado
                   <span>Número</span>
                   <span>Protocolo</span>
                   <span>Canal</span>
+                  <span>Resumo</span>
                   <span className="text-right">Data/Hora</span>
                 </div>
 
@@ -238,7 +240,7 @@ export function PatrocinadosDrawer({ selected, dateRange, onClose }: Patrocinado
                     <div
                       key={`${item.protocolo}-${idx}`}
                       className={cn(
-                        "grid grid-cols-[minmax(0,1fr)_120px_130px_120px_88px] gap-x-2 px-5 py-3 text-[12px] transition-colors items-center",
+                        "grid grid-cols-[minmax(0,1fr)_120px_130px_120px_140px_88px] gap-x-2 px-5 py-3 text-[12px] transition-colors items-center",
                         isDark
                           ? "hover:bg-[#0C2135]/80 border-[#1E3A5F]/20"
                           : "hover:bg-slate-50 border-slate-100"
@@ -273,6 +275,13 @@ export function PatrocinadosDrawer({ selected, dateRange, onClose }: Patrocinado
                         )}>
                           {item.canal || "—"}
                         </span>
+                      </div>
+
+                      {/* Resumo */}
+                      <div className="min-w-0">
+                        <p className={cn("text-[11px] truncate", isDark ? "text-gray-400" : "text-gray-500")} title={item.resumoConversa || undefined}>
+                          {item.resumoConversa || "—"}
+                        </p>
                       </div>
 
                       {/* Data */}
