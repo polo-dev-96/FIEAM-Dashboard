@@ -23,7 +23,8 @@
 // Switch e Route: componentes de roteamento da biblioteca "wouter"
 // Switch → renderiza apenas a primeira <Route> que bater com a URL atual
 // Route  → associa um caminho (ex: "/anual") a um componente de página
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
+import { useEffect } from "react";
 
 // queryClient: instância configurada em queryClient.ts para gerenciar requisições
 import { queryClient } from "./lib/queryClient";
@@ -68,12 +69,19 @@ import NotFound from "@/pages/not-found";                        // Página 404
  *   /protocolo → SearchProtocol ✓
  *   /openai → NÃO registrado → cai no NotFound
  */
+function SenaiHomeRedirect() {
+  const [, navigate] = useLocation();
+  useEffect(() => { navigate("/anual"); }, []);
+  return null;
+}
+
 function Router() {
-  const { canAccess } = useAuth(); // obtém a função de verificação de permissão
+  const { canAccess, user } = useAuth(); // obtém a função de verificação de permissão
+  const isSenai = user?.email === "senai@polotelecom.com";
   return (
     <Switch>
-      {/* Rota principal - todos têm acesso */}
-      <Route path="/" component={OverviewPage} />
+      {/* Rota principal - redireciona senai@polotelecom.com para /anual */}
+      {isSenai ? <Route path="/" component={SenaiHomeRedirect} /> : <Route path="/" component={OverviewPage} />}
 
       {/* Rotas condicionais - só registradas se o usuário tem permissão */}
       {canAccess("/protocolo") && <Route path="/protocolo" component={SearchProtocolPage} />}

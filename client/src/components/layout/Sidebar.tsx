@@ -84,7 +84,11 @@ export function Sidebar() {
   const { logout, canAccess, user } = useAuth();
   const { isDark, toggleTheme } = useTheme();
 
-  const allowedItems = navItems.filter((item) => canAccess(item.href));
+  const allowedItems = navItems.filter((item) => {
+    if (!canAccess(item.href)) return false;
+    if (item.href === "/" && user?.email === "senai@polotelecom.com") return false;
+    return true;
+  });
   const sections = (Object.keys(sectionLabels) as NavSection[])
     .map((section) => ({
       section,

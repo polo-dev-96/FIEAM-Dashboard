@@ -56,7 +56,7 @@ import { CHART_COLORS, getTooltipStyle, getGridStroke, getAxisColor, getAxisTick
 
 import {
     RefreshCw, TrendingUp, Headphones, FileText, Clock, Filter,
-    Building2, Users, CalendarDays, Settings2
+    Building2, Users, CalendarDays, Settings2, MessageSquare
 } from "lucide-react";
 
 import { useState, useMemo, useCallback, useRef } from "react";
@@ -234,6 +234,7 @@ export default function DashboardAnualPage() {
     const { user } = useAuth();
     const { isDark } = useTheme();
     const isGerente = user?.nivel_acesso === "gerente" || user?.nivel_acesso === "master";
+    const isSenaiUser = user?.email === "senai@polotelecom.com";
     const currentYear = new Date().getFullYear();
     const [selectedYear, setSelectedYear] = useState(currentYear);
     const [selectedMonths, setSelectedMonths] = useState<number[]>([]);
@@ -418,6 +419,22 @@ export default function DashboardAnualPage() {
         if (!stats?.porAssunto?.length) return [];
         return agruparAssuntos(stats.porAssunto as any).slice(0, 20);
     }, [stats?.porAssunto]);
+
+    const { data: senaiOpcaoStats } = useQuery<{ porOpcaoSelecionada: Array<{ nome: string; total: number }> }>(
+        {
+            queryKey: ["senai-opcoes", exportDateRange.startDate, exportDateRange.endDate, selectedCasas],
+            queryFn: () => apiRequest(`/api/stats?startDate=${exportDateRange.startDate}&endDate=${exportDateRange.endDate}${casaParam}`),
+            enabled: isSenaiUser,
+        }
+    );
+
+    const opcoesSelecionadasSenai = useMemo(() => {
+        if (!isSenaiUser || !senaiOpcaoStats?.porOpcaoSelecionada) return [];
+        return senaiOpcaoStats.porOpcaoSelecionada
+            .filter((d) => d.nome && d.nome !== "false" && d.nome.trim() !== "")
+            .sort((a, b) => b.total - a.total)
+            .slice(0, 10);
+    }, [isSenaiUser, senaiOpcaoStats]);
 
     // ─── Monta o relatório PDF nativo (vetorial) a partir dos dados ──
     const buildPdfReport = useCallback((): PdfReport => {
@@ -1108,6 +1125,32 @@ export default function DashboardAnualPage() {
                     </div>
                 </ChartCard>
             </div>
+
+            {/* Qtd de Opções Selecionadas — apenas para senai@polotelecom.com */}
+            {isSenaiUser && opcoesSelecionadasSenai.length > 0 && (
+                <ChartCard title="Qtd de Opções Selecionadas" icon={<MessageSquare className="w-4 h-4" />} iconAccent="cyan" isDark={isDark} badge="Top 10" height={Math.max(240, opcoesSelecionadasSenai.length * 48 + 50)}>
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                            data={opcoesSelecionadasSenai}
+                            layout="vertical"
+                            margin={{ left: 10, right: 70, top: 6, bottom: 6 }}
+                            barCategoryGap={8}
+                        >
+                            <defs>{barGradientDefs("opcao")}</defs>
+                            <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke={getGridStroke(isDark)} />
+                            <XAxis type="number" stroke={getAxisColor(isDark)} fontSize={11} tick={{ fill: getAxisTickFill(isDark) }} axisLine={false} tickLine={false} />
+                            <YAxis type="category" dataKey="nome" width={270} stroke={getAxisColor(isDark)} fontSize={12} tick={{ fill: getAxisTickFill(isDark), fontWeight: 500 }} axisLine={false} tickLine={false} />
+                            <RechartsTooltip cursor={{ fill: isDark ? 'rgba(0,159,227,0.06)' : 'rgba(0,159,227,0.04)' }} content={<PremiumTooltip isDark={isDark} valueLabel="Atendimentos" />} />
+                            <Bar dataKey="total" radius={[0, 8, 8, 0]} barSize={28} animationDuration={900}>
+                                {opcoesSelecionadasSenai.map((_, index) => (
+                                    <Cell key={`opcao-${index}`} fill={getBarGradient("opcao", index + 7)} />
+                                ))}
+                                <LabelList dataKey="total" position="right" fill={isDark ? "#E2E8F0" : "#334155"} fontSize={12} fontWeight={700} formatter={(v: number) => v.toLocaleString("pt-BR")} offset={10} />
+                            </Bar>
+                        </BarChart>
+                    </ResponsiveContainer>
+                </ChartCard>
+            )}
 
             {/* 3. Atendimentos por Assunto — Bar Chart + Insights */}
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5">
